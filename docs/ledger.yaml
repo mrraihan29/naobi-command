@@ -76,20 +76,21 @@ entries:
 
   - id: R-006
     type: requirement
-    version: 4
+    version: 5
     status: active
     topic: 5
-    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
-    recommendation: "Owner accepted the cold-start split (tray-ready 300 ms, window 1.5 s, early hotkey served when ready). The 40 MB idle working-set budget is kept and is measured WITHOUT working-set trimming: trim-on-hide is not used because the Slint software renderer meets the budget untrimmed (24 MB measured); trimming would be YAGNI."
-    statement: "Performance budgets: hotkey-to-visible p95 <= 50 ms; keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results; idle working set <= 40 MB total, measured without working-set trimming; idle CPU < 0.5% averaged over 60 s; process start to tray-ready (tray icon shown, hotkeys registered) <= 300 ms, pre-warmed launcher window ready <= 1.5 s after process start, and a hotkey pressed before the window is ready is served as soon as it is; release exe <= 20 MB. The installed PowerToys is measured as the baseline."
+    answer: "A + C together."
+    recommendation: "RK-15 verdict 6b (keystroke p95_est 19.3 ms, p95_upper 26.3 ms on screen at 144 Hz under ~48% background CPU). Change the keystroke budget to p95 <= 25 ms measured on screen including DWM composition under normal load (about 3 frames at 144 Hz), and add a parity target: Naobi keystroke inject_to_t1 p95 is no worse than PowerToys Command Palette measured the same way (NCMD-6)."
+    statement: "Performance budgets: hotkey-to-visible p95 <= 50 ms; keystroke-to-results p95_est (p95_upper minus the measured probe cost) <= 25 ms over a 10,000-item index, from the key event received by the window procedure to the composed on-screen frame that contains the new results, measured under normal background load (D-036), and keystroke inject-to-screen p95 no worse than PowerToys Command Palette measured the same way; idle working set <= 40 MB total, measured without working-set trimming; idle CPU < 0.5% averaged over 60 s; process start to tray-ready (tray icon shown, hotkeys registered) <= 300 ms, pre-warmed launcher window ready <= 1.5 s after process start, and a hotkey pressed before the window is ready is served as soon as it is; release exe <= 20 MB. The installed PowerToys is measured as the baseline."
     acceptance:
       - "perf-harness measures hotkey-to-visible p95 <= 50 ms over 200 runs"
-      - "perf-harness measures keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results"
+      - "perf-harness measures keystroke-to-results p95_est (p95_upper minus the measured probe cost) <= 25 ms over a 10,000-item index, from the key event received by the window procedure to the composed on-screen frame that contains the new results"
+      - "Naobi keystroke inject_to_t1 p95 is no worse than PowerToys Command Palette inject_to_t1 p95 in the NCMD-6 baseline"
       - "Idle working set <= 40 MB and idle CPU < 0.5% over 60 s, measured without working-set trimming"
       - "Process start to tray-ready <= 300 ms and launcher window ready <= 1.5 s after process start; a hotkey pressed before the window is ready opens the launcher as soon as it is ready; release exe size <= 20 MB"
       - "A baseline report records the same metrics for the installed PowerToys"
     links:
-      tickets: ["NCMD-4@4", "NCMD-5@4", "NCMD-6@4", "NCMD-11@4", "NCMD-14@4", "NCMD-25@4", "NCMD-27@4"]
+      tickets: ["NCMD-4@5", "NCMD-5@5", "NCMD-6@5", "NCMD-11@5", "NCMD-14@5", "NCMD-25@5", "NCMD-27@5"]
 
   - id: R-007
     type: requirement
@@ -658,3 +659,25 @@ entries:
     answer: "aku setujui! untuk melanjutkannya gunakan skill /ponytail:ponytail baik di kamu atau pun sub agent"
     recommendation: "Approve the Plan breakdown and the consolidated recommendations of the plan review (docs/ledger.yaml, Plane epic NCMD-3)."
     statement: "Gate 2 approved 2026-10-23: the epic NCMD-3 breakdown of 24 sub-items NCMD-4 to NCMD-27 and decisions 1 to 11: (1) breakdown and critical path accepted; (2) dependencies zeroize, slint-build 1.18.1, serde_json (naobi-perf only) and tracing-subscriber (default-features off, features fmt and std) approved, raw-window-handle dropped; (3) Slint used as GPL-3.0-only through cargo-deny exceptions scoped to the Slint crates, deny.toml targets only x86_64-pc-windows-msvc; (4) tools cargo-deny, cargo-mutants, gitleaks and semgrep (grep tests stand in if semgrep does not run natively) approved; (5) RK-15 passes only if p95_upper is at most 16 ms under pinned conditions; (6) on a miss, if p95_est is at most 16 ms and the probe cost is stable the result is accepted and recorded as a D- entry, otherwise the Owner chooses between changing R-006 and rethinking the renderer; (7) NCMD-8, 9 and 10 start after NCMD-4 without waiting for NCMD-27; (8) NCMD-6 may start once the NCMD-27 probe code is committed, PowerToys stays installed until it is Done; (9) D-019 v5 and D-034 v2 accuracy fixes approved; (10) proposal keys, tray glyphs, picker overlay look and the Proton Pass exe name are confirmed at the first UI-CHECK; (11) the platform thread uses a hidden top-level tool window instead of a message-only window so broadcast messages arrive; the Owner also asked that Build follows the ponytail skill in full mode, in the main chat and in every sub-agent."
+
+  - id: D-036
+    type: decision
+    version: 1
+    status: active
+    topic: 14
+    answer: "pc ku menang terlalu berat, impossible untuk di bawah 10% lakukan aja sebisanya"
+    recommendation: "Drop the background-CPU < 10% precondition for RK-15 and R-006 latency runs; measure under the owner's normal load, record mean background CPU in the verdict JSON, and keep the PASS bar and miss policy of D-035 (5, 6) unchanged. A pass under load is treated as conservative evidence."
+    statement: "The RK-15 and R-006 latency verdicts are taken under the owner's normal background load: the background-CPU < 10% precondition is removed, the measured mean background CPU is recorded with every verdict, and the PASS bar (p95_upper <= 16 ms) and the miss policy (D-035 decisions 5 and 6) stay unchanged. Other pinned conditions (143/144 Hz panel, AC power, release build with perf feature, dogfood instance and PowerToys Run not running) still apply."
+    links:
+      decisions: ["D-035@1"]
+
+  - id: D-037
+    type: decision
+    version: 1
+    status: active
+    topic: 5
+    answer: "A + C together."
+    recommendation: "Resolve RK-15 by changing the R-006 keystroke budget to p95 <= 25 ms on screen (option A) and running the PowerToys baseline with the same method to set a parity target (option C); keep the Slint software renderer."
+    statement: "RK-15 is resolved by R-006 v5: keystroke-to-results p95_est <= 25 ms (p95_upper minus the measured probe cost; measured 19.3 ms) on screen under normal load plus parity with PowerToys Command Palette; this bar replaces the p95_upper <= 16 ms bar and miss policy of D-035 (5, 6) and D-036; the Slint software renderer (D-034) is kept and no renderer switch is made. The true on-screen p95 lies between p95_est (19.3 ms) and p95_upper (26.3 ms) depending on how much of the probe's one-refresh wait is real display latency; the verdict records both. If NCMD-6 shows Naobi slower than PowerToys, the decision returns to the Owner."
+    links:
+      decisions: ["D-034@2", "D-035@1", "D-036@1"]

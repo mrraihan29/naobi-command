@@ -2,6 +2,8 @@
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "perf")]
+mod perf_fixture;
+#[cfg(feature = "perf")]
 mod perf_report;
 
 use naobi_core::ui::{Key, Row, UiEvent, ViewModel};
@@ -37,6 +39,20 @@ fn report(ev: &str) {
 #[cfg(not(feature = "perf"))]
 fn report(_ev: &str) {}
 
+/// The synthetic 10,000-item index (`NAOBI_PERF_ITEMS` overrides the count), the real event path's data.
+#[cfg(feature = "perf")]
+static FIXTURE: std::sync::OnceLock<Mutex<perf_fixture::Fixture>> = std::sync::OnceLock::new();
+
+#[cfg(feature = "perf")]
+fn fixture_rows(q: &str) -> Vec<Row> {
+    let n = std::env::var("NAOBI_PERF_ITEMS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10_000);
+    let f = FIXTURE.get_or_init(|| Mutex::new(perf_fixture::Fixture::new(n)));
+    f.lock().unwrap_or_else(|e| e.into_inner()).top(q)
+}
+
 fn placeholder() -> ViewModel {
     let row = |t: &str, s: &str| Row {
         title: t.into(),
@@ -67,6 +83,12 @@ fn on_hotkey() {
 fn on_ready(ui: UiHandle) {
     let mut s = state();
     s.view = placeholder();
+    #[cfg(feature = "perf")]
+    {
+        s.view.rows = fixture_rows("");
+        // Same UI thread as the window: t0 of the keystroke metric is taken in this subclass.
+        naobi_win32::subclass::install(ui.window());
+    }
     ui.post(s.view.clone());
     report("window_ready");
     if std::mem::take(&mut s.early_hotkey) {
@@ -85,8 +107,20 @@ fn on_event(ev: UiEvent) {
             Key::Down => move_selection(&mut s, &ui, 1),
         },
         UiEvent::RowActivated(_) | UiEvent::Dismissed => ui.hide(),
-        // Search is not wired yet: the placeholder list stays as it is.
-        UiEvent::TextChanged(q) => s.view.query = q,
+        // Search is not wired yet: the placeholder list stays as it is (perf: the fixture answers).
+        UiEvent::TextChanged(q) => {
+            #[cfg(feature = "perf")]
+            {
+                s.view.rows = fixture_rows(&q);
+                s.view.selected = 0;
+                s.view.query = q;
+                ui.post(s.view.clone());
+            }
+            #[cfg(not(feature = "perf"))]
+            {
+                s.view.query = q;
+            }
+        }
     }
 }
 

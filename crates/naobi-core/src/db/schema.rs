@@ -1,0 +1,37 @@
+//! Schema per REPORT 4.1. Content and preview columns are BLOB (DPAPI ciphertext, R-009).
+//! Migrations are append-only and expand-only (D-014): add tables or nullable/defaulted columns, never drop or rename.
+
+pub const MIGRATIONS: &[&str] = &[V1];
+
+const V1: &str = "
+CREATE TABLE meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE clip_entry (
+    id             INTEGER PRIMARY KEY,
+    kind           TEXT NOT NULL CHECK (kind IN ('text', 'image', 'files')),
+    created_at     INTEGER NOT NULL,
+    last_copied_at INTEGER NOT NULL,
+    pinned         INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+    source_exe     TEXT,
+    byte_size      INTEGER NOT NULL,
+    preview_enc    BLOB NOT NULL
+);
+CREATE TABLE clip_payload (
+    entry_id INTEGER NOT NULL REFERENCES clip_entry (id) ON DELETE CASCADE,
+    format   TEXT NOT NULL CHECK (format IN ('text', 'png', 'filelist')),
+    data_enc BLOB NOT NULL,
+    PRIMARY KEY (entry_id, format)
+);
+CREATE TABLE frecency (
+    item_key       INTEGER PRIMARY KEY,
+    open_count     INTEGER NOT NULL,
+    last_opened_at INTEGER NOT NULL
+);
+CREATE TABLE color_history (
+    id        INTEGER PRIMARY KEY,
+    rgba      INTEGER NOT NULL,
+    picked_at INTEGER NOT NULL
+);
+";

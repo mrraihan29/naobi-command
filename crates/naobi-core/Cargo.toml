@@ -11,3 +11,5 @@ workspace = true
 serde.workspace = true
 toml.workspace = true
 thiserror.workspace = true
+rusqlite.workspace = true
+xxhash-rust.workspace = true

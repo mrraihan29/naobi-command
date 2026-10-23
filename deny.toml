@@ -65,6 +65,11 @@ crate = "clipboard-win"
 allow = ["BSL-1.0"]
 crate = "error-code"
 
+# xxh3 for stable stored hashes (NCMD-9); BSL-1.0 is permissive, accepted by the orchestrator under owner delegation.
+[[licenses.exceptions]]
+allow = ["BSL-1.0"]
+crate = "xxhash-rust"
+
 [bans]
 multiple-versions = "warn"
 # R-005 / T-016: no HTTP client, no dynamic-library loader.

@@ -7,11 +7,12 @@ build = "build.rs"
 
 [features]
 # Readiness lines on stdout and key injection for tier 2 tests and naobi-perf; never in the release exe.
-perf = ["naobi-win32/perf"]
+perf = ["naobi-win32/perf", "dep:nucleo-matcher"]
 
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
+nucleo-matcher = { workspace = true, optional = true }
 naobi-core = { path = "../naobi-core" }
 naobi-ui = { path = "../naobi-ui" }
 naobi-win32 = { path = "../naobi-win32" }

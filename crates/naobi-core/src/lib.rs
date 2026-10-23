@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 pub mod chord;
 pub mod command;
+pub mod db;
 pub mod effect;
 pub mod error;
 pub mod event;

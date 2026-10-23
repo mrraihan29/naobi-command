@@ -1,0 +1,86 @@
+# Only the release target is checked, so Linux-only transitive crates of winit and accesskit
+# (libloading, zbus, tokio and similar) never enter the graph.
+[graph]
+targets = ["x86_64-pc-windows-msvc"]
+
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0", "MPL-2.0"]
+# Workspace crates are publish = false and unlicensed.
+private = { ignore = true }
+# No global GPL entry: a GPL crate outside the exceptions below fails the gate.
+
+# Slint is offered as GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0.
+# The GPL option is used because the exe is never distributed (R-001, D-008).
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "slint"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "slint-macros"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "slint-build"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-backend-selector"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-backend-winit"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-common"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-compiler"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-core"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-core-macros"
+
+[[licenses.exceptions]]
+allow = ["GPL-3.0-only"]
+crate = "i-slint-renderer-software"
+
+# Boost Software License 1.0 is permissive; both are transitive crates of the winit backend (clipboard-win).
+# Scoped exceptions, not a global allow. Accepted by the orchestrator in NCMD-4 review round 1.
+
+[[licenses.exceptions]]
+allow = ["BSL-1.0"]
+crate = "clipboard-win"
+
+[[licenses.exceptions]]
+allow = ["BSL-1.0"]
+crate = "error-code"
+
+[bans]
+multiple-versions = "warn"
+# R-005 / T-016: no HTTP client, no dynamic-library loader.
+deny = [
+  { crate = "reqwest" },
+  { crate = "hyper" },
+  { crate = "ureq" },
+  { crate = "isahc" },
+  { crate = "curl" },
+  { crate = "surf" },
+  { crate = "attohttpc" },
+  { crate = "libloading" },
+  { crate = "dlopen2" },
+]
+
+# R-005 / CLAUDE.md: no socket APIs through the windows crate either.
+[[bans.features]]
+crate = "windows"
+deny = ["Win32_Networking_WinHttp", "Win32_Networking_WinInet", "Win32_Networking_WinSock"]

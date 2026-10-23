@@ -1,0 +1,17 @@
+[package]
+name = "naobi-win32"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
+
+# EX-001: the only crate allowed `unsafe`; it does not inherit `unsafe_code = "forbid"`.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+undocumented_unsafe_blocks = "deny"

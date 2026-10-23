@@ -1,0 +1,3 @@
+# T-025: static CRT, and DLL search limited to System32 (planted-DLL defence).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/DEPENDENTLOADFLAG:0x800"]

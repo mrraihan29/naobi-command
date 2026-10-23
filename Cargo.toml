@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+undocumented_unsafe_blocks = "deny"
+
+# Pinned once here; each crate opts in with `x.workspace = true`.
+# Other planned crates (slint, rusqlite, toml, ...) are added by the item that first uses them.
+[workspace.dependencies]
+windows = "0.62"
+serde_json = "1"
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"

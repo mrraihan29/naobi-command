@@ -1,0 +1,31 @@
+erDiagram
+  CLIP_ENTRY ||--|{ CLIP_PAYLOAD : has
+  CLIP_ENTRY {
+    integer id PK
+    text kind "text, image, files"
+    integer created_at
+    integer last_copied_at
+    integer pinned "0 or 1"
+    text source_exe "metadata"
+    integer byte_size
+    blob preview_enc "DPAPI, personal data"
+  }
+  CLIP_PAYLOAD {
+    integer entry_id FK
+    text format "text, png, filelist"
+    blob data_enc "DPAPI, personal data"
+  }
+  FRECENCY {
+    integer item_key PK "64-bit hash of item identity"
+    integer open_count
+    integer last_opened_at
+  }
+  COLOR_HISTORY {
+    integer id PK
+    integer rgba
+    integer picked_at
+  }
+  META {
+    text key PK
+    text value "schema_version, hash_salt"
+  }

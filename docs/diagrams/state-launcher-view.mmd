@@ -1,0 +1,20 @@
+stateDiagram-v2
+  [*] --> Hidden
+  Hidden --> RootEmpty: launcher hotkey
+  Hidden --> ClipboardHotkeyView: clipboard hotkey
+  RootEmpty --> RootQuery: type
+  RootQuery --> RootEmpty: Esc clears query
+  RootEmpty --> Hidden: Esc
+  RootQuery --> ActionPanel: Ctrl+K
+  ActionPanel --> RootQuery: Esc
+  RootQuery --> ClipboardView: Enter on view item
+  ClipboardHotkeyView --> ClipboardHotkeyView: Esc clears a non-empty query
+  ClipboardHotkeyView --> Hidden: Esc on empty query hides (opened by its own hotkey)
+  ClipboardHotkeyView --> Hidden: Enter pastes
+  ClipboardView --> ClipboardView: Esc clears a non-empty query
+  ClipboardView --> RootEmpty: Esc on empty query pops the view
+  RootQuery --> Armed: Enter on restart, shut down, sign out, empty bin
+  Armed --> RootQuery: other key, selection change, 5 s timeout
+  Armed --> Hidden: second Enter runs the command
+  RootQuery --> Hidden: Enter runs primary action
+  ClipboardView --> Hidden: Enter pastes

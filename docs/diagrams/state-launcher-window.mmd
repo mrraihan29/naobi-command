@@ -1,0 +1,9 @@
+stateDiagram-v2
+  [*] --> Creating: process start, single instance acquired
+  Creating --> Cloaked: window created hidden, fonts and index loaded
+  Cloaked --> Showing: hotkey, tray Open, second launch
+  Showing --> Visible: first frame presented
+  Visible --> Cloaked: Esc at root, action run, hotkey again (focus returned to the previous window unless a process was launched)
+  Visible --> Cloaked: focus lost (cloak only, never SetForegroundWindow)
+  Cloaked --> [*]: Quit
+  Visible --> [*]: Quit

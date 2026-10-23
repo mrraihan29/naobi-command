@@ -1,0 +1,38 @@
+sequenceDiagram
+  actor O as Owner
+  participant A as Other app
+  participant P as P1 Platform thread
+  participant K as P3 Clipboard module
+  participant D as Data store
+  participant C as P2 Controller
+  participant U as P5 UI shell
+  participant X as naobi-win32
+  A->>P: WM_CLIPBOARDUPDATE
+  P->>K: AppEvent ClipboardChanged(sequence)
+  K->>X: read formats, flags, owner exe
+  alt exclusion flag, ignored app, or over size limit
+    K->>K: drop, store nothing
+  else storable
+    K->>D: encrypt (DPAPI) and insert, then purge by retention
+  end
+  O->>P: press Alt+Shift+V
+  P->>C: AppEvent Hotkey(Clipboard), paste target recorded
+  C->>U: ViewModel clipboard history view
+  O->>U: type to search, select entry
+  O->>U: Enter
+  U->>C: UiEvent Key(Enter)
+  C->>K: paste(entry)
+  K->>X: snapshot current clipboard with its exclusion formats and owner, then set entry with own marker format
+  C->>X: cloak launcher, SetForegroundWindow(paste target)
+  X->>X: poll foreground equals paste target, up to about 100 ms
+  alt focus returned and target not elevated
+    X->>A: SendInput Ctrl+V
+    alt snapshot had an exclusion format or its owner is ignored
+      K->>K: do not restore, clipboard keeps the pasted entry
+    else snapshot is restorable
+      K->>X: after about 300 ms restore the snapshot (marker set), unless another copy happened
+    end
+  else focus not returned, changed, or elevated
+    K->>X: put the snapshot back (same exclusion rule)
+    K->>C: Notice, nothing pasted
+  end

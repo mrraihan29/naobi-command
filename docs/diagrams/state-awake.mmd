@@ -1,0 +1,10 @@
+stateDiagram-v2
+  [*] --> Off
+  Off --> Indefinite: awake on
+  Off --> Timed: awake 30m, 1h, 2h, custom
+  Indefinite --> Timed: awake with duration
+  Timed --> Indefinite: awake on
+  Timed --> Off: expiry or awake off
+  Indefinite --> Off: awake off
+  Indefinite --> Indefinite: resume from sleep re-applies state
+  Timed --> Timed: resume from sleep re-applies state

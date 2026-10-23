@@ -1,0 +1,38 @@
+flowchart LR
+  owner([Owner]):::ext
+  otherapps([Other apps: clipboard owners, foreground windows]):::ext
+  elevated([Elevated windows]):::ext
+  winsvc([Windows services: Search index, Shell, DWM, DPAPI, Power]):::ext
+  browser([Default browser]):::ext
+  subgraph tb_fs[Trust boundary: same-user file system]
+    settings[(Settings file TOML)]
+    store[(Data store SQLite with DPAPI blobs)]
+    logs[(Log files)]
+  end
+  subgraph tb_proc[Trust boundary: Naobi Command process, medium integrity]
+    plat[P1 Platform thread: hotkeys, clipboard listener, tray]
+    ctrl[P2 Controller and launcher engine]
+    clip[P3 Clipboard capture and paste]
+    mods[P4 Window, topmost, picker, awake effects]
+    ui[P5 UI shell]
+  end
+  owner -->|"F1 hotkey chord"| plat
+  owner <-->|"F2 keys, text, rows"| ui
+  ui <-->|"F3 UiEvent, ViewModel"| ctrl
+  plat -->|"F4 AppEvent"| ctrl
+  otherapps -->|"F5 clipboard content, exclusion flags, owner exe"| clip
+  clip <-->|"F6 encrypted payloads"| store
+  ctrl <-->|"F7 frecency, color history"| store
+  settings -->|"F8 settings, hot reload"| ctrl
+  winsvc -->|"F9 app catalog, file rows"| ctrl
+  ctrl -->|"F10 launch app, system command"| winsvc
+  ctrl -->|"F11 URL on explicit action"| browser
+  mods -->|"F12 SetWindowPos, topmost, screen snapshot"| otherapps
+  mods -.->|"F12 blocked by UIPI"| elevated
+  clip -->|"F13 SendInput Ctrl+V"| otherapps
+  mods -->|"F14 execution state"| winsvc
+  ctrl -->|"F15 log lines, no content"| logs
+  winsvc -->|"F16 theme, resume, display change"| plat
+  ctrl --> clip
+  ctrl --> mods
+  classDef ext stroke-dasharray: 4 2

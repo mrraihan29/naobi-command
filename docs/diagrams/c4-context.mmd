@@ -1,0 +1,11 @@
+C4Context
+  title Naobi Command - system context
+  Person(owner, "Owner", "Single Windows 11 power user")
+  System(naobi, "Naobi Command", "Resident Rust app: launcher, calculator, clipboard history, window management, color picker, always-on-top, awake")
+  System_Ext(windows, "Windows 11", "Shell, Windows Search index, DWM, DPAPI, power manager, registry")
+  System_Ext(otherapps, "Other apps", "Foreground windows and clipboard owners, including elevated ones")
+  System_Ext(browser, "Default browser", "Opens URLs the Owner asks for")
+  Rel(owner, naobi, "Presses hotkeys, types, selects", "keyboard, mouse")
+  Rel(naobi, windows, "Queries, registers, controls", "Win32, COM, WinRT")
+  Rel(naobi, otherapps, "Reads clipboard, moves windows, pastes", "Win32")
+  Rel(naobi, browser, "Opens URL on explicit action only", "ShellExecute")

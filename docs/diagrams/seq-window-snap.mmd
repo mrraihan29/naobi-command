@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor O as Owner
+  participant W as Windows
+  participant P as P1 Platform thread
+  participant C as P2 Controller
+  participant M as naobi-winmgr
+  participant X as naobi-win32 window ops
+  O->>W: Ctrl+Alt+Left
+  W->>P: WM_HOTKEY
+  P->>C: AppEvent Hotkey(Snap LeftHalf)
+  C->>X: foreground window info, monitors, DPI
+  X-->>C: WindowInfo
+  alt target is elevated
+    C->>C: Notice naming the window, change nothing
+  else normal window
+    C->>M: plan(LeftHalf, WindowInfo, monitors, gap)
+    M-->>C: Plan with target rectangle and restore rectangle
+    C->>X: apply(plan)
+    X->>X: restore if maximized, add DWM frame delta, SetWindowPos
+    X->>X: DPI changed? apply a second time
+  end

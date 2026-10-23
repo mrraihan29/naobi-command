@@ -1,0 +1,30 @@
+sequenceDiagram
+  actor O as Owner
+  participant W as Windows
+  participant P as P1 Platform thread
+  participant C as P2 Controller and launcher
+  participant X as naobi-win32 window ops
+  participant U as P5 UI shell
+  participant F as File search worker
+  participant S as Shell
+  Note over P,W: Startup RegisterHotKey Alt+Space. On failure a Notice names the hotkey (R-008)
+  O->>W: press Alt+Space
+  W->>P: WM_HOTKEY
+  P->>P: record paste target (foreground window)
+  P->>C: AppEvent Hotkey(Launcher), t0
+  C->>U: ViewModel root, empty query
+  C->>X: show launcher on monitor under cursor
+  X->>U: move, uncloak, foreground trick
+  U-->>C: frame presented, t1 (perf build)
+  O->>U: type chrome
+  U->>C: UiEvent TextChanged
+  C->>C: sync providers: apps, commands, quicklinks, calculator
+  C->>U: ViewModel with ranked rows
+  C-)F: file query, generation n
+  F--)C: rows (dropped if generation is stale)
+  C->>U: ViewModel with Files section appended
+  O->>U: Enter
+  U->>C: UiEvent Key(Enter)
+  C->>S: launch app (primary action)
+  C->>C: record frecency
+  C->>X: cloak launcher (no focus return: the launched app takes the foreground)

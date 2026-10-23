@@ -1,0 +1,605 @@
+# Decision ledger for Naobi Command. Schema: C:/Coding/naobi-sdlc/references/ledger.md
+schema_version: 1
+project: naobi-command
+test_globs:
+  - "crates/**/*.rs"
+  - "tests/**/*.rs"
+na_topics:
+  9: "No external integrations in the MVP: the product is offline-only; currency rates are phase 2."
+entries:
+  - id: R-001
+    type: requirement
+    version: 1
+    status: active
+    topic: 1
+    answer: "setuju dengan semuanya!"
+    recommendation: "Pengguna: kamu sendiri (single user, power user Windows 11). Masalah: Raycast + PowerToys adalah dua aplikasi terpisah, berat di RAM, dan fiturnya tidak pas dengan kebutuhanmu. Tidak didistribusikan ke publik."
+    statement: "Naobi Command is a personal tool for one Windows 11 power user (the owner) that replaces two separate, memory-heavy tools (Raycast and PowerToys) with one tailored app; it is not distributed publicly."
+    acceptance:
+      - "The app runs for a single local user with no account and no multi-user features"
+
+  - id: R-002
+    type: requirement
+    version: 1
+    status: active
+    topic: 2
+    answer: "setuju dengan semuanya!"
+    recommendation: "Sukses = PowerToys bisa di-uninstall dan Raycast tidak dibutuhkan selama 14 hari pemakaian harian, tanpa satu pun fitur MVP yang membuatmu kembali ke aplikasi lama; plus semua budget performa di Q8 lolos."
+    statement: "Success means the owner uses Naobi Command daily for 14 days with PowerToys uninstalled and Raycast not installed, without falling back to either for any MVP capability, and every performance budget in R-006 passes."
+    acceptance:
+      - "A 14-day usage log records zero fallbacks to PowerToys or Raycast for MVP capabilities"
+      - "perf-harness reports every R-006 budget as PASS"
+
+  - id: R-003
+    type: requirement
+    version: 1
+    status: active
+    topic: 3
+    answer: "setuju dengan semuanya!"
+    recommendation: "Windows 11 x64 saja. macOS/Linux out of scope."
+    statement: "The only supported platform is Windows 11 on x86_64; macOS and Linux are out of scope."
+    acceptance:
+      - "The release build targets x86_64-pc-windows-msvc only"
+
+  - id: R-004
+    type: requirement
+    version: 1
+    status: active
+    topic: 3
+    answer: "setuju dengan semuanya!"
+    recommendation: "MVP = A (Launcher: app, file, system commands, quicklinks web search), B (kalkulator + konversi unit), C (Clipboard history), E (Window management snap/zona), F (Color Picker), G (Always On Top), H (Awake). Fase 2 = D (Snippets), I (Text Extractor OCR), J (Keyboard remapper), K (PowerRename, Image Resizer, Hosts editor, Peek, emoji picker, dll)."
+    statement: "The MVP contains seven modules: launcher (apps, files, system commands, web-search quicklinks), inline calculator with unit conversion, clipboard history, window management (snap to zones), color picker, always-on-top, and awake. Snippets, OCR text extractor, keyboard remapper and the remaining PowerToys utilities are phase 2."
+    acceptance:
+      - "Each of the seven MVP modules is reachable from the launcher or its own hotkey"
+      - "No phase-2 module ships in the MVP build"
+
+  - id: R-005
+    type: requirement
+    version: 1
+    status: active
+    topic: 3
+    answer: "setuju dengan semuanya!"
+    recommendation: "Tidak kompatibel dengan extension Raycast (JS/React); tidak ada plugin system di MVP (semua modul built-in Rust); fitur AI di luar MVP (nanti bisa via Ollama lokal)."
+    statement: "Out of scope for the MVP: Raycast extension compatibility, any third-party plugin system, and AI features; all modules are built into the Rust binary."
+    acceptance:
+      - "The MVP build loads no external plugin code and makes no AI calls"
+
+  - id: R-006
+    type: requirement
+    version: 4
+    status: active
+    topic: 5
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner accepted the cold-start split (tray-ready 300 ms, window 1.5 s, early hotkey served when ready). The 40 MB idle working-set budget is kept and is measured WITHOUT working-set trimming: trim-on-hide is not used because the Slint software renderer meets the budget untrimmed (24 MB measured); trimming would be YAGNI."
+    statement: "Performance budgets: hotkey-to-visible p95 <= 50 ms; keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results; idle working set <= 40 MB total, measured without working-set trimming; idle CPU < 0.5% averaged over 60 s; process start to tray-ready (tray icon shown, hotkeys registered) <= 300 ms, pre-warmed launcher window ready <= 1.5 s after process start, and a hotkey pressed before the window is ready is served as soon as it is; release exe <= 20 MB. The installed PowerToys is measured as the baseline."
+    acceptance:
+      - "perf-harness measures hotkey-to-visible p95 <= 50 ms over 200 runs"
+      - "perf-harness measures keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results"
+      - "Idle working set <= 40 MB and idle CPU < 0.5% over 60 s, measured without working-set trimming"
+      - "Process start to tray-ready <= 300 ms and launcher window ready <= 1.5 s after process start; a hotkey pressed before the window is ready opens the launcher as soon as it is ready; release exe size <= 20 MB"
+      - "A baseline report records the same metrics for the installed PowerToys"
+
+  - id: R-007
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju dengan semuanya!"
+    recommendation: "Token dari naobi.dev/DESIGN.md (tema terang 'paper', tema gelap 'stone', ikut tema Windows), font Inter + JetBrains Mono di-embed, bahasa UI Inggris, WCAG 2.2 AA untuk kontras, semua fitur bisa pakai keyboard saja."
+    statement: "The UI applies the Naobi design tokens from naobi.dev DESIGN.md with a light 'paper' theme and a dark 'stone' theme that follow the Windows app theme, embeds Inter and JetBrains Mono, uses English copy, meets WCAG 2.2 AA contrast, and every capability is operable by keyboard alone."
+    acceptance:
+      - "Switching Windows between light and dark mode switches the app theme without restart"
+      - "All text/background token pairs meet WCAG 2.2 AA contrast ratios"
+      - "Every MVP capability can be completed without a mouse"
+
+  - id: R-008
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju dengan semuanya!"
+    recommendation: "Alt+Space untuk launcher; PowerToys Run/CmdPal dimatikan saat migrasi supaya tidak bentrok."
+    statement: "As the owner, I press Alt+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently."
+    acceptance:
+      - "Alt+Space opens the launcher from any foreground app"
+      - "When Alt+Space is taken by another process, a visible conflict notice names the hotkey"
+
+  - id: R-009
+    type: requirement
+    version: 1
+    status: active
+    topic: 6
+    answer: "setuju dengan semuanya!"
+    recommendation: "Semua data lokal: settings TOML di %APPDATA%\\NaobiCommand, clipboard history di SQLite dengan isi dienkripsi Windows DPAPI, retensi 30 hari / 1.000 item, clipboard dari password manager (Bitwarden) diabaikan lewat format eksklusi standar Windows, ada perintah 'Clear clipboard history'. UU PDP tidak relevan (data milik sendiri, di perangkat sendiri)."
+    statement: "All data stays local: settings as TOML in %APPDATA%\\NaobiCommand, clipboard history in SQLite with entry contents encrypted by Windows DPAPI (current user), retained for at most 30 days or 1,000 entries; clipboard updates flagged with ExcludeClipboardContentFromMonitorProcessing or CanIncludeInClipboardHistory=0 are never stored; a 'Clear clipboard history' command deletes all entries. UU 27/2022 does not apply because the owner processes only their own data on their own device."
+    acceptance:
+      - "Clipboard entry contents in the SQLite file are not readable as plaintext"
+      - "Entries older than 30 days or beyond 1,000 are purged"
+      - "A copy flagged with ExcludeClipboardContentFromMonitorProcessing is not stored"
+      - "Clear clipboard history leaves zero entries"
+
+  - id: R-010
+    type: requirement
+    version: 1
+    status: active
+    topic: 7
+    answer: "setuju dengan semuanya!"
+    recommendation: "Tanpa login/akun; tidak ada koneksi keluar kecuali aksi eksplisit (buka URL di browser); jalan sebagai user biasa; modul yang butuh admin (fase 2, mis. Hosts editor) lewat helper terpisah yang minta elevasi hanya saat dipakai; OWASP ASVS 5.0 Level 1 untuk bab yang relevan + threat model STRIDE."
+    statement: "The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL, and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model."
+    acceptance:
+      - "The main process token is not elevated"
+      - "No socket is opened during a 10-minute idle-and-use session without an explicit URL action"
+      - "STRIDE threats in the design report each have a mitigation, test or accepted risk"
+
+  - id: D-001
+    type: decision
+    version: 1
+    status: active
+    topic: 8
+    answer: "setuju dengan semuanya!"
+    recommendation: "Full Rust, tanpa Tauri (WebView2 +60-100 MB RAM melanggar budget Q8)."
+    statement: "The whole product is Rust with a native (non-webview) UI; Tauri/WebView2 is rejected because its +60-100 MB working set breaks the 40 MB idle budget in R-006, and Rust is justified by the measured budgets in R-006 plus low-level Win32 hooks."
+
+  - id: D-002
+    type: decision
+    version: 1
+    status: superseded
+    superseded_by: D-034
+    topic: 8
+    answer: "setuju dengan semuanya!"
+    recommendation: "Slint vs GPUI ditunda ke prototipe: bangun launcher minimal di keduanya, ukur terhadap Q8 dan kesetiaan visual Naobi."
+    statement: "The native UI framework (Slint or GPUI) is chosen by a prototype that builds the same minimal launcher in both and measures them against R-006 and Naobi visual fidelity."
+
+  - id: D-003
+    type: decision
+    version: 1
+    status: active
+    topic: 8
+    answer: "setuju dengan semuanya!"
+    recommendation: "Aku install rustup (stable, MSVC) dan cek Visual Studio Build Tools sebelum prototipe UI."
+    statement: "The toolchain is rustup stable with the x86_64-pc-windows-msvc host; it is installed before the UI prototype."
+
+  - id: D-004
+    type: decision
+    version: 1
+    status: active
+    topic: 3
+    answer: "setuju dengan semuanya!"
+    recommendation: "PowerToys: baca source + dokumentasi resmi (MIT), tanpa REA. Raycast: izin download installer Raycast for Windows dari raycast.com, dianalisis dengan REA untuk inventaris fitur/perilaku/UX secara clean-room. Hasil ke docs/research/ sebagai input Design."
+    statement: "Reference research is clean-room: PowerToys behaviour comes from its MIT source and official docs; Raycast for Windows behaviour comes from its official docs plus REA analysis of the installed app; outputs are feature and behaviour notes in docs/research/, and no third-party code, assets or proprietary text are copied into the product."
+
+  - id: D-005
+    type: decision
+    version: 1
+    status: active
+    topic: 11
+    answer: "setuju dengan semuanya!"
+    recommendation: "Cargo workspace, satu crate per modul (core, launcher, clipboard, winmgr, ui, ...); rustfmt + clippy -D warnings; thiserror di library, anyhow di binary; tanpa unwrap() di luar test; unsafe hanya di adapter Win32 dengan komentar // SAFETY:."
+    statement: "Code layout is a Cargo workspace with one crate per module; rustfmt and clippy with -D warnings gate every change; libraries use thiserror and the binary uses anyhow; unwrap/expect are forbidden outside tests; unsafe code lives only in Win32 adapter modules and every unsafe block carries a // SAFETY: comment."
+
+  - id: D-006
+    type: decision
+    version: 1
+    status: active
+    topic: 12
+    answer: "setuju dengan semuanya!"
+    recommendation: "Playwright tidak berlaku (app native). cargo test untuk logika tiap crate (ranking pencarian, parser kalkulator, retensi clipboard, layout zona), integration test per modul, plus binary perf-harness untuk budget Q8. Alur kritis: hotkey -> buka app, copy -> cari -> paste dari history, snap window."
+    statement: "Playwright does not apply to this native app. Logic is tested with cargo test per crate (search ranking, calculator parser, clipboard retention, zone layout), each module has integration tests, and a perf-harness binary verifies R-006. Critical flows: hotkey to app launch, copy to search to paste from history, window snap."
+
+  - id: D-007
+    type: decision
+    version: 1
+    status: active
+    topic: 13
+    answer: "setuju dengan semuanya!"
+    recommendation: "Exe portable hasil build release + autostart via registry HKCU Run. Installer (MSIX/winget) dan auto-update di luar MVP. Tanpa server, tanpa backup."
+    statement: "Delivery is a portable release exe with optional autostart through HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run; installers and auto-update are out of the MVP; there is no server and no backup."
+
+  - id: D-008
+    type: decision
+    version: 1
+    status: active
+    topic: 14
+    answer: "setuju dengan semuanya!"
+    recommendation: "Budget Rp0, tidak ada deadline keras, pemutus keputusan tunggal: kamu."
+    statement: "Budget is zero (only free and open-source dependencies), there is no hard deadline, and the owner is the single decider."
+
+  # ---- Grill round 2 (Q23-Q36), answered 2026-10-22 ----
+  - id: R-011
+    type: requirement
+    version: 1
+    status: active
+    topic: 7
+    answer: "setuju semua"
+    recommendation: "A untuk MVP (terima batasan UIPI + tampilkan notifikasi); C (UIAccess self-signed) dievaluasi di fase 2."
+    statement: "The app never runs elevated in the MVP; when a module targets an elevated window it cannot control (UIPI), it shows a notice naming the window instead of failing silently. A UIAccess build is reconsidered in phase 2."
+    acceptance:
+      - "Snapping or pinning an elevated window shows the admin-window notice and changes nothing"
+
+  - id: R-012
+    type: requirement
+    version: 2
+    status: active
+    topic: 4
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner accepted: exact alias first, then fuzzy title score with a frecency boost of at most 20% of the fuzzy score, files as a trailing section because Windows Search results arrive last, and Esc hides a view that was opened directly by its own hotkey."
+    statement: "(critical) As the owner, I type into one root search that mixes apps, files, commands, quicklinks and calculator results, ranked exact alias first, then fuzzy title match with a frecency boost of at most 20% of the fuzzy score, with file results in a trailing section because Windows Search results arrive last; Enter runs the primary action, Ctrl+Enter the secondary action, Ctrl+K opens the action panel, and Esc clears the query, then pops the view, then hides the launcher; a view opened directly by its own hotkey (for example clipboard history via Alt+Shift+V) hides on Esc instead of popping to the root view."
+    acceptance:
+      - "Typing an exact alias ranks its item first"
+      - "An item opened more often ranks above an equal fuzzy match; frecency never raises an item by more than 20% of its fuzzy score"
+      - "Enter on an app result launches it and hides the launcher"
+      - "Ctrl+K lists the selected result's actions"
+      - "Esc with a non-empty query clears it; Esc on an empty root view hides the launcher"
+      - "Esc on an empty query in a view opened by its own hotkey hides the launcher"
+      - "File results appear after the other results"
+
+  - id: R-013
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "MVP: query Windows Search index (cara PowerToys), memori ditanggung service Windows. Index MFT sendiri di fase 2."
+    statement: "File results in the MVP come from querying the Windows Search system index; the app keeps no file index of its own. An own NTFS index is phase 2."
+    acceptance:
+      - "A file in an indexed location appears in results by name"
+      - "When Windows Search is disabled, the launcher shows a 'file search unavailable' row instead of an error"
+
+  - id: R-014
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "Parser sendiri: aritmetika, persen, pangkat, hex/bin; konversi 8 kategori satuan (panjang, massa, suhu, volume, ukuran data, waktu, kecepatan, luas); tanpa kurs; Enter menyalin hasil."
+    statement: "Typing an expression in the root search shows an inline calculator result supporting arithmetic, percentages, powers and hex/binary, plus unit conversion in eight categories (length, mass, temperature, volume, data size, time, speed, area); there is no currency conversion; Enter copies the result."
+    acceptance:
+      - "Expressions such as 2^10 + 15% evaluate correctly in unit tests"
+      - "5 km to mi and 100 F to C convert correctly"
+      - "Enter on a calculator result puts the result text on the clipboard"
+
+  - id: R-015
+    type: requirement
+    version: 2
+    status: active
+    topic: 4
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner uses Proton Pass, not Bitwarden: the default ignore list is the Proton Pass desktop app, planned exe name 'Proton Pass.exe', to be confirmed at build."
+    statement: "(critical) As the owner, I press Alt+Shift+V to open clipboard history holding text, images up to 10 MB and file lists; I can search text, pin entries, press Enter to paste into the previously focused app or Ctrl+Enter to copy only; copies from apps on the ignore list (default the Proton Pass desktop app, planned exe name 'Proton Pass.exe', confirmed at build) are never stored."
+    acceptance:
+      - "Copy text, open history, Enter: the text is pasted into the previous app"
+      - "An image larger than 10 MB is not stored"
+      - "A pinned entry survives retention purge"
+      - "A copy made while 'Proton Pass.exe' owns the clipboard is not stored"
+
+  - id: R-016
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "Perintah keyboard ala Raycast: halves, thirds, quarters, center, maximize, almost-maximize, next display, restore; opsi gap; hotkey Ctrl+Alt+Panah (halves), Ctrl+Alt+Enter (maximize), Ctrl+Alt+C (center), Ctrl+Alt+Backspace (restore). Drag-zone overlay ala FancyZones di fase 2."
+    statement: "(critical) Window management offers keyboard commands for halves, thirds, quarters, center, maximize, almost-maximize, move to next display and restore, with a configurable gap; default hotkeys are Ctrl+Alt+Arrow for halves, Ctrl+Alt+Enter maximize, Ctrl+Alt+C center and Ctrl+Alt+Backspace restore. Drag-to-zone overlays are phase 2."
+    acceptance:
+      - "Ctrl+Alt+Left places the foreground window on the left half of its monitor work area, gap applied"
+      - "Restore returns the window to its pre-command rectangle"
+      - "Next display moves the window keeping its relative position, correct on mixed-DPI monitors"
+
+  - id: R-017
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "Hotkey Win+Shift+C, kaca pembesar, klik = salin HEX, format HEX/RGB/HSL/OKLCH dipilih di launcher, history 20 warna."
+    statement: "Win+Shift+C starts the color picker with a magnifier; a click copies the color as HEX; HEX, RGB, HSL and OKLCH formats are available from the launcher; the last 20 picked colors are kept."
+    acceptance:
+      - "Picking a known pixel copies its exact HEX value"
+      - "The 21st pick drops the oldest color"
+
+  - id: R-018
+    type: requirement
+    version: 2
+    status: active
+    topic: 4
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner accepted: the topmost border follows the Windows theme, oxide #914A3B in light mode and stone-focus #E3BDA9 in dark mode, both at least 3:1 against the Naobi window colors."
+    statement: "Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings and is the Naobi oxide accent #914A3B when Windows is in light mode and stone-focus #E3BDA9 when Windows is in dark mode (each at least 3:1 against its theme window color); no sound is played."
+    acceptance:
+      - "Toggling twice returns the window to non-topmost"
+      - "The border follows the pinned window when it moves and disappears when unpinned"
+      - "The border color is #914A3B in Windows light mode and #E3BDA9 in Windows dark mode and changes with the theme without restart"
+
+  - id: R-019
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "Mode Off / Indefinite / Timed (30m, 1h, 2h, custom) + toggle keep display on; dikontrol lewat perintah launcher (mis. 'awake 1h'), status terlihat di ikon tray."
+    statement: "Awake keeps the PC from sleeping in Indefinite or Timed mode (30 min, 1 h, 2 h or a custom duration), optionally keeping the display on; it is controlled by launcher commands such as 'awake 1h' and its state shows in the tray icon. The owner's PC uses S3 sleep (no Modern Standby)."
+    acceptance:
+      - "During Timed mode, powercfg /requests lists the app; after expiry it does not"
+      - "The tray icon reflects Off, Indefinite or Timed"
+
+  - id: R-020
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "lock, sleep, hibernate, restart, shut down, sign out, empty recycle bin, toggle dark mode, open Windows settings; restart/shut down/sign out/empty recycle bin minta konfirmasi (Enter dua kali)."
+    statement: "System commands are lock, sleep, hibernate, restart, shut down, sign out, empty recycle bin, toggle dark mode and open Windows settings; restart, shut down, sign out and empty recycle bin require a second Enter to confirm."
+    acceptance:
+      - "A single Enter on Restart only arms the confirmation; a second Enter executes"
+      - "Toggle dark mode flips the Windows app theme"
+
+  - id: R-021
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua"
+    recommendation: "Didefinisikan di settings TOML dengan placeholder {query}; bawaan Google, GitHub, YouTube, naobi.dev; alias per quicklink (mis. 'gh react')."
+    statement: "Quicklinks are defined in the settings TOML as URL templates with a {query} placeholder and an alias; the defaults are Google, GitHub, YouTube and naobi.dev; typing '<alias> <text>' opens the URL with the text URL-encoded in the default browser."
+    acceptance:
+      - "Typing gh react native opens the GitHub search URL with react%20native"
+
+  - id: D-009
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju semua"
+    recommendation: "MVP: settings berupa file TOML yang di-reload otomatis saat disimpan; perintah 'Open settings' membuka file itu di editor default. Settings GUI di fase 2."
+    statement: "MVP settings are a hot-reloaded TOML file opened in the default editor by an 'Open settings' command; a settings window is phase 2. An invalid file keeps the last valid settings and shows the parse error."
+
+  - id: R-022
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju semua"
+    recommendation: "Ikon tray dengan menu Open, Pause hotkeys, Awake status, Settings, Quit. Tidak ada ikon taskbar."
+    statement: "The app shows only a tray icon (no taskbar button) with the menu Open, Pause hotkeys, Awake status, Settings and Quit."
+    acceptance:
+      - "The launcher window never appears in the taskbar or Alt+Tab"
+      - "Pause hotkeys stops every global hotkey until resumed"
+
+  - id: R-023
+    type: requirement
+    version: 1
+    status: active
+    topic: 5
+    answer: "setuju semua"
+    recommendation: "Satu instance saja (instance kedua mengaktifkan launcher instance pertama lalu keluar); window launcher dibuat tersembunyi saat startup (pre-warm) dan disembunyikan dengan cloak, bukan di-destroy."
+    statement: "Only one instance runs; a second launch shows the first instance's launcher and exits. The launcher window is created hidden at startup and hidden by DWM cloaking, never destroyed, so showing it does not create a window."
+    acceptance:
+      - "Starting the exe twice leaves one process and shows the launcher"
+      - "The launcher HWND is identical across 100 show/hide cycles"
+
+  # ---- Design phase (NCMD-2), autonomous defaults awaiting owner confirmation at Gate 1 ----
+  - id: D-010
+    type: decision
+    version: 3
+    status: active
+    topic: 8
+    answer: "autonomous default"
+    recommendation: "Isolate the UI framework behind one seam so D-002 can be decided by the prototype without touching any other crate; keep focus-free overlays, the tray menu and notices outside the framework."
+    statement: "The UI framework is isolated: naobi-core::ui defines the ViewModel and UiEvent data types and the launcher returns Effects, so behaviour is testable without a window; only the naobi-ui crate depends on Slint and naobi-app calls naobi-ui directly (no UiShell trait, since D-034 resolved the framework); the color picker overlay, the topmost border, the tray menu and notices are native Win32 owned by naobi-win32. Recorded in ADR-0002."
+
+  - id: D-011
+    type: decision
+    version: 1
+    status: active
+    topic: 11
+    answer: "autonomous default"
+    recommendation: "Confine unsafe to one crate so memory-safety review has one place to look; this refines D-005 and is the ADR the toolchain floor requires."
+    statement: "Every crate except naobi-win32 carries forbid(unsafe_code); naobi-win32 denies undocumented unsafe blocks and unsafe_op_in_unsafe_fn, and exposes only safe functions and ports. Recorded in ADR-0003."
+
+  - id: D-012
+    type: decision
+    version: 1
+    status: active
+    topic: 4
+    answer: "autonomous default"
+    recommendation: "Use RegisterHotKey only and report conflicts; skip the low-level keyboard hook that both reference products need for modifier-only taps, since no ledger hotkey needs it."
+    statement: "All global hotkeys are registered with RegisterHotKey on one message-only window; a refused registration raises a Notice naming the hotkey; Pause hotkeys unregisters every hotkey; there is no low-level keyboard hook in the MVP. Recorded in ADR-0004."
+
+  - id: D-013
+    type: decision
+    version: 4
+    status: active
+    topic: 5
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner accepted: tray-ready is the tray icon plus registered hotkeys within 300 ms; the pre-warmed window follows within 1.5 s and an early hotkey is queued until then."
+    statement: "The launcher window is created hidden at startup, hidden by DwmSetWindowAttribute(DWMWA_CLOAK) and shown by moving it to the monitor under the cursor, uncloaking and applying the foreground trick; a hide driven by Esc or Enter also returns the foreground to the window recorded when the Launcher opened, unless the action launched a process, while a hide caused by focus loss only cloaks and never calls SetForegroundWindow, because the window the Owner just chose already has the keyboard; a named mutex Local\\NaobiCommand.Instance enforces one instance and a second launch posts one payload-free message to the first instance's message-only window; tray-ready means the tray icon is shown and the hotkeys are registered (within 300 ms of process start), the pre-created window is ready within 1.5 s of process start, a hotkey pressed earlier is queued and served as soon as the window is ready, and the app catalog loads asynchronously afterwards. Recorded in ADR-0005."
+
+  - id: D-014
+    type: decision
+    version: 2
+    status: active
+    topic: 6
+    answer: "autonomous default"
+    recommendation: "One SQLite file in the local (non-roaming) profile with per-blob DPAPI encryption, as R-009 asks; search over clipboard text through an in-memory index dropped after 60 s idle."
+    statement: "Clipboard entries, frecency and color history live in %LOCALAPPDATA%\\NaobiCommand\\naobi.db (SQLite, WAL); every content column is a CryptProtectData current-user blob and only metadata is plaintext; frecency stores a 64-bit xxh3 hash of the item identity keyed with a random per-install salt kept in the META table (a stable algorithm, never DefaultHasher), not the path; window restore rectangles, topmost windows and Awake mode are not persisted; schema changes are expand-contract with a file copy before migration. Recorded in ADR-0006."
+
+  - id: D-015
+    type: decision
+    version: 3
+    status: active
+    topic: 6
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner confirmed: pinned entries are exempt from the 30-day and 1,000-entry limit, capped at 100, and removed by Clear clipboard history."
+    statement: "Clipboard limits: a text entry over 1 MiB is not stored; an image is stored only if its PNG is at most 10 MB and a raw bitmap over 64 MiB is rejected before conversion; a file list keeps at most 1,000 paths; the store is capped at 500 MB with the oldest unpinned entries evicted first; captures are rate-limited to 10 per second with trailing-edge capture, so the last clipboard state after a burst is always stored; pinned entries (at most 100) survive the retention purge (R-015) but are deleted by Clear clipboard history (R-009); settings may lower the 30-day and 1,000-entry retention but never raise it."
+
+  - id: D-016
+    type: decision
+    version: 2
+    status: active
+    topic: 4
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner accepted ranking as in R-012 v2: exact alias, then fuzzy score plus a frecency boost bounded at 20% of the fuzzy score, files in a trailing section."
+    statement: "Root search ranks in two tiers: an exact alias match first; then every other Result by nucleo-matcher fuzzy score on title and keywords plus a frecency boost of min(5 x decayed open count, 20% of the fuzzy score) points with a 30-day half-life, ties broken by title; a minimum fuzzy score filters weak matches (tuned in Build on the 10,000-item set); at most 50 rows are shown; an empty query lists the 10 most frecent Items; file results arrive asynchronously from Windows Search, are capped at 30, form a trailing Files section ordered by Windows Search rank, and never move rows above them."
+
+  - id: D-017
+    type: decision
+    version: 2
+    status: active
+    topic: 4
+    answer: "autonomous default"
+    recommendation: "Pick the percent semantics that match the owner's example '2^10 + 15%' and the reference calculators, keep arithmetic in f64, and show no calculator row for bare numbers."
+    statement: "Calculator semantics: arithmetic uses f64 and prints 10 significant digits with trailing zeros trimmed; operators are + - * / ^ and parentheses, mod is the word 'mod'; percent means a + b% = a + a*b/100, a - b% likewise, a * b% = a*b/100 and a lone b% = b/100, so '2^10 + 15%' = 1177.6; 0x and 0b literals are accepted and 'to hex' or 'to bin' prints an integer in that base using i128 integer math, exact above 2^53; unit conversion is '<number> <unit> to|in <unit>' inside one of the eight categories with case-insensitive names and affine temperature; in the data size category KB, MB, GB and TB are powers of 1000 and KiB, MiB, GiB and TiB are powers of 1024; a bare number or a word shows no calculator row; division by zero shows no result; Enter copies the result text."
+
+  - id: D-018
+    type: decision
+    version: 2
+    status: active
+    topic: 10
+    answer: "autonomous default"
+    recommendation: "Keep Notices until the owner has seen them: balloon plus a banner on the next launcher show and a tray tooltip, because balloons can be suppressed by Do Not Disturb."
+    statement: "A Notice is sticky until the Owner has seen it: it is shown as a Shell_NotifyIcon balloon from the tray icon, is kept and shown as a banner row above the results the next time the Launcher is shown (including through tray Open), and while it is active the tray tooltip and icon reflect it (for example a hotkey conflict); a banner is dismissed by Esc; every Notice names its subject (the hotkey, the window, the parse error line) and is exposed to screen readers."
+
+  - id: D-019
+    type: decision
+    version: 4
+    status: active
+    topic: 4
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner chose to restore the previous clipboard after a paste from history, after the paste keystroke is delivered, with a short delay."
+    statement: "Enter on a clipboard entry snapshots the current clipboard (text, image or file list within the D-015 limits), writes the entry with a private marker format, cloaks the Launcher, calls SetForegroundWindow on the paste target, polls GetForegroundWindow for up to about 100 ms until it equals the paste target, checks that the target is not elevated, and only then sends Ctrl+V with SendInput; if any step fails a Notice is shown, nothing is pasted and the snapshot is put back under the same rule; about 300 ms after the keystroke is delivered the snapshot is restored with the private marker, unless the clipboard sequence number shows that another copy happened in between, and unless the snapshot carried an exclusion format (ExcludeClipboardContentFromMonitorProcessing, CanIncludeInClipboardHistory = 0 or CanUploadToCloudClipboard = 0) or its owner is on the ignore list, in which case it is not restored and the clipboard keeps the pasted entry; writes carrying the marker (paste, restore, calculator copy, color copy) are never stored in clipboard history."
+
+  - id: D-020
+    type: decision
+    version: 1
+    status: active
+    topic: 11
+    answer: "autonomous default"
+    recommendation: "Log to a small local rolling file with tracing and never write what the owner typed or copied."
+    statement: "Diagnostics use tracing to rolling files in %LOCALAPPDATA%\\NaobiCommand\\logs (5 files of at most 1 MB, level info); logs contain ids, sizes, counts and error codes only and never clipboard content, query text or file names; there is no network log sink."
+
+  - id: D-021
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "autonomous default"
+    recommendation: "Start from the measured Raycast Windows layout numbers (clean-room, numbers only) and confirm them in the mockups."
+    statement: "Launcher window defaults: 750 x 475 logical px, search header 66, row 40, footer 42, icon 22, horizontally centered with its top at 20% of the work-area height of the monitor under the cursor; it hides when it loses focus; every show starts at the root view with an empty query; at most 50 rows are drawn."
+
+  - id: D-022
+    type: decision
+    version: 1
+    status: active
+    topic: 4
+    answer: "autonomous default"
+    recommendation: "Define the ambiguous window-management words once so tests can assert them; keep state in memory and use no WinEvent hooks for window management (only a scoped hook while a window is topmost)."
+    statement: "Window management defaults: Gap is 8 logical px, applied as the margin to the work-area edge and as the spacing between two snapped neighbours; almost-maximize is 90% of the work area, centered; thirds are left, center, right, first two and last two; quarters are the four corners; Ctrl+Alt+Left, Right, Up and Down are the left, right, top and bottom halves and all other Snap commands have no default hotkey; Restore rectangles are kept in memory per window (at most 64, lost at exit) and are recorded at the first Snap only; next display preserves the window's relative position and size as fractions of the work area."
+
+  - id: D-023
+    type: decision
+    version: 1
+    status: active
+    topic: 4
+    answer: "autonomous default"
+    recommendation: "Freeze a screen snapshot and draw the magnifier on it, so the picker needs no mouse hook and no click-through overlay."
+    statement: "Color picker: on Win+Shift+C the app takes a per-monitor-DPI snapshot of the virtual screen with GDI, shows one borderless topmost overlay per monitor that draws the snapshot, a magnifier and the HEX readout; a left click copies HEX and records the pick, Esc or a right click cancels; the snapshot lives only in memory until the overlay closes; HEX, RGB, HSL and OKLCH are copy actions on Color history items in the launcher, not a global setting; HDR content reads as SDR."
+
+  - id: D-024
+    type: decision
+    version: 1
+    status: active
+    topic: 4
+    answer: "autonomous default"
+    recommendation: "List every launcher-visible command once and fix the awake grammar, so the command catalog is testable; leave out run-as-administrator because the app never elevates."
+    statement: "Command catalog: Clipboard History, Clear Clipboard History, Pick Color, Color History, Toggle Always on Top, each Snap command, Restore, the nine system commands, Awake (typed 'awake 1h', 'awake 45m', 'awake on', 'awake off', 'awake display on|off' or chosen from a list of 30 min, 1 h, 2 h, custom), Open Settings File, Pause Hotkeys and Quit; default quicklink aliases are g (Google), gh (GitHub), yt (YouTube) and naobi (naobi.dev); there is no run-as-administrator action in the MVP."
+
+  - id: D-025
+    type: decision
+    version: 3
+    status: active
+    topic: 12
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner accepted: tier 2 before Gate 3, and the PowerToys baseline is captured before PowerToys is uninstalled."
+    statement: "Test tiers: tier 1 is pure cargo test per crate with no Win32 and is the per-task gate; tier 2 is Win32 integration tests that use real Windows APIs and helper test windows on an interactive desktop, marked #[ignore = \"tier2: interactive desktop\"] and run with cargo test --workspace -- --ignored before Gate 3 or on demand with the dogfood instance quit; tier 3 is the naobi-perf harness for the R-006 budgets, the 10-minute network-silence check and the PowerToys baseline, which is captured in Plan slice 1 before PowerToys is uninstalled for the R-002 trial and committed as docs/research/baseline-powertoys.json; test names start with r<nnn>_ and carry a '// @R-nnn' comment; after Gate 1 the owner's OK installs cargo-deny, cargo-mutants and optionally cargo-nextest; no hosted CI before Ship, so every gate command runs locally."
+
+  - id: D-026
+    type: decision
+    version: 2
+    status: active
+    topic: 7
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner signed off this accepted risk. Accept same-user compromise as out of scope: DPAPI cannot defend against code already running as the owner, and the tool has one user."
+    statement: "Accepted risk: any process running as the same user, or an administrator, can decrypt Data store blobs through DPAPI, read decrypted clipboard text from process memory or the page file, or replace blobs; DPAPI protects against other accounts and offline disk copies only. Exposure is reduced by retention, the Clear command, exclusion flags, the ignore list and dropping the decrypted index after 60 s."
+
+  - id: D-027
+    type: decision
+    version: 2
+    status: active
+    topic: 7
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner signed off. The owner uses Proton Pass, not Bitwarden: copies from its browser extension have the browser as clipboard owner, so the desktop-app ignore entry does not apply; the risk is mitigated by the Windows exclusion flags when Proton Pass sets them and by Clear clipboard history."
+    statement: "Accepted risk: copies from an app that sets no exclusion flag and is not on the ignore list are stored for up to 30 days, including a password revealed in a browser and copies made by the Proton Pass browser extension (the clipboard owner is then the browser process, so the Proton Pass desktop-app ignore entry does not apply); the risk is mitigated by the Windows exclusion flags when Proton Pass sets them, by the ignore list and by Clear clipboard history."
+
+  - id: D-028
+    type: decision
+    version: 2
+    status: active
+    topic: 7
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner signed off this accepted risk. Accept an unsigned portable exe, since it is never distributed (R-001) and dependencies are checked by cargo-deny with a committed Cargo.lock."
+    statement: "Accepted risk: the release exe is not code-signed, so SmartScreen may warn and Windows gives no authenticity check; the supply chain is controlled by cargo-deny advisories and licenses and a committed Cargo.lock."
+
+  - id: D-029
+    type: decision
+    version: 2
+    status: active
+    topic: 7
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Owner signed off this accepted risk. Accept that another process can hold a chord first; R-008 asks only that the conflict is reported."
+    statement: "Accepted risk: if another process already owns a Hotkey, including Alt+Space held by PowerToys Run, that module's hotkey does not work until the Owner frees the chord; the app reports the conflict and keeps the module reachable from the Launcher."
+
+  - id: D-030
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "autonomous default"
+    recommendation: "Adapt the Naobi web tokens to the desktop without inventing colors: reuse the paper and stone tokens, the DOC-09 type and spacing scales and the DOC-10 motion tokens, and flag the one contrast failure."
+    statement: "Desktop token adaptation: the paper window uses paper-elevated and the stone window uses dock-stone; the selection accent is oxide on paper and stone-focus on stone; the focus ring is focus blue on paper and stone-focus on stone; type uses Inter and JetBrains Mono at 12, 13, 14, 16 and 18 px only; spacing follows the 4 px scale; window radius is 8 and row radius 2; there is no shadow beyond the OS window shadow and no animation on show or hide; reduced motion follows the Windows Animation effects setting; on a selected row in paper, muted text steps up to ink-secondary because ink-muted measures 4.32:1 there; no new danger or success tint is added on stone and state is conveyed by text and glyph; the settings file offers ui.text_scale of 1.0, 1.125 or 1.25."
+
+  - id: D-031
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Mockup direction approved: docs/design/mockups/launcher-mockups.html covers root, results with calculator, action panel, clipboard history and window management in paper and stone; the remaining screens follow the same pattern and are specified per ticket in Plan."
+    statement: "Mockup direction approved by the Owner: docs/design/mockups/launcher-mockups.html (root, results with calculator, action panel, clipboard history, window management; paper and stone themes). The remaining screens (color picker overlay, tray menu, error, loading and empty states) follow the same pattern and are specified per ticket in Plan."
+
+  - id: D-032
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Screen-reader support is a weighted criterion for D-002, not a hard requirement, and is switched on when it costs less than 5 MB of working set."
+    statement: "UI Automation exposure is not a hard requirement for this single-user tool; it is a weighted criterion for D-002, and the chosen framework's accessibility support is enabled when it costs less than 5 MB of working set."
+
+  - id: D-033
+    type: decision
+    version: 1
+    status: active
+    topic: 7
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Keep OWASP ASVS Level 1; apply encryption at rest, exclusion flags and content-free logs regardless."
+    statement: "OWASP ASVS 5.0 Level 1 is confirmed by the Owner for this single-user, offline tool even though clipboard history holds the Owner's own personal data; encryption at rest, exclusion flags and the content-free log policy apply regardless of the level."
+
+  - id: D-034
+    type: decision
+    version: 1
+    status: active
+    topic: 8
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    recommendation: "Slint with the software renderer and the accessibility feature enabled; GPUI, femtovg and skia rejected on measured evidence (docs/research/ui-prototype.md, .ai-workspace coder-slint-iter2.md)."
+    statement: "UI framework is Slint with the software renderer and the accessibility feature enabled; GPUI is rejected (no UI Automation, custom text input, higher idle CPU); femtovg is rejected (idle working set about 80 MB, window creation about 1.15 s); skia is rejected (idle working set 160 MB, no render notifier). Measured with the software renderer on the NCMD-1 spike, untrimmed: idle working set 24.0 MB (27.3 MB with accessibility, +3.3 MB), private bytes about 8 MB, idle CPU 0.00%, 5 threads, tray-ready 33-39 ms from process start, window created and cloaked about 200 ms (249 ms with accessibility), release exe 10.7 MB. Keystroke-to-results p95 of 16 ms is not yet proven for the software renderer (screen-probe upper bound 26.7 ms, probe overhead about 7 ms) and is measured in the first Build slice."

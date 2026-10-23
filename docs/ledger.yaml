@@ -17,6 +17,8 @@ entries:
     statement: "Naobi Command is a personal tool for one Windows 11 power user (the owner) that replaces two separate, memory-heavy tools (Raycast and PowerToys) with one tailored app; it is not distributed publicly."
     acceptance:
       - "The app runs for a single local user with no account and no multi-user features"
+    links:
+      tickets: ["NCMD-5@1"]
 
   - id: R-002
     type: requirement
@@ -29,6 +31,8 @@ entries:
     acceptance:
       - "A 14-day usage log records zero fallbacks to PowerToys or Raycast for MVP capabilities"
       - "perf-harness reports every R-006 budget as PASS"
+    links:
+      tickets: ["NCMD-6@1", "NCMD-25@1", "NCMD-26@1"]
 
   - id: R-003
     type: requirement
@@ -40,6 +44,8 @@ entries:
     statement: "The only supported platform is Windows 11 on x86_64; macOS and Linux are out of scope."
     acceptance:
       - "The release build targets x86_64-pc-windows-msvc only"
+    links:
+      tickets: ["NCMD-4@1"]
 
   - id: R-004
     type: requirement
@@ -52,6 +58,8 @@ entries:
     acceptance:
       - "Each of the seven MVP modules is reachable from the launcher or its own hotkey"
       - "No phase-2 module ships in the MVP build"
+    links:
+      tickets: ["NCMD-25@1"]
 
   - id: R-005
     type: requirement
@@ -63,6 +71,8 @@ entries:
     statement: "Out of scope for the MVP: Raycast extension compatibility, any third-party plugin system, and AI features; all modules are built into the Rust binary."
     acceptance:
       - "The MVP build loads no external plugin code and makes no AI calls"
+    links:
+      tickets: ["NCMD-4@1", "NCMD-25@1"]
 
   - id: R-006
     type: requirement
@@ -78,6 +88,8 @@ entries:
       - "Idle working set <= 40 MB and idle CPU < 0.5% over 60 s, measured without working-set trimming"
       - "Process start to tray-ready <= 300 ms and launcher window ready <= 1.5 s after process start; a hotkey pressed before the window is ready opens the launcher as soon as it is ready; release exe size <= 20 MB"
       - "A baseline report records the same metrics for the installed PowerToys"
+    links:
+      tickets: ["NCMD-4@4", "NCMD-5@4", "NCMD-6@4", "NCMD-11@4", "NCMD-14@4", "NCMD-25@4", "NCMD-27@4"]
 
   - id: R-007
     type: requirement
@@ -91,6 +103,8 @@ entries:
       - "Switching Windows between light and dark mode switches the app theme without restart"
       - "All text/background token pairs meet WCAG 2.2 AA contrast ratios"
       - "Every MVP capability can be completed without a mouse"
+    links:
+      tickets: ["NCMD-11@1", "NCMD-13@1", "NCMD-25@1"]
 
   - id: R-008
     type: requirement
@@ -103,6 +117,8 @@ entries:
     acceptance:
       - "Alt+Space opens the launcher from any foreground app"
       - "When Alt+Space is taken by another process, a visible conflict notice names the hotkey"
+    links:
+      tickets: ["NCMD-12@1", "NCMD-13@1"]
 
   - id: R-009
     type: requirement
@@ -117,6 +133,8 @@ entries:
       - "Entries older than 30 days or beyond 1,000 are purged"
       - "A copy flagged with ExcludeClipboardContentFromMonitorProcessing is not stored"
       - "Clear clipboard history leaves zero entries"
+    links:
+      tickets: ["NCMD-8@1", "NCMD-9@1", "NCMD-19@1", "NCMD-20@1"]
 
   - id: R-010
     type: requirement
@@ -130,6 +148,8 @@ entries:
       - "The main process token is not elevated"
       - "No socket is opened during a 10-minute idle-and-use session without an explicit URL action"
       - "STRIDE threats in the design report each have a mitigation, test or accepted risk"
+    links:
+      tickets: ["NCMD-5@1", "NCMD-17@1", "NCMD-25@1"]
 
   - id: D-001
     type: decision
@@ -215,6 +235,8 @@ entries:
     statement: "The app never runs elevated in the MVP; when a module targets an elevated window it cannot control (UIPI), it shows a notice naming the window instead of failing silently. A UIAccess build is reconsidered in phase 2."
     acceptance:
       - "Snapping or pinning an elevated window shows the admin-window notice and changes nothing"
+    links:
+      tickets: ["NCMD-21@1", "NCMD-22@1"]
 
   - id: R-012
     type: requirement
@@ -232,6 +254,8 @@ entries:
       - "Esc with a non-empty query clears it; Esc on an empty root view hides the launcher"
       - "Esc on an empty query in a view opened by its own hotkey hides the launcher"
       - "File results appear after the other results"
+    links:
+      tickets: ["NCMD-14@2", "NCMD-15@2", "NCMD-16@2", "NCMD-17@2"]
 
   - id: R-013
     type: requirement
@@ -244,6 +268,8 @@ entries:
     acceptance:
       - "A file in an indexed location appears in results by name"
       - "When Windows Search is disabled, the launcher shows a 'file search unavailable' row instead of an error"
+    links:
+      tickets: ["NCMD-17@1"]
 
   - id: R-014
     type: requirement
@@ -257,6 +283,8 @@ entries:
       - "Expressions such as 2^10 + 15% evaluate correctly in unit tests"
       - "5 km to mi and 100 F to C convert correctly"
       - "Enter on a calculator result puts the result text on the clipboard"
+    links:
+      tickets: ["NCMD-10@1", "NCMD-18@1"]
 
   - id: R-015
     type: requirement
@@ -271,6 +299,8 @@ entries:
       - "An image larger than 10 MB is not stored"
       - "A pinned entry survives retention purge"
       - "A copy made while 'Proton Pass.exe' owns the clipboard is not stored"
+    links:
+      tickets: ["NCMD-19@2", "NCMD-20@2"]
 
   - id: R-016
     type: requirement
@@ -284,6 +314,8 @@ entries:
       - "Ctrl+Alt+Left places the foreground window on the left half of its monitor work area, gap applied"
       - "Restore returns the window to its pre-command rectangle"
       - "Next display moves the window keeping its relative position, correct on mixed-DPI monitors"
+    links:
+      tickets: ["NCMD-21@1"]
 
   - id: R-017
     type: requirement
@@ -296,6 +328,8 @@ entries:
     acceptance:
       - "Picking a known pixel copies its exact HEX value"
       - "The 21st pick drops the oldest color"
+    links:
+      tickets: ["NCMD-24@1"]
 
   - id: R-018
     type: requirement
@@ -309,6 +343,8 @@ entries:
       - "Toggling twice returns the window to non-topmost"
       - "The border follows the pinned window when it moves and disappears when unpinned"
       - "The border color is #914A3B in Windows light mode and #E3BDA9 in Windows dark mode and changes with the theme without restart"
+    links:
+      tickets: ["NCMD-22@2"]
 
   - id: R-019
     type: requirement
@@ -321,6 +357,8 @@ entries:
     acceptance:
       - "During Timed mode, powercfg /requests lists the app; after expiry it does not"
       - "The tray icon reflects Off, Indefinite or Timed"
+    links:
+      tickets: ["NCMD-23@1"]
 
   - id: R-020
     type: requirement
@@ -333,6 +371,8 @@ entries:
     acceptance:
       - "A single Enter on Restart only arms the confirmation; a second Enter executes"
       - "Toggle dark mode flips the Windows app theme"
+    links:
+      tickets: ["NCMD-14@1", "NCMD-18@1"]
 
   - id: R-021
     type: requirement
@@ -344,6 +384,8 @@ entries:
     statement: "Quicklinks are defined in the settings TOML as URL templates with a {query} placeholder and an alias; the defaults are Google, GitHub, YouTube and naobi.dev; typing '<alias> <text>' opens the URL with the text URL-encoded in the default browser."
     acceptance:
       - "Typing gh react native opens the GitHub search URL with react%20native"
+    links:
+      tickets: ["NCMD-8@1", "NCMD-18@1"]
 
   - id: D-009
     type: decision
@@ -365,6 +407,8 @@ entries:
     acceptance:
       - "The launcher window never appears in the taskbar or Alt+Tab"
       - "Pause hotkeys stops every global hotkey until resumed"
+    links:
+      tickets: ["NCMD-5@1", "NCMD-12@1"]
 
   - id: R-023
     type: requirement
@@ -377,6 +421,8 @@ entries:
     acceptance:
       - "Starting the exe twice leaves one process and shows the launcher"
       - "The launcher HWND is identical across 100 show/hide cycles"
+    links:
+      tickets: ["NCMD-5@1", "NCMD-12@1"]
 
   # ---- Design phase (NCMD-2), autonomous defaults awaiting owner confirmation at Gate 1 ----
   - id: D-010
@@ -462,12 +508,12 @@ entries:
 
   - id: D-019
     type: decision
-    version: 4
+    version: 5
     status: active
     topic: 4
-    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
-    recommendation: "Owner chose to restore the previous clipboard after a paste from history, after the paste keystroke is delivered, with a short delay."
-    statement: "Enter on a clipboard entry snapshots the current clipboard (text, image or file list within the D-015 limits), writes the entry with a private marker format, cloaks the Launcher, calls SetForegroundWindow on the paste target, polls GetForegroundWindow for up to about 100 ms until it equals the paste target, checks that the target is not elevated, and only then sends Ctrl+V with SendInput; if any step fails a Notice is shown, nothing is pasted and the snapshot is put back under the same rule; about 300 ms after the keystroke is delivered the snapshot is restored with the private marker, unless the clipboard sequence number shows that another copy happened in between, and unless the snapshot carried an exclusion format (ExcludeClipboardContentFromMonitorProcessing, CanIncludeInClipboardHistory = 0 or CanUploadToCloudClipboard = 0) or its owner is on the ignore list, in which case it is not restored and the clipboard keeps the pasted entry; writes carrying the marker (paste, restore, calculator copy, color copy) are never stored in clipboard history."
+    answer: "aku setujui! untuk melanjutkannya gunakan skill /ponytail:ponytail baik di kamu atau pun sub agent"
+    recommendation: "Owner approved the accuracy fix at Gate 2: the restore covers only text, image and file list within the D-015 limits; other formats come back degraded."
+    statement: "Enter on a clipboard entry snapshots the current clipboard (only text, image or file list within the D-015 limits; rich text, HTML, spreadsheet ranges and app-private formats come back degraded, and content above the limits is not restored), writes the entry with a private marker format, cloaks the Launcher, calls SetForegroundWindow on the paste target, polls GetForegroundWindow for up to about 100 ms until it equals the paste target, checks that the target is not elevated, and only then sends Ctrl+V with SendInput; if any step fails a Notice is shown, nothing is pasted and the snapshot is put back under the same rule; about 300 ms after the keystroke is delivered the snapshot is restored with the private marker, unless the clipboard sequence number shows that another copy happened in between, and unless the snapshot carried an exclusion format (ExcludeClipboardContentFromMonitorProcessing, CanIncludeInClipboardHistory = 0 or CanUploadToCloudClipboard = 0) or its owner is on the ignore list, in which case it is not restored and the clipboard keeps the pasted entry; writes carrying the marker (paste, restore, calculator copy, color copy) are never stored in clipboard history."
 
   - id: D-020
     type: decision
@@ -597,9 +643,18 @@ entries:
 
   - id: D-034
     type: decision
-    version: 1
+    version: 2
     status: active
     topic: 8
-    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
+    answer: "aku setujui! untuk melanjutkannya gunakan skill /ponytail:ponytail baik di kamu atau pun sub agent"
     recommendation: "Slint with the software renderer and the accessibility feature enabled; GPUI, femtovg and skia rejected on measured evidence (docs/research/ui-prototype.md, .ai-workspace coder-slint-iter2.md)."
-    statement: "UI framework is Slint with the software renderer and the accessibility feature enabled; GPUI is rejected (no UI Automation, custom text input, higher idle CPU); femtovg is rejected (idle working set about 80 MB, window creation about 1.15 s); skia is rejected (idle working set 160 MB, no render notifier). Measured with the software renderer on the NCMD-1 spike, untrimmed: idle working set 24.0 MB (27.3 MB with accessibility, +3.3 MB), private bytes about 8 MB, idle CPU 0.00%, 5 threads, tray-ready 33-39 ms from process start, window created and cloaked about 200 ms (249 ms with accessibility), release exe 10.7 MB. Keystroke-to-results p95 of 16 ms is not yet proven for the software renderer (screen-probe upper bound 26.7 ms, probe overhead about 7 ms) and is measured in the first Build slice."
+    statement: "UI framework is Slint with the software renderer and the accessibility feature enabled; GPUI is rejected (no UI Automation, custom text input, higher idle CPU); femtovg is rejected (idle working set about 80 MB, window creation about 1.15 s); skia is rejected (idle working set 160 MB, no render notifier). Measured with the software renderer on the NCMD-1 spike, untrimmed: idle working set 24.0 MB (27.3 MB with accessibility, +3.3 MB), private bytes about 8 MB, idle CPU 0.00%, 5 threads without accessibility (not measured with accessibility), tray-ready 33-35 ms from process start (39 ms is skia), window created and cloaked about 200 ms (249 ms with accessibility), release exe 10.7 MB. Keystroke-to-results p95 of 16 ms is not yet proven for the software renderer (screen-probe upper bound 26.7 ms, probe overhead about 7 ms) and is measured in the first Build slice."
+
+  - id: D-035
+    type: decision
+    version: 1
+    status: active
+    topic: 3
+    answer: "aku setujui! untuk melanjutkannya gunakan skill /ponytail:ponytail baik di kamu atau pun sub agent"
+    recommendation: "Approve the Plan breakdown and the consolidated recommendations of the plan review (docs/ledger.yaml, Plane epic NCMD-3)."
+    statement: "Gate 2 approved 2026-10-23: the epic NCMD-3 breakdown of 24 sub-items NCMD-4 to NCMD-27 and decisions 1 to 11: (1) breakdown and critical path accepted; (2) dependencies zeroize, slint-build 1.18.1, serde_json (naobi-perf only) and tracing-subscriber (default-features off, features fmt and std) approved, raw-window-handle dropped; (3) Slint used as GPL-3.0-only through cargo-deny exceptions scoped to the Slint crates, deny.toml targets only x86_64-pc-windows-msvc; (4) tools cargo-deny, cargo-mutants, gitleaks and semgrep (grep tests stand in if semgrep does not run natively) approved; (5) RK-15 passes only if p95_upper is at most 16 ms under pinned conditions; (6) on a miss, if p95_est is at most 16 ms and the probe cost is stable the result is accepted and recorded as a D- entry, otherwise the Owner chooses between changing R-006 and rethinking the renderer; (7) NCMD-8, 9 and 10 start after NCMD-4 without waiting for NCMD-27; (8) NCMD-6 may start once the NCMD-27 probe code is committed, PowerToys stays installed until it is Done; (9) D-019 v5 and D-034 v2 accuracy fixes approved; (10) proposal keys, tray glyphs, picker overlay look and the Proton Pass exe name are confirmed at the first UI-CHECK; (11) the platform thread uses a hidden top-level tool window instead of a message-only window so broadcast messages arrive; the Owner also asked that Build follows the ponytail skill in full mode, in the main chat and in every sub-agent."

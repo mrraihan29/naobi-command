@@ -5,7 +5,16 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
+windows = { workspace = true, features = [
+  "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Security",
+  "Win32_System_LibraryLoader", "Win32_System_Performance", "Win32_System_ProcessStatus",
+  "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging",
+] }
+
+[features]
+# Key injection for tier 2 tests and naobi-perf; never in the release exe.
+perf = []
 
 # EX-001: the only crate allowed `unsafe`; it does not inherit `unsafe_code = "forbid"`.
 [lints.rust]

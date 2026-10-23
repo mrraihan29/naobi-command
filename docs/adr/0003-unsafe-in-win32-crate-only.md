@@ -7,7 +7,7 @@ The toolchain floor is `#![forbid(unsafe_code)]` in every Rust crate unless an A
 
 ## Decision
 
-- Every crate except `naobi-win32` carries `#![forbid(unsafe_code)]`. That includes `naobi-ui` (the framework crate may use unsafe internally as a dependency; our own adapter code does not).
+- Every crate except `naobi-win32` carries `#![forbid(unsafe_code)]`. That includes `naobi-ui` (the framework crate may use unsafe internally as a dependency; our own adapter code does not). Correction (EX-002): Slint's generated code carries `#[allow(unsafe_code)]`, which `forbid` rejects, so `naobi-ui` uses `unsafe_code = "deny"` and a test scans its hand-written sources for `unsafe`.
 - `naobi-win32` carries `#![deny(unsafe_op_in_unsafe_fn, clippy::undocumented_unsafe_blocks)]`. Every `unsafe` block has a `// SAFETY:` comment (D-005).
 - The crate exposes only safe functions and safe types. Module crates define the ports (traits) and `naobi-win32` implements them; callers never see a raw handle except through `raw-window-handle` values.
 - The exception is listed in `CONSTRAINTS.md` (EX-001) with this ADR as its reason.

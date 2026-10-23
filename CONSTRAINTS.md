@@ -75,6 +75,7 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 | ID | Rule | Path | Reason | Owner | Expires |
 |---|---|---|---|---|---|
 | EX-001 | `#![forbid(unsafe_code)]` | `crates/naobi-win32/**` | All Win32, COM and DPAPI calls live here; every block carries `// SAFETY:` (docs/adr/0003-unsafe-in-win32-crate-only.md, D-011) | Raihan | never |
+| EX-002 | `#![forbid(unsafe_code)]` becomes `unsafe_code = "deny"` | `crates/naobi-ui/**` | Slint-generated code carries `#[allow(unsafe_code)]`, which forbid rejects (E0453). Hand-written sources are scanned for `unsafe` by test `naobi_ui_hand_written_sources_have_no_unsafe` (docs/adr/0003-unsafe-in-win32-crate-only.md) | Raihan (delegated to the orchestrator) | never |
 
 ## Definition of Done (standing)
 

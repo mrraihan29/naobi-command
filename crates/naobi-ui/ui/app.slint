@@ -1,0 +1,119 @@
+import { ListView } from "std-widgets.slint";
+import "../assets/Inter-subset.ttf";
+
+export struct Row { title: string, subtitle: string }
+
+// DESIGN_SYSTEM.md tokens: paper (light) and stone (dark).
+export global Tokens {
+    in property <bool> dark: false;
+    out property <color> window: dark ? #2A2622 : #FAF8F2;
+    out property <color> raised: dark ? #36312C : #F3F0E8;
+    out property <color> selected: dark ? #3A3632 : #E8E6E0;
+    out property <color> primary: dark ? #F3F0E8 : #171714;
+    out property <color> muted: dark ? #F3F0E8.with-alpha(0.58) : #6D6A63;
+    out property <color> accent: dark ? #E3BDA9 : #914A3B;
+    out property <color> hair: dark ? #4A433A : #D9D3C7;
+}
+
+export component AppWindow inherits Window {
+    title: "Naobi Command Launcher";
+    no-frame: true;
+    always-on-top: true;
+    width: 750px;
+    height: 475px;
+    background: Tokens.window;
+    default-font-family: "Inter";
+
+    in property <[Row]> rows;
+    in-out property <string> query;
+    in property <int> selected: 0;
+    callback text-changed(string);
+    callback key-pressed(string, bool, bool, bool) -> bool;
+    callback row-activated(int);
+    public function focus-input() { input.focus(); }
+
+    // Keep the selected row inside the viewport.
+    changed selected => {
+        if (selected * 40px < -list.content-y) {
+            list.content-y = -selected * 40px;
+        } else if ((selected + 1) * 40px > -list.content-y + list.visible-height) {
+            list.content-y = -((selected + 1) * 40px - list.visible-height);
+        }
+    }
+
+    FocusScope {
+        capture-key-pressed(e) => {
+            if (root.key-pressed(e.text, e.modifiers.control, e.modifiers.alt, e.modifiers.shift)) {
+                return accept;
+            }
+            reject
+        }
+        Rectangle {
+            border-width: 1px;
+            border-color: Tokens.hair;
+            VerticalLayout {
+                padding: 1px;
+                Rectangle {
+                    height: 66px;
+                    input := TextInput {
+                        x: 20px;
+                        width: parent.width - 40px;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        font-size: 16px;
+                        color: Tokens.primary;
+                        single-line: true;
+                        accessible-role: AccessibleRole.text-input;
+                        accessible-label: "Search";
+                        text <=> root.query;
+                        edited => { root.text-changed(self.text); }
+                    }
+                    Text {
+                        x: 20px;
+                        height: parent.height;
+                        vertical-alignment: center;
+                        visible: root.query == "";
+                        text: "Search apps and commands...";
+                        font-size: 16px;
+                        color: Tokens.muted;
+                    }
+                }
+                Rectangle { height: 1px; background: Tokens.hair; }
+                list := ListView {
+                    vertical-stretch: 1;
+                    accessible-role: AccessibleRole.list;
+                    accessible-label: "Results";
+                    for r[i] in root.rows : Rectangle {
+                        height: 40px;
+                        background: i == root.selected ? Tokens.selected : transparent;
+                        accessible-role: AccessibleRole.list-item;
+                        accessible-label: r.title;
+                        accessible-item-selectable: true;
+                        accessible-item-selected: i == root.selected;
+                        Rectangle { x: 0; width: 2px; background: Tokens.accent; visible: i == root.selected; }
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 12px;
+                            alignment: start;
+                            Rectangle { width: 22px; height: 22px; y: 9px; border-radius: 4px; background: Tokens.hair; }
+                            Text { text: r.title; font-size: 13px; color: Tokens.primary; vertical-alignment: center; }
+                            Text { text: r.subtitle; font-size: 12px; color: Tokens.muted; vertical-alignment: center; overflow: elide; }
+                        }
+                        TouchArea { clicked => { root.row-activated(i); } }
+                    }
+                }
+                Rectangle {
+                    height: 42px;
+                    background: Tokens.raised;
+                    HorizontalLayout {
+                        padding-left: 20px;
+                        padding-right: 20px;
+                        Text { text: "Naobi Command"; font-size: 12px; color: Tokens.muted; vertical-alignment: center; horizontal-stretch: 1; }
+                        Text { text: "Enter  Open"; font-size: 12px; color: Tokens.muted; vertical-alignment: center; horizontal-alignment: right; }
+                    }
+                }
+            }
+        }
+    }
+}

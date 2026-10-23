@@ -1,0 +1,24 @@
+[package]
+name = "naobi-app"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[features]
+# Readiness lines on stdout and key injection for tier 2 tests and naobi-perf; never in the release exe.
+perf = ["naobi-win32/perf"]
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+naobi-core = { path = "../naobi-core" }
+naobi-ui = { path = "../naobi-ui" }
+naobi-win32 = { path = "../naobi-win32" }
+
+[dev-dependencies]
+# Turns `perf` on for the tier 2 tests, so the exe they spawn prints its readiness lines.
+naobi-app = { path = ".", features = ["perf"] }
+
+[lints]
+workspace = true

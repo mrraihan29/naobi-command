@@ -1,0 +1,167 @@
+//! The Launcher window's OS side: tool-window style, DWM cloak, placement, foreground (ADR-0005).
+use std::ffi::c_void;
+use windows::core::{w, BOOL, HSTRING};
+use windows::Win32::Foundation::{HWND, POINT};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_CLOAKED,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
+use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEINPUT,
+};
+use windows::Win32::UI::WindowsAndMessaging::{
+    FindWindowW, GetCursorPos, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW,
+    SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SW_HIDE, SW_SHOWNA,
+    WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+};
+
+const LOGICAL_WIDTH: i32 = 750;
+const LOGICAL_HEIGHT: i32 = 475;
+
+fn hwnd(h: isize) -> HWND {
+    HWND(h as *mut c_void)
+}
+
+/// Finds a top-level window by exact title; the HWND is returned as a plain value.
+pub fn find_window(title: &str) -> Option<isize> {
+    // SAFETY: the title is a NUL-terminated string that the HSTRING keeps alive for the call.
+    unsafe { FindWindowW(None, &HSTRING::from(title)) }
+        .ok()
+        .map(|h| h.0 as isize)
+}
+
+fn set_cloak(h: isize, on: bool) {
+    let v = BOOL::from(on);
+    // SAFETY: DWMWA_CLOAK reads one BOOL; `v` outlives the call.
+    let _ =
+        unsafe { DwmSetWindowAttribute(hwnd(h), DWMWA_CLOAK, &v as *const _ as *const c_void, 4) };
+}
+
+/// True while DWM hides the window (our cloak or a virtual desktop switch).
+pub fn is_cloaked(h: isize) -> bool {
+    let mut v = 0u32;
+    // SAFETY: DWMWA_CLOAKED writes one u32 into `v`, which outlives the call.
+    let _ = unsafe {
+        DwmGetWindowAttribute(hwnd(h), DWMWA_CLOAKED, &mut v as *mut _ as *mut c_void, 4)
+    };
+    v != 0
+}
+
+/// True when the window has `WS_EX_TOOLWINDOW` and not `WS_EX_APPWINDOW`: no taskbar button, not in Alt+Tab.
+pub fn is_tool_window(h: isize) -> bool {
+    // SAFETY: reads the extended style of a window handle; an invalid handle returns 0.
+    let ex = unsafe { GetWindowLongPtrW(hwnd(h), GWL_EXSTYLE) } as u32;
+    ex & WS_EX_TOOLWINDOW.0 != 0 && ex & WS_EX_APPWINDOW.0 == 0
+}
+
+/// One-time setup of the freshly created window: tool-window style, rounded corners, then cloaked.
+pub fn prepare(h: isize) {
+    let w = hwnd(h);
+    let round = DWMWCP_ROUND;
+    // SAFETY: plain style and attribute calls on our own window; `round` outlives the call.
+    unsafe {
+        // Hide first so the shell drops any taskbar button before the style changes.
+        let _ = ShowWindow(w, SW_HIDE);
+        let ex = GetWindowLongPtrW(w, GWL_EXSTYLE);
+        // winit sets WS_EX_APPWINDOW, which forces a taskbar button even on a tool window.
+        let ex = (ex | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize);
+        SetWindowLongPtrW(w, GWL_EXSTYLE, ex);
+        let _ = DwmSetWindowAttribute(
+            w,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &round as *const _ as *const c_void,
+            4,
+        );
+        let _ = ShowWindow(w, SW_SHOWNA);
+    }
+    set_cloak(h, true);
+}
+
+pub fn hide(h: isize) {
+    set_cloak(h, true);
+}
+
+/// Pixel size and top-left corner `(x, y, w, h)` for a work area `(left, top, right, bottom)` at `dpi`:
+/// 750 x 475 logical, centered horizontally, top edge at 20% of the work area height.
+fn placement(work: (i32, i32, i32, i32), dpi: u32) -> (i32, i32, i32, i32) {
+    let (left, top, right, bottom) = work;
+    let scale = |v: i32| v * dpi as i32 / 96;
+    let (w, h) = (scale(LOGICAL_WIDTH), scale(LOGICAL_HEIGHT));
+    (
+        left + (right - left - w) / 2,
+        top + (bottom - top) * 20 / 100,
+        w,
+        h,
+    )
+}
+
+/// Moves the cloaked window to the monitor under the cursor, uncloaks it and takes the foreground.
+pub fn show(h: isize) {
+    let w = hwnd(h);
+    // SAFETY: Win32 calls on plain values and our own window; every out-pointer outlives its call.
+    unsafe {
+        let mut pt = POINT::default();
+        let _ = GetCursorPos(&mut pt);
+        let mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let _ = GetMonitorInfoW(mon, &mut mi);
+        let (mut dx, mut dy) = (96u32, 96u32);
+        let _ = GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
+        let r = mi.rcWork;
+        let (x, y, pw, ph) = placement((r.left, r.top, r.right, r.bottom), dx);
+        let _ = SetWindowPos(w, Some(HWND_TOPMOST), x, y, pw, ph, SWP_NOACTIVATE);
+        set_cloak(h, false);
+        // Foreground trick (ADR-0005): an empty mouse event, then SetForegroundWindow.
+        let empty = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT::default(),
+            },
+        };
+        SendInput(&[empty], std::mem::size_of::<INPUT>() as i32);
+        let _ = SetForegroundWindow(w);
+    }
+}
+
+/// True when the user chose dark app mode in Windows (`stone` theme), read once at startup.
+pub fn system_uses_dark_theme() -> bool {
+    let mut v = 1u32;
+    let mut size = 4u32;
+    // SAFETY: RRF_RT_REG_DWORD writes at most 4 bytes into `v`; `size` says so.
+    let err = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut v as *mut _ as *mut c_void),
+            Some(&mut size),
+        )
+    };
+    err.0 == 0 && v == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::placement;
+
+    #[test]
+    fn launcher_sits_at_a_fifth_of_the_work_area_and_scales_with_dpi() {
+        // 1920 x 1040 work area, 100%: 750 x 475 centered, top at 208.
+        assert_eq!(placement((0, 0, 1920, 1040), 96), (585, 208, 750, 475));
+        // Second monitor at x = 1920, 125% DPI: 937 x 593 (integer division).
+        assert_eq!(
+            placement((1920, 0, 3840, 1080), 120),
+            (1920 + (1920 - 937) / 2, 216, 937, 593)
+        );
+    }
+}

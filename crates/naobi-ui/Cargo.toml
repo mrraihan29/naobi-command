@@ -1,0 +1,23 @@
+[package]
+name = "naobi-ui"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+naobi-core = { path = "../naobi-core" }
+naobi-win32 = { path = "../naobi-win32" }
+slint.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true
+
+# Slint's generated code carries `#[allow(unsafe_code)]`, which `forbid` rejects (E0453).
+# `deny` keeps our own adapter code unsafe-free; pending Owner approval, see coder-ncmd5.md.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+undocumented_unsafe_blocks = "deny"

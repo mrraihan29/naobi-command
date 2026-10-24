@@ -1,3 +1,4 @@
+mod baseline;
 mod cold_start;
 mod exe_size;
 mod hotkey;
@@ -14,6 +15,9 @@ const USAGE: &str = "usage: naobi-perf idle --exe <path> --seconds <n> [--out <f
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let cmd = args.next().ok_or_else(|| anyhow!(USAGE))?;
+    if cmd == "baseline-powertoys" {
+        return baseline::run(&args.collect::<Vec<_>>());
+    }
     let (mut exe, mut seconds, mut out) = (None, 60, PathBuf::from("target/perf.json"));
     let (mut runs, mut items) = (None::<usize>, 10_000usize);
     while let Some(flag) = args.next() {

@@ -1,0 +1,183 @@
+{
+  "ac_power": true,
+  "captured_at_unix": 1792818314,
+  "chord": "CtrlSpace",
+  "discarded": {
+    "hotkey": 0,
+    "inject": 0
+  },
+  "item": "NCMD-6",
+  "machine": "OMEN",
+  "metrics": [
+    {
+      "n": 1,
+      "name": "idle_working_set",
+      "note": "sum over the PowerToys processes at the end of 60 s idle",
+      "unit": "MB",
+      "value": 884.723712
+    },
+    {
+      "n": 1,
+      "name": "idle_private_bytes",
+      "note": "sum of private bytes over the same processes",
+      "unit": "MB",
+      "value": 674.054144
+    },
+    {
+      "n": 1,
+      "name": "idle_cpu_percent",
+      "note": "sum over the PowerToys processes, 60 s idle, command palette hidden",
+      "unit": "percent of one core",
+      "value": 1.0677083333333333
+    },
+    {
+      "n": 1,
+      "name": "idle_system_busy_percent",
+      "note": "all logical CPUs during the idle window (background load)",
+      "unit": "percent",
+      "value": 20.99609375
+    },
+    {
+      "n": 200,
+      "name": "hotkey_to_visible_p50",
+      "note": "chord SendInput to the first backdrop change",
+      "unit": "ms",
+      "value": 35.4032
+    },
+    {
+      "n": 200,
+      "name": "hotkey_to_visible_p95",
+      "note": "same runs",
+      "unit": "ms",
+      "value": 37.4927
+    },
+    {
+      "n": 200,
+      "name": "inject_to_t1_p50",
+      "note": "QPC before SendInput of the key to the probe t1",
+      "unit": "ms",
+      "value": 184.1697
+    },
+    {
+      "n": 200,
+      "name": "inject_to_t1_p95_upper",
+      "note": "conservative bound, as in rk15-result.md",
+      "unit": "ms",
+      "value": 232.5389
+    },
+    {
+      "n": 200,
+      "name": "inject_to_t1_p95_est",
+      "note": "p95_upper minus the probe cost; the true p95 lies between the two",
+      "unit": "ms",
+      "value": 220.62310000000002
+    },
+    {
+      "n": 200,
+      "name": "inject_to_t1_max",
+      "note": "same runs",
+      "unit": "ms",
+      "value": 442.4064
+    },
+    {
+      "n": 200,
+      "name": "probe_cost",
+      "note": "p50 of region hash on a static frame (one refresh period)",
+      "unit": "ms",
+      "value": 11.9158
+    },
+    {
+      "n": 1,
+      "name": "system_busy_percent_during_runs",
+      "note": "all logical CPUs during the latency runs",
+      "unit": "percent",
+      "value": 47.49070390306056
+    },
+    {
+      "n": 3,
+      "name": "install_size",
+      "note": "sum over the --install-dir paths",
+      "unit": "bytes",
+      "value": 1240600152.0
+    },
+    {
+      "n": 0,
+      "name": "start_to_tray_ready",
+      "note": "not applicable: PowerToys is not started by the harness; it runs before the capture",
+      "unit": "ms",
+      "value": null
+    }
+  ],
+  "naobi_vs_cmdpal_inject_to_t1": {
+    "cmdpal_p95_upper_ms": 232.5389,
+    "naobi_is": "better",
+    "naobi_p95_ms": 28.76
+  },
+  "pinned_hz": 143,
+  "processes": [
+    {
+      "name": "PowerToys.exe",
+      "pid": 27376
+    },
+    {
+      "name": "PowerToys.QuickAccess.exe",
+      "pid": 20648
+    },
+    {
+      "name": "PowerToys.AlwaysOnTop.exe",
+      "pid": 21728
+    },
+    {
+      "name": "PowerToys.Awake.exe",
+      "pid": 36476
+    },
+    {
+      "name": "PowerToys.ColorPickerUI.exe",
+      "pid": 40504
+    },
+    {
+      "name": "PowerToys.FancyZones.exe",
+      "pid": 6828
+    },
+    {
+      "name": "PowerToys.Peek.UI.exe",
+      "pid": 45072
+    },
+    {
+      "name": "Microsoft.CmdPal.UI.exe",
+      "pid": 34312
+    },
+    {
+      "name": "Microsoft.CmdPal.Ext.PowerToys.exe",
+      "pid": 23432
+    }
+  ],
+  "rect": [
+    460,
+    240,
+    1000,
+    600
+  ],
+  "refresh_hz": 144,
+  "release_build": true,
+  "subject": "PowerToys Command Palette",
+  "conditions": {
+    "hand_added": true,
+    "hand_added_note": "Round 2 (2026-10-24), read-only from the live machine while PowerToys was still installed. Not written by the capture. Not a metric.",
+    "cpu_model": "Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz, 6 cores, 12 logical processors",
+    "display_resolution": "1920x1080",
+    "refresh_hz_at_capture_gdi": 144,
+    "refresh_hz_read_round2": 143,
+    "dpi_scale": "125% (AppliedDPI 120)",
+    "applied_dpi": 120,
+    "powertoys_version": "0.102.2933.0",
+    "command_palette_version": "0.13.12934.0 (package version; file ProductVersion reads 0.13.261020004)",
+    "ac_power": true,
+    "ac_power_note": "BatteryStatus 2 (AC) read in round 2; the capture refuses to run without AC power",
+    "capture_date_utc": "2026-10-24T05:05:14Z",
+    "background_cpu_percent": {
+      "idle_window": 20.99609375,
+      "latency_runs": 47.49070390306056
+    }
+  }
+}

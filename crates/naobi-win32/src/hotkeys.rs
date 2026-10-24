@@ -1,0 +1,201 @@
+//! Global hotkeys through `RegisterHotKey` only (ADR-0004). One id per settings chord; a chord that
+//! another process owns becomes an event, and the other chords still register.
+use std::sync::OnceLock;
+
+use naobi_core::chord::KeyChord;
+use naobi_core::event::AppEvent;
+use naobi_core::ids::HotkeyId;
+use naobi_core::settings::Settings;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_NOREPEAT,
+};
+
+/// Hotkey names in id order: id = position + 1. The settings parser accepts only these names.
+fn names() -> &'static [String] {
+    static NAMES: OnceLock<Vec<String>> = OnceLock::new();
+    NAMES.get_or_init(|| Settings::default().hotkeys.into_keys().collect())
+}
+
+/// The hotkey a `WM_HOTKEY` id stands for.
+pub fn name_for_id(id: usize) -> Option<HotkeyId> {
+    names().get(id.checked_sub(1)?).map(|n| HotkeyId(n.clone()))
+}
+
+/// The OS side of registration, so the logic runs in tests without Windows.
+pub trait Registrar {
+    fn register(&mut self, id: i32, chord: KeyChord) -> bool;
+    fn unregister(&mut self, id: i32);
+}
+
+/// Registers on the platform window; call it only on the platform thread.
+pub struct Win32 {
+    pub hwnd: HWND,
+}
+
+impl Registrar for Win32 {
+    fn register(&mut self, id: i32, chord: KeyChord) -> bool {
+        let mods = HOT_KEY_MODIFIERS(u32::from(chord.mods)) | MOD_NOREPEAT;
+        // SAFETY: plain values; the window is the platform window that this thread owns.
+        unsafe { RegisterHotKey(Some(self.hwnd), id, mods, chord.vk).is_ok() }
+    }
+
+    fn unregister(&mut self, id: i32) {
+        // SAFETY: plain values; unregistering an id that is not registered is harmless.
+        let _ = unsafe { UnregisterHotKey(Some(self.hwnd), id) };
+    }
+}
+
+/// The chords of the settings file with their ids, and whether Pause is on.
+pub struct Registry {
+    entries: Vec<(i32, HotkeyId, KeyChord)>,
+    paused: bool,
+}
+
+impl Registry {
+    pub fn new(settings: &Settings) -> Self {
+        let mut entries = Vec::new();
+        for (name, chord) in &settings.hotkeys {
+            if let Some(index) = names().iter().position(|n| n == name) {
+                entries.push((index as i32 + 1, HotkeyId(name.clone()), *chord));
+            }
+        }
+        Self {
+            entries,
+            paused: false,
+        }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    /// Registers every chord unless paused. Returns one `HotkeyConflict` per chord that was refused.
+    pub fn register_all(&mut self, r: &mut impl Registrar) -> Vec<AppEvent> {
+        if self.paused {
+            return Vec::new();
+        }
+        self.apply(r)
+    }
+
+    /// Pause unregisters every id; resume registers them again (also the retry after sleep).
+    pub fn set_paused(&mut self, r: &mut impl Registrar, paused: bool) -> Vec<AppEvent> {
+        self.paused = paused;
+        if paused {
+            for (id, _, _) in &self.entries {
+                r.unregister(*id);
+            }
+            return Vec::new();
+        }
+        self.apply(r)
+    }
+
+    fn apply(&self, r: &mut impl Registrar) -> Vec<AppEvent> {
+        let mut conflicts = Vec::new();
+        for (id, name, chord) in &self.entries {
+            // Unregister first so a retry after resume does not see our own old registration.
+            r.unregister(*id);
+            if !r.register(*id, *chord) {
+                conflicts.push(AppEvent::HotkeyConflict(name.clone()));
+            }
+        }
+        conflicts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Fake OS: `taken` chords belong to another process, `live` ids are what we hold.
+    #[derive(Default)]
+    struct Fake {
+        taken: BTreeSet<u32>,
+        live: BTreeSet<i32>,
+    }
+
+    impl Registrar for Fake {
+        fn register(&mut self, id: i32, chord: KeyChord) -> bool {
+            if self.taken.contains(&chord.vk) {
+                return false;
+            }
+            self.live.insert(id);
+            true
+        }
+        fn unregister(&mut self, id: i32) {
+            self.live.remove(&id);
+        }
+    }
+
+    #[test]
+    fn ids_follow_the_default_table_and_names_round_trip() {
+        assert_eq!(name_for_id(0), None);
+        let reg = Registry::new(&Settings::default());
+        assert_eq!(reg.entries.len(), 11);
+        let (id, name, chord) = &reg.entries[0];
+        assert_eq!((*id, name.0.as_str()), (1, "center"));
+        assert_eq!(*chord, Settings::default().hotkeys["center"]);
+        assert_eq!(name_for_id(1), Some(HotkeyId("center".into())));
+    }
+
+    // @R-008
+    #[test]
+    fn r008_conflict_is_reported_and_other_chords_still_register() {
+        let mut reg = Registry::new(&Settings::default());
+        let mut fake = Fake {
+            taken: BTreeSet::from([0x20]), // Space: Alt+Space is owned by another process
+            ..Fake::default()
+        };
+        let events = reg.register_all(&mut fake);
+        assert_eq!(
+            events,
+            vec![AppEvent::HotkeyConflict(HotkeyId("launcher".into()))]
+        );
+        assert_eq!(fake.live.len(), 10);
+    }
+
+    // @R-008
+    #[test]
+    fn r008_refused_chord_is_retried_on_resume() {
+        let mut reg = Registry::new(&Settings::default());
+        let mut fake = Fake {
+            taken: BTreeSet::from([0x20]),
+            ..Fake::default()
+        };
+        assert_eq!(reg.register_all(&mut fake).len(), 1);
+        // The other process lets go of Alt+Space while the machine sleeps.
+        fake.taken.clear();
+        assert!(reg.register_all(&mut fake).is_empty());
+        assert_eq!(fake.live.len(), 11);
+    }
+
+    // @R-022
+    #[test]
+    fn r022_pause_unregisters_every_id_and_resume_registers_them_again() {
+        let mut reg = Registry::new(&Settings::default());
+        let mut fake = Fake::default();
+        reg.register_all(&mut fake);
+        assert_eq!(fake.live.len(), 11);
+
+        assert!(reg.set_paused(&mut fake, true).is_empty());
+        assert!(fake.live.is_empty());
+        assert!(reg.register_all(&mut fake).is_empty());
+        assert!(fake.live.is_empty(), "no registration while paused");
+
+        assert!(reg.set_paused(&mut fake, false).is_empty());
+        assert_eq!(fake.live.len(), 11);
+    }
+
+    #[test]
+    fn modifier_bits_are_the_win32_mod_values() {
+        use naobi_core::chord::{ALT, CTRL, SHIFT, WIN};
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN,
+        };
+        assert_eq!(MOD_ALT.0, u32::from(ALT));
+        assert_eq!(MOD_CONTROL.0, u32::from(CTRL));
+        assert_eq!(MOD_SHIFT.0, u32::from(SHIFT));
+        assert_eq!(MOD_WIN.0, u32::from(WIN));
+    }
+}

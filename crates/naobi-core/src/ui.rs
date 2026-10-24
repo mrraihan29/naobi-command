@@ -30,13 +30,154 @@ impl ViewModel {
     }
 }
 
+/// The full Launcher snapshot: everything the views draw (DESIGN_SYSTEM.md). `ViewModel` converts
+/// into one, so the list-only producer keeps working.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Screen {
+    pub query: String,
+    /// Sections in display order. A section without a header is a plain list.
+    pub sections: Vec<Section>,
+    /// Index of the selected row across all sections (headers do not count).
+    pub selected: usize,
+    pub notice: Option<NoticeView>,
+    pub action_panel: Option<ActionPanelView>,
+    pub footer: FooterView,
+    pub preview: Option<PreviewView>,
+    pub empty: Option<EmptyView>,
+    pub loading: bool,
+    pub reduced_motion: bool,
+    /// `ui.text_scale`: 1.0, 1.125 or 1.25.
+    pub text_scale: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Section {
+    pub header: Option<String>,
+    pub rows: Vec<RowView>,
+}
+
+/// One row as shown on screen. `kind` names the row for assistive technology ("Application").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowView {
+    pub kind: String,
+    pub title: String,
+    pub subtitle: String,
+    /// Key hint chip on the right, such as "Copy".
+    pub hint: Option<String>,
+    /// Calculator result: the title is the result value, the subtitle the expression.
+    pub calculator: bool,
+    pub disabled: bool,
+    pub armed: bool,
+    pub pinned: bool,
+    /// Color history rows: 0xRRGGBB.
+    pub swatch: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionPanelView {
+    pub filter: String,
+    pub actions: Vec<ActionView>,
+    pub selected: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionView {
+    pub label: String,
+    pub shortcut: Option<String>,
+    /// `Some(reason)` marks the action unavailable; it is listed dimmed with the reason.
+    pub reason: Option<String>,
+}
+
+/// A Notice banner. The message names its subject; the banner is always announced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoticeView {
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FooterView {
+    /// Label of the primary action, shown after the "Enter" chip. `None` shows only the name.
+    pub primary: Option<String>,
+    /// Shows the "Ctrl K Actions" chip.
+    pub actions: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PreviewView {
+    Text(String),
+    /// RGBA8 pixels, row by row; `rgba.len()` must be `width * height * 4`.
+    Image {
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    },
+    Loading,
+    /// Message text, for example "Cannot read this entry".
+    Error(String),
+    Empty,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmptyView {
+    pub title: String,
+    pub helper: String,
+}
+
+impl From<Row> for RowView {
+    fn from(r: Row) -> Self {
+        Self {
+            kind: String::new(),
+            title: r.title,
+            subtitle: r.subtitle,
+            hint: None,
+            calculator: false,
+            disabled: false,
+            armed: false,
+            pinned: false,
+            swatch: None,
+        }
+    }
+}
+
+impl From<ViewModel> for Screen {
+    fn from(vm: ViewModel) -> Self {
+        let rows: Vec<RowView> = vm.rows.into_iter().map(RowView::from).collect();
+        Self {
+            query: vm.query,
+            sections: if rows.is_empty() {
+                Vec::new()
+            } else {
+                vec![Section { header: None, rows }]
+            },
+            selected: vm.selected,
+            notice: None,
+            action_panel: None,
+            footer: FooterView::default(),
+            preview: None,
+            empty: None,
+            loading: false,
+            reduced_motion: false,
+            text_scale: 1.0,
+        }
+    }
+}
+
 /// The keys the Launcher window reports; their meaning is decided outside the adapter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
     Up,
     Down,
+    PageUp,
+    PageDown,
     Enter,
     Escape,
+    Backspace,
+    /// Ctrl+. (pin or unpin the clipboard entry).
+    Period,
+    /// Ctrl+X (delete the clipboard entry when the field has no selection).
+    X,
+    /// Ctrl+K (open or close the action panel).
+    K,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,5 +228,18 @@ mod tests {
         let mut vm = rows(0);
         vm.move_selection(1);
         assert_eq!(vm.selected, 0);
+    }
+
+    #[test]
+    fn view_model_becomes_one_plain_section() {
+        let mut vm = rows(2);
+        vm.selected = 1;
+        let screen = Screen::from(vm);
+        assert_eq!(screen.sections.len(), 1);
+        assert_eq!(screen.sections[0].header, None);
+        assert_eq!(screen.sections[0].rows[1].title, "r1");
+        assert_eq!(screen.selected, 1);
+        assert_eq!(screen.text_scale, 1.0);
+        assert!(Screen::from(rows(0)).sections.is_empty());
     }
 }

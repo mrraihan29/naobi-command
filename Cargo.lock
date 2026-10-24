@@ -2678,6 +2678,7 @@ dependencies = [
 name = "naobi-win32"
 version = "0.0.0"
 dependencies = [
+ "naobi-core",
  "windows",
 ]
 

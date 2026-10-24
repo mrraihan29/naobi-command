@@ -9,7 +9,7 @@ The whole product is Rust: one process, no webview, no managed runtime. The rule
 
 | Evidence | Number | Source |
 |---|---|---|
-| Budget to meet | idle working set <= 40 MB total, cold start <= 300 ms, hotkey-to-visible p95 <= 50 ms, exe <= 20 MB | R-006 |
+| Budget to meet | idle working set <= 40 MB total, tray-ready <= 300 ms, window ready <= 1.5 s, hotkey-to-visible p95 <= 50 ms, exe <= 20 MB | R-006 |
 | Raycast (WPF host + WebView2 + Node), idle, installed on the owner's PC | about 991 MB working set summed over 8 processes (686 MB private) | `docs/research/raycast-rea.md` §9 |
 | PowerToys Command Palette (WinUI 3, .NET), resident | 137 MB working set, 180 MB private | `docs/research/powertoys.md` §8.2 |
 | Raycast's own Rust UI-access helper (hooks, clipboard, window ops) | 16 MB working set | `docs/research/raycast-rea.md` §9 |
@@ -30,4 +30,4 @@ A single Rust process with native rendering is the only option in the table that
 
 - Tauri / Electron / any webview: breaks the 40 MB budget (D-001).
 - .NET (WPF, WinUI 3): the measured Command Palette baseline is 137 MB working set before any feature work.
-- Rust UI frameworks other than Slint and GPUI: not evaluated; D-002 names the two candidates.
+- Rust UI frameworks other than Slint and GPUI: not evaluated; D-002 named the two candidates; D-034 resolved it.

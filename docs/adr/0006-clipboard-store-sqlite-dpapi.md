@@ -21,7 +21,7 @@ R-009 requires clipboard contents encrypted with Windows DPAPI for the current u
 
 ## Consequences
 
-- Paste from history restores the previous clipboard content afterwards (D-019 v4), except when that content carried an exclusion format or came from an ignored app: then it is left unrestored, so an excluded secret is never put back without its exclusion formats. The restore write carries the private marker, so neither the paste nor the restore is stored as a new entry.
+- Paste from history restores the previous clipboard content afterwards (D-019 v5), except when that content carried an exclusion format or came from an ignored app: then it is left unrestored, so an excluded secret is never put back without its exclusion formats. The restore covers only text, image and file list within the D-015 limits; rich text, HTML, spreadsheet ranges and app-private formats come back degraded. The restore write carries the private marker, so neither the paste nor the restore is stored as a new entry.
 - DPAPI does not authenticate who wrote a blob and is readable by any process running as the same user; that residual risk is accepted (D-026).
 - Opening the history view costs a decrypt pass (measured in Build; 1,000 `CryptUnprotectData` calls is expected in the low milliseconds range).
 - The migration rule is expand-contract with a file copy to `naobi.db.bak-v<N>` before any migration (portable exe, so an older exe may be put back).

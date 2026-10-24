@@ -7,7 +7,7 @@ Both reference products register with `RegisterHotKey` first and fall back to a 
 
 ## Decision
 
-- All hotkeys (launcher, clipboard, snap commands, color picker, topmost) are registered with `RegisterHotKey` on one message-only window owned by the platform thread. `WM_HOTKEY` is forwarded as an `AppEvent`.
+- All hotkeys (launcher, clipboard, snap commands, color picker, topmost) are registered with `RegisterHotKey` on the hidden top-level tool window owned by the platform thread (a message-only window does not receive broadcast messages). `WM_HOTKEY` is forwarded as an `AppEvent`.
 - A refused registration is never worked around. The Owner sees a Notice that names the hotkey (R-008 acceptance) and the module stays reachable from the launcher.
 - "Pause hotkeys" (R-022) is `UnregisterHotKey` for every id, and re-register on resume. No hook to disable.
 - No low-level hook, no Raw Input probe, no priority boost.

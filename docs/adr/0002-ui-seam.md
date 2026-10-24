@@ -22,8 +22,8 @@ From `docs/research/ui-prototype.md` and `.ai-workspace/20261021-2301-naobi-comm
 | Idle working set | 27.3 MB (24.0 without a11y) | 79.9 MB | 159.7 MB | 77.8 MB |
 | Private bytes | 8.5 MB | 103.5 MB | 257.6 MB | 103.5 MB |
 | Idle CPU (one core) | 0.00% | 0.10% | 0.08% | 4.85% |
-| Threads | 5 | 18 | 16 | 34 |
-| Tray-ready from process start | 33 to 39 ms | 35 ms | 39 ms | not built |
+| Threads | 5 (without accessibility) | 18 | 16 | 34 |
+| Tray-ready from process start | 33 to 35 ms | 35 ms | 39 ms (skia) | not built |
 | Window created and cloaked | 197 ms (249 ms with a11y) | 1179 ms | 1139 ms | 1061 ms |
 | Release exe | 10.7 MB | 9.8 MB | 18.2 MB | 5.3 MB |
 
@@ -39,5 +39,5 @@ Accessibility costs 3.3 MB working set with the software renderer (under the 5 M
 
 - Open risk (RK-15): keystroke-to-results p95 <= 16 ms is not proven with the software renderer. The prototype's screen probe gave an upper bound of 26.7 ms with about 7 ms probe overhead and vsync of 7 ms; the femtovg notifier measured 10.4 ms. The software renderer has no render notifier, so the production `naobi-perf` must instrument its present path, and the first Build slice measures it before other modules are built. If it fails, the Owner decides at that point; there is no automatic renderer switch.
 - The software renderer rasterizes on the CPU: no blur, no large shadows, short fades only (DESIGN_SYSTEM.md). The footer glyph U+21B5 is absent from the Inter subset and renders nothing, so key hints use text ("Enter") or the font subset is fixed.
-- Idle working set is measured without trimming (R-006 v3). The prototype showed `EmptyWorkingSet` after hide would reach 2 to 5 MB at a next-show cost below probe noise; it is not used (YAGNI) and remains available as a fallback.
+- Idle working set is measured without trimming (R-006 v3). The prototype showed `EmptyWorkingSet` after hide would reach 2 to 5 MB at a next-show cost below probe noise; it is not used (YAGNI). It is not a fallback under R-006 v3, because trimming cannot turn a budget miss into a PASS; a miss needs an Owner decision on R-006.
 - Cost: no framework-native models in module code, and one view-model clone per update, bounded by the 50-row cap.

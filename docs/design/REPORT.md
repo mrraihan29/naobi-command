@@ -2,7 +2,7 @@
 
 <!-- English only. Every chapter stays; an irrelevant chapter says "N/A — <reason>". Source of truth: docs/ledger.yaml. Generated pieces (requirement lists, diagram embeds, STRIDE counts, Appendix A) are produced from the ledger and docs/diagrams by a script; edit the sources, not the copies. -->
 
-Status: draft for Gate 1 · Plane: NCMD-2 · Date: 2026-10-22 · Ledger: 53 entries (R-001..R-023, D-001..D-030)
+Status: draft for Gate 1 · Plane: NCMD-2 · Date: 2026-10-22 · Ledger: 60 entries (R-001..R-023, D-001..D-037)
 
 ## 0. Executive summary
 
@@ -12,7 +12,7 @@ The stack is Rust with a native, non-webview UI (ADR-0001). The budgets that jus
 
 The UI framework is Slint with the software renderer and the accessibility feature enabled (D-034, resolving D-002). GPUI, femtovg and skia were rejected on measured evidence (ADR-0002, `docs/research/ui-prototype.md`). The UI is still isolated (ADR-0002, D-010): everything else is written against a view model and a UI event type, and `naobi-app` calls `naobi-ui` directly.
 
-Main risks: keystroke-to-results p95 <= 16 ms is not yet proven with the software renderer (the spike's screen probe gave an upper bound of 26.7 ms, with about 7 ms of probe overhead), so the first Build slice measures it before other modules are built (RK-15); hotkey-to-visible latency has never been published for either reference product. Measured on the spike, untrimmed, the software renderer idles at 24 MB working set (27.3 MB with accessibility), about 8 MB private bytes and 0.00% CPU, so the 40 MB budget has headroom. The Owner has answered the open decisions of review round 1 (section 11.5). The other autonomous defaults (D-011 to D-030, except those answered) still await confirmation.
+Main risks: keystroke-to-results p95 <= 16 ms is not yet proven with the software renderer (the spike's screen probe gave an upper bound of 26.7 ms, with about 7 ms of probe overhead), so the first Build slice measures it before other modules are built (RK-15); hotkey-to-visible latency has never been published for either reference product. Measured on the spike, untrimmed, the software renderer idles at 24 MB working set (27.3 MB with accessibility), about 8 MB private bytes and 0.00% CPU, so the 40 MB budget has headroom. The Owner has answered the open decisions of review round 1 (section 11.5). The other autonomous defaults (D-010 to D-030, except those answered) still await confirmation.
 
 Gate 1 asks the Owner to approve this report, the diagrams and the design system, to confirm the remaining autonomous defaults in chapter 11, and to note that the ledger gate is clean now that D-002 is resolved (D-034). The mockup direction is already approved (D-031).
 
@@ -181,14 +181,14 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 |---|---|---|
 | Performance | Budgets as in R-006, measured by `naobi-perf` (chapter 9) | R-006 |
 | Security | OWASP ASVS 5.0 Level 1 for the relevant chapters plus the STRIDE model in chapter 6 | R-010 |
-| Accessibility | WCAG 2.2 AA contrast, keyboard-only operation. Screen-reader support (UI Automation) is proposed, not required, pending the Owner (section 11.5) | R-007 |
+| Accessibility | WCAG 2.2 AA contrast, keyboard-only operation. Screen-reader support (UI Automation) is a weighted criterion, not a hard requirement (D-032), and is on with the software renderer (D-034, section 11.5) | R-007 |
 | Availability | Not applicable as a service. The process restarts at login through the HKCU Run value (D-007); a crash loses only in-memory state (D-014) | D-007 |
 | Scale and data volume | 10,000 launcher items; at most 1,000 clipboard entries plus 100 pinned; store capped at 500 MB; 20 colors | R-006, D-015 |
 | Platform | Windows 11 x86_64, target `x86_64-pc-windows-msvc` only (R-003); minimum build assumed 22H2 (build 22621) | R-003, assumption |
 
 ### 2.3 Assumptions the ledger does not settle
 
-The Owner is not available in this design run (autonomous mode), so each assumption is a `D-` entry with `answer: "autonomous default"` for confirmation at Gate 1. A correction changes only the named entry.
+This design run was autonomous, so each assumption is a `D-` entry with `answer: "autonomous default"` for confirmation at Gate 1. A correction changes only the named entry.
 
 | Topic | Assumption | Ledger |
 |---|---|---|
@@ -199,7 +199,7 @@ The Owner is not available in this design run (autonomous mode), so each assumpt
 | Ranking | Exact alias, then fuzzy plus a frecency boost of at most 20% of the fuzzy score; files in a trailing async section (owner-confirmed, R-012 v2) | D-016 |
 | Calculator | f64, percent semantics, display rounding, decimal KB and binary KiB, i128 for hex and bin | D-017 |
 | Notices | Sticky: balloon plus a banner on the next Launcher show and a tray tooltip | D-018 |
-| Paste | Clipboard write, cloak, return focus to the paste target, verify, SendInput Ctrl+V, then restore the previous clipboard after about 300 ms (owner-chosen, D-019 v3); abort otherwise | D-019 |
+| Paste | Clipboard write, cloak, return focus to the paste target, verify, SendInput Ctrl+V, then restore the previous clipboard after about 300 ms (owner-chosen, D-019 v5; text, image and file list only, other formats come back degraded); abort otherwise | D-019 |
 | Logging | Local rolling files, no content | D-020 |
 | Launcher geometry | 750 x 475, top at 20% of the work area, hide on focus loss, always start at root | D-021 |
 | Window defaults | Gap 8 px, almost-maximize 90%, third and quarter set, restore in memory | D-022 |
@@ -208,7 +208,7 @@ The Owner is not available in this design run (autonomous mode), so each assumpt
 | Tests | Three tiers; tier 2 is `#[ignore]`d and run before Gate 3; no hosted CI before Ship | D-025 |
 | Design tokens | Desktop adaptation of the Naobi tokens, one contrast fix | D-030 |
 | Mockups | Direction approved by the Owner; remaining screens specified per ticket | D-031 |
-| Screen reader | Weighted criterion for D-002, enabled when it costs < 5 MB working set | D-032 |
+| Screen reader | Weighted criterion, enabled when it costs < 5 MB working set | D-032 |
 | Security level | ASVS Level 1 confirmed | D-033 |
 
 ## 3. Architecture
@@ -286,7 +286,7 @@ C4Container
 | `naobi-picker` | Color math (HEX, RGB, HSL, OKLCH), history | core | no |
 | `naobi-awake` | Mode state machine, expiry, re-apply on resume | core | no |
 | `naobi-ui` | Slint adapter (software renderer, accessibility on): draws `ViewModel`, emits `UiEvent`, exposes a `Clone + Send` handle to post view models and show or hide | core | no (the framework crate may) |
-| `naobi-win32` | Adapters for every Win32, COM and WinRT port: hotkeys, message-only window, clipboard listener, DWM cloak, window ops, tray, balloon, DPAPI, Search index, AppsFolder, shell execute, registry, GDI snapshot, overlays, power | core and module crates (to implement their ports) | yes (ADR-0003) |
+| `naobi-win32` | Adapters for every Win32, COM and WinRT port: hotkeys, hidden tool window, clipboard listener, DWM cloak, window ops, tray, balloon, DPAPI, Search index, AppsFolder, shell execute, registry, GDI snapshot, overlays, power | core and module crates (to implement their ports) | yes (ADR-0003) |
 | `naobi-app` | Composition root and controller: starts threads, wires ports, calls `naobi-ui` directly | all | no |
 | `naobi-perf` | Perf harness binary for R-006 and the PowerToys baseline | app internals via a `perf` feature | no |
 
@@ -304,7 +304,7 @@ Dependency categories: in-process; local-substitutable (has a local stand-in); r
 | Window plan | `naobi_winmgr::plan(cmd, &WindowInfo, &[Monitor], gap) -> Plan` (pure); port `WindowOps` | in-process; port true external | prod: Win32; test: fake with synthetic monitors (mixed DPI) |
 | Topmost | `Topmost::toggle(WindowId)`; port `TopmostOps` | port true external | prod: Win32; test: fake |
 | Color picker | `format(Rgba, Format) -> String`; `ColorHistory::{push, list}`; port `ScreenCapture` | in-process; history local-substitutable | prod: GDI; test: synthetic bitmap |
-| Awake | `Awake::{set(Mode), on_resume, remaining}`; ports `PowerPort`, `Clock` | in-process; ports true external | prod: `SetThreadExecutionState`; test: recording fake with a fake clock |
+| Awake | `Awake::{set(Mode), on_resume, remaining}`; ports `PowerPort`, `Clock` | in-process; ports true external | prod: `PowerCreateRequest`/`PowerSetRequest`; test: recording fake with a fake clock |
 | UI isolation | `ViewModel` and `UiEvent` data types; `Launcher::handle(UiEvent) -> Vec<Effect>` is what tests cross. No `UiShell` trait: D-034 fixed the framework, so there is one adapter | in-process data; the framework is true external | Slint (software renderer). Tests assert on `Effect` and `ViewModel` values, so no headless shell is needed |
 | OS boundary | `naobi-win32` public functions | true external | contract tests (tier 2) on a real desktop |
 
@@ -340,7 +340,7 @@ No async runtime: std threads and channels (ADR-0001).
 | Thread | Owns | Notes |
 |---|---|---|
 | UI thread | The framework event loop and the Launcher window | Draws view models, emits `UiEvent`. Idle when hidden |
-| Platform thread (P1) | Message-only window: `WM_HOTKEY`, `WM_CLIPBOARDUPDATE`, `WM_SETTINGCHANGE` (theme), `WM_POWERBROADCAST`, `WM_DISPLAYCHANGE`, tray callback, second-instance message | Forwards `AppEvent`; also owns the Awake power request and its timer; no work beyond forwarding, no hooks |
+| Platform thread (P1) | Hidden top-level tool window (`WS_EX_TOOLWINDOW`, never shown; a message-only window does not receive the broadcast messages): `WM_HOTKEY`, `WM_CLIPBOARDUPDATE`, `WM_SETTINGCHANGE` (theme), `WM_POWERBROADCAST`, `WM_DISPLAYCHANGE`, `TaskbarCreated`, tray callback, second-instance message | Forwards `AppEvent`; also owns the Awake power request and its timer, and the one scoped topmost `SetWinEventHook` (section 5.4), the one stated exception to "no hooks"; no other work beyond forwarding |
 | Controller | Launcher session, module state | Runs on the Slint event loop thread through `invoke_from_event_loop`, or a dedicated thread if Build measures a need. Calls `UiHandle::post` |
 | Search workers | Sync providers run inline on the controller (budget 16 ms); the file provider runs on its own COM thread with a 500 ms timeout | Generation counter cancels stale queries; stale results are dropped |
 | Index worker | App catalog scan at startup, `ReadDirectoryChangesW` watchers on the Start Menu folders and on the settings directory (debounced; parses the settings file there and keeps the last valid settings, D-009; no thread of its own), icon extraction | Never blocks queries |
@@ -353,14 +353,14 @@ No async runtime: std threads and channels (ADR-0001).
 |---|---|---|
 | Hotkey to visible p95 <= 50 ms | Pre-created cloaked window, uncloak plus foreground trick, no show animation, view model for the empty query prepared before the hotkey (ADR-0005) | Measured as defined below. Run keeps the window and toggles it; Command Palette cloaks (`docs/research/powertoys.md` §2.4); no published latency for either, so the spike and the harness are the evidence |
 | Keystroke to results p95 <= 16 ms over 10,000 items | Titles lowercased and normalized once at index time; `nucleo-matcher` subsequence match; top 50 kept with a bounded heap; file provider async | Precomputed matcher approach in PR #44090 (`docs/research/powertoys.md` §2.5); the spike measures nucleo on 10,000 items |
-| Idle working set <= 40 MB, measured without working-set trimming (R-006 v3) | One process; no webview, no Node; Slint software renderer (5 threads, no GPU driver in the process); bounded caches (icons 100, thumbnails 8, SQLite cache 2 MiB, decrypted index dropped after 60 s); 50 rows only; no `EmptyWorkingSet` or `SetProcessWorkingSetSize` trimming, because the budget is met without it (YAGNI); private bytes are recorded next to the number | Spike, software renderer, untrimmed: 24.0 MB working set, 27.3 MB with accessibility, 8.5 MB private (`.ai-workspace/.../coder-slint-iter2.md`); femtovg 79.9 MB and skia 159.7 MB for comparison; Raycast's native helper is 16 MB |
+| Idle working set <= 40 MB, measured without working-set trimming (R-006 v3) | One process; no webview, no Node; Slint software renderer (5 threads without accessibility, no GPU driver in the process); bounded caches (icons 100, thumbnails 8, SQLite cache 2 MiB, decrypted index dropped after 60 s); 50 rows only; no `EmptyWorkingSet` or `SetProcessWorkingSetSize` trimming, because the budget is met without it (YAGNI); private bytes are recorded next to the number | Spike, software renderer, untrimmed: 24.0 MB working set, 27.3 MB with accessibility, 8.5 MB private (`.ai-workspace/.../coder-slint-iter2.md`); femtovg 79.9 MB and skia 159.7 MB for comparison; Raycast's native helper is 16 MB |
 | Idle CPU < 0.5% | No timers or animation while cloaked; no WinEvent hooks except one scoped to the pinned window's process while a window is topmost (section 5.4); no polling (clipboard by listener, apps by watcher) | Awake in Rust uses 5.6 M cycles per 10 s timed countdown vs 114.9 M in C# (`docs/research/powertoys.md` §6.3) |
-| Process start to tray-ready <= 300 ms; launcher window ready <= 1.5 s (R-006 v2) | Hotkey thread and tray start before any UI work; the window is created on the event loop afterwards; a hotkey pressed earlier is queued and served as soon as the window is ready. Fonts via `include_bytes`; the app catalog and frecency load asynchronously and the Launcher shows an "Indexing apps" row until ready | Spike, software renderer: tray-ready 33 to 39 ms, window created and cloaked about 200 ms (249 ms with accessibility). PR #51181 Rust Awake starts in 16.5 ms |
+| Process start to tray-ready <= 300 ms; launcher window ready <= 1.5 s (R-006 v2) | Hotkey thread and tray start before any UI work; the window is created on the event loop afterwards; a hotkey pressed earlier is queued and served as soon as the window is ready. Fonts via `include_bytes`; the app catalog and frecency load asynchronously and the Launcher shows an "Indexing apps" row until ready | Spike, software renderer: tray-ready 33 to 35 ms (39 ms is skia), window created and cloaked about 200 ms (249 ms with accessibility). PR #51181 Rust Awake starts in 16.5 ms |
 | Exe <= 20 MB | `opt-level 3`, `lto thin`, `codegen-units 1`, `strip`, `panic = "abort"`; Latin-subset fonts (Inter variable about 0.8 MB, JetBrains Mono two weights); no async runtime | Measured in the spike results |
 
 Measurement definitions (one for every renderer, so the numbers are comparable): hotkey-to-visible t0 is the QPC time just before the harness injects the real hotkey with `SendInput`; t1 is the first QPC time at which a sampled pixel inside the Launcher rectangle on the composed desktop equals the Launcher background color (polled in a tight loop), which includes DWM composition and presentation. The Slint software renderer has no render notifier, so in-process frame callbacks are unavailable and the external probe is the only metric; the production harness must instrument the software renderer's present path. Idle numbers are working set and private bytes after 60 s idle with the Launcher cloaked, with no working-set trimming. Keystroke-to-results is defined once: t0 is the QPC time when the key event is received by the window procedure (the first point the product sees it); t1 is the presentation of the frame that contains the new results. Slint's software renderer has no render notifier and presents inside Slint, so the in-process measurement is taken where Slint allows it and is cross-checked by a composed-pixel or region-hash probe whose measured cost (about 7 ms in the spike) is reported next to the number. A present-path hook that would need a custom platform backend (and so lose the AccessKit accessibility support) is a diagnostic only, never the verdict. If the probe is the only usable metric and p95 is above 16 ms, the Owner decides (RK-15).
 
-Memory allocation of the 40 MB, from the spike with the software renderer (untrimmed): UI framework, renderer, fonts and accessibility 27.3 MB working set today (24.0 MB without accessibility); that leaves about 12 MB for the Rust heap including the 10,000-item index (about 2 MB), SQLite and caches (about 3 MB), Win32, COM and tray, and the later modules. The spike has no real index, icons or clipboard history yet, so the allocation is rechecked with `naobi-perf idle` as each module lands (risk RK-12). Trim-on-hide is not used (YAGNI): the iteration-2 spike showed it would bring the number to 2 to 5 MB at a page-fault cost below probe noise, and it stays available if the budget is ever missed.
+Memory allocation of the 40 MB, from the spike with the software renderer (untrimmed): UI framework, renderer, fonts and accessibility 27.3 MB working set today (24.0 MB without accessibility); that leaves about 12 MB for the Rust heap including the 10,000-item index (about 2 MB), SQLite and caches (about 3 MB), Win32, COM and tray, and the later modules. The spike has no real index, icons or clipboard history yet, so the allocation is rechecked with `naobi-perf idle` as each module lands (risk RK-12). Trim-on-hide is not used (YAGNI): the iteration-2 spike showed it would bring the number to 2 to 5 MB at a page-fault cost below probe noise. It is not a fallback under R-006 v3, because it cannot turn a miss into a PASS; a budget miss needs an Owner decision on R-006.
 
 ### 3.7 ADR index
 
@@ -373,7 +373,7 @@ Memory allocation of the 40 MB, from the spike with the software renderer (untri
 | 0005 | Pre-warmed cloaked window, single instance | accepted | D-013 |
 | 0006 | Clipboard store: SQLite with per-blob DPAPI | accepted | D-014, D-015 |
 
-Design-it-twice alternatives were not requested by the Owner. The alternatives that matter (Slint versus GPUI) are what D-002 resolves.
+Design-it-twice alternatives were not requested by the Owner. The alternatives that mattered (Slint versus GPUI) were resolved by D-034 (D-002 superseded).
 
 ## 4. Data
 
@@ -667,13 +667,13 @@ Entities with a lifecycle that are not drawn: a clipboard entry (created, option
 
 ### 5.4 Mechanism notes behind the flows
 
-- **Hotkeys.** `RegisterHotKey` on a message-only window; refusal raises a Notice (ADR-0004). Alt+Shift is also the Windows input-language chord, so Alt+Shift+V must be tested with two layouts installed (RK-07).
-- **Show and hide.** Show: cloak, placement on the monitor under the cursor at that monitor's DPI, uncloak, empty mouse `SendInput` plus `SetForegroundWindow` (the foreground-lock workaround both references use, `docs/research/powertoys.md` §1 item 3). Hide by Esc or Enter: cloak, then `SetForegroundWindow(previous window)` so an invisible Launcher never keeps the keyboard, except when the action launched a process. Hide by focus loss: cloak only, never `SetForegroundWindow`, because the window the Owner just chose already has the keyboard (ADR-0005, D-013). Paste: cloak, return focus to the paste target, poll `GetForegroundWindow` for about 100 ms, check elevation, then `SendInput` Ctrl+V; the previous clipboard is restored about 300 ms later unless it carried an exclusion format or came from an ignored app (D-019 v4).
+- **Hotkeys.** `RegisterHotKey` on the platform thread's hidden tool window; refusal raises a Notice (ADR-0004). Alt+Shift is also the Windows input-language chord, so Alt+Shift+V must be tested with two layouts installed (RK-07).
+- **Show and hide.** Show: cloak, placement on the monitor under the cursor at that monitor's DPI, uncloak, empty mouse `SendInput` plus `SetForegroundWindow` (the foreground-lock workaround both references use, `docs/research/powertoys.md` §1 item 3). Hide by Esc or Enter: cloak, then `SetForegroundWindow(previous window)` so an invisible Launcher never keeps the keyboard, except when the action launched a process. Hide by focus loss: cloak only, never `SetForegroundWindow`, because the window the Owner just chose already has the keyboard (ADR-0005, D-013). Paste: cloak, return focus to the paste target, poll `GetForegroundWindow` for about 100 ms, check elevation, then `SendInput` Ctrl+V; the previous clipboard is restored about 300 ms later unless it carried an exclusion format or came from an ignored app (D-019 v5). The restore covers text, image and file list within the D-015 limits; rich text, HTML, spreadsheet ranges and app-private formats come back degraded. The restore timer starts when `SendInput` returns, so a slow paste target may paste the restored content (ADR-0005).
 - **Apps.** Enumerate `shell:AppsFolder` (covers Win32 shortcuts and packaged apps with their AUMIDs), launched through the shell; the fallback is the PowerToys approach of Start Menu `.lnk` parsing plus `PackageManager` (`docs/research/powertoys.md` §2.6). To be confirmed in Build (RK-06).
 - **Files.** Windows Search index only (R-013). Scope `file:`, `System.FileName` contains-match, 30 rows, as PowerToys does (`docs/research/powertoys.md` §2.8). The user text is escaped before it enters the Search SQL: single quotes doubled, CONTAINS terms wrapped in double quotes, `%`, `_` and `[` escaped in the LIKE fallback, and the `scope='file:'` clause is appended after escaping (T-031). Icons for file rows and clipboard file lists come from the extension only (`SHGFI_USEFILEATTRIBUTES`, no file access); icon locations inside `.url`, `.lnk`, `.library-ms` and `.searchConnector-ms` files are never resolved, because a UNC icon path would open an SMB connection and leak the NTLM hash with no URL action (T-030). The `WSearch` service state decides the "file search unavailable" row.
 - **Clipboard capture.** `AddClipboardFormatListener`, read once per `GetClipboardSequenceNumber`, bounded retry when another process holds the clipboard; the sequence number is re-read after the read and the read is discarded if it changed, so the clipboard owner (resolved to an exe) always belongs to the copy that was read; trailing-edge capture stores the last state of a burst (D-015); exclusion formats and owner exe are checked before storing; the DIB to PNG conversion runs in safe Rust after the 64 MiB pre-check (`docs/research/raycast-rea.md` §4, `docs/research/powertoys.md` §7).
 - **Snap.** Work area from `GetMonitorInfoW` in physical pixels; the visible frame is `DWMWA_EXTENDED_FRAME_BOUNDS`, so the target rectangle is converted to a window rectangle by adding the invisible-border delta; `SetWindowPos`; a second pass when the monitor DPI differs (`docs/research/powertoys.md` §3.3). The elevation check reads the target token before any change (R-011); a token that cannot be read, or `SetWindowPos` failing with ERROR_ACCESS_DENIED, is treated as elevated and shows the admin-window Notice instead of an error.
-- **Topmost.** `SetWindowPos(HWND_TOPMOST)`; the border is a layered topmost tool window drawn with GDI. While at least one window is topmost, one `SetWinEventHook` (`WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS`) per pinned process, scoped by `idProcess` and filtered to `OBJID_WINDOW`, repositions the border on `EVENT_OBJECT_LOCATIONCHANGE`; an unscoped hook would fire for every caret and cursor move on the system. With no topmost window there is no hook. `naobi-perf idle` is run once with one pinned window.
+- **Topmost.** `SetWindowPos(HWND_TOPMOST)`; the border is a layered topmost tool window drawn with GDI. While at least one window is topmost, one `SetWinEventHook` (`WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS`) per pinned process, scoped by `idProcess` and filtered to `OBJID_WINDOW`, repositions the border on `EVENT_OBJECT_LOCATIONCHANGE`; an unscoped hook would fire for every caret and cursor move on the system. The platform thread (P1) owns this hook: it already runs the message loop that an out-of-context hook needs, and the callback only repositions the border. This is the one stated exception to "no hooks" (sections 3.5 and T-021); the alternative, the index worker, would add a second loop. With no topmost window there is no hook. `naobi-perf idle` is run once with one pinned window.
 - **Awake.** The platform thread holds a power request (`PowerCreateRequest`, `PowerSetRequest` with system required and, if chosen, display required) with a reason string, so `powercfg /requests` names the app (R-019); re-applied on `PBT_APMRESUMEAUTOMATIC`; cleared on Off, expiry and exit.
 - **Color picker.** Frozen GDI snapshot overlay (D-023); no mouse hook.
 
@@ -707,7 +707,7 @@ Elements are the DFD nodes and the flows F1 to F16 in chapter 5. Every threat en
 | Threat id | STRIDE | Element | Threat | Mitigation | ASVS 5.0 chapter | Test or accepted-risk D-id |
 |---|---|---|---|---|---|---|
 | T-001 | Spoofing | F1, P1 hotkey registration | Another process registers Alt+Space (or any chord) first, so the Owner believes Naobi is running | RegisterHotKey failure is detected at startup and on resume; a sticky Notice names the hotkey: balloon, banner on the next Launcher show or tray Open, and tray tooltip (D-018) | V16 Security Logging and Error Handling | `r008_conflict_notice_names_hotkey` (asserts the banner on tray Open and the tray tooltip, not only the balloon); residual risk D-029 |
-| T-002 | Spoofing | P1 second-instance message | A process posts the show message to the message-only window | The message has no payload; the handler only shows the Launcher; the window is message-only so it is not broadcast to | V15 Secure Coding and Architecture | `r023_second_instance_shows_first_and_exits` |
+| T-002 | Spoofing | P1 second-instance message | A process posts the show message to the hidden tool window | The message has no payload; the handler only shows the Launcher; the window is hidden and never shown | V15 Secure Coding and Architecture | `r023_second_instance_shows_first_and_exits` |
 | T-003 | Spoofing | F9 file results | A file named like an app (for example Chrome.exe in Downloads) is mistaken for the real app | File results sit only in the trailing Files section with a file glyph and the full path as subtitle; Applications come only from the app catalog (D-016) | V2 Validation and Business Logic | `r013_file_results_never_in_apps_section` |
 | T-004 | Tampering | S settings file, F8 | Another process of the same user edits the settings to add a quicklink with a dangerous scheme | Strict schema; quicklink URL scheme allowlist (http, https); invalid file keeps the last valid settings (D-009) | V1 Encoding and Sanitization; V13 Configuration | `r021_non_http_scheme_rejected` |
 | T-005 | Tampering | S data store, F6 | Same-user code replaces a DPAPI blob so a later paste inserts attacker text | None: DPAPI does not authenticate who wrote a blob and there is no key store to authenticate with | V11 Cryptography | Accepted risk D-026 |
@@ -726,7 +726,7 @@ Elements are the DFD nodes and the flows F1 to F16 in chapter 5. Every threat en
 | T-018 | Denial of service | F5 clipboard payload | A huge or endless clipboard payload exhausts memory or disk | Limits of D-015: 1 MiB text, raw bitmap over 64 MiB rejected before conversion, 10 MB PNG, 500 MB store; reads are bounded | V2 Validation and Business Logic | `r015_image_over_10mb_rejected`, `d015_oversize_text_rejected` |
 | T-019 | Denial of service | F5 clipboard rate | An app copies hundreds of times per second | Coalesce by clipboard sequence number; rate limit 10 per second; work on the clipboard worker | V2 Validation and Business Logic | `d015_capture_rate_limited` |
 | T-020 | Denial of service | F9 Windows Search | The Search service hangs and blocks results | File provider is asynchronous with a 500 ms timeout and generation cancellation; sync providers never wait on it | V2 Validation and Business Logic | `r012_late_file_rows_do_not_block_sync_rows` |
-| T-021 | Denial of service | P1 platform thread | Slow work on the message thread delays hotkeys and clipboard events | The thread only forwards events; no hooks; budget measured under load | V15 Secure Coding and Architecture | `naobi-perf hotkey-to-visible` with a busy clipboard worker (R-006) |
+| T-021 | Denial of service | P1 platform thread | Slow work on the message thread delays hotkeys and clipboard events | The thread only forwards events; its one hook is the scoped topmost hook, whose callback only repositions the border; budget measured under load | V15 Secure Coding and Architecture | `naobi-perf hotkey-to-visible` with a busy clipboard worker (R-006) |
 | T-022 | Denial of service | S settings file, F8 | An oversized or malformed settings file stalls reload | 256 KiB cap; parse on a worker; last valid settings kept | V13 Configuration | `d009_invalid_settings_keeps_last_valid` |
 | T-023 | Denial of service | P4 awake | Awake stays on and drains the battery or blocks sleep unnoticed | Mode shown in the tray icon and tooltip; Timed has an expiry; Awake mode is not persisted, so a restart returns to Off | V15 Secure Coding and Architecture | `r019_tray_icon_reflects_mode` |
 | T-024 | Elevation of privilege | P1 process token | The app runs elevated by mistake or starts an elevated child | Manifest asInvoker; no run-as-administrator action (D-024) | V15 Secure Coding and Architecture | `r010_main_token_not_elevated` |
@@ -773,7 +773,7 @@ Keyboard grammar (R-012, R-007): Enter primary, Ctrl+Enter secondary, Ctrl+K act
 Summary of `CONSTRAINTS.md` (Rust rows only; E2E and axe do not apply, D-006):
 
 - Floor: no new suppressions without a reason, no stubs, no skipped tests, no secrets, the file is never weakened, `forbid(unsafe_code)` everywhere except `naobi-win32` (EX-001, ADR-0003).
-- Enforced by commands: `cargo fmt --check`; `cargo clippy --all-targets -- -D warnings` (with `unwrap_used`, `expect_used` and `undocumented_unsafe_blocks` denied); `cargo check --all-targets`; `cargo test --workspace`; `naobi-perf` for R-006; `cargo deny check`; `gitleaks`; `semgrep`; the ledger check.
+- Enforced by commands: `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings` (with `unwrap_used`, `expect_used` and `undocumented_unsafe_blocks` denied); `cargo check --workspace --all-targets`; `cargo test --workspace`; `naobi-perf` for R-006; `cargo deny check`; `gitleaks`; `semgrep`; the ledger check.
 - Conventions (D-005): Cargo workspace with one crate per module; `thiserror` in libraries, `anyhow` in the binary; unsafe only in Win32 adapter modules with `// SAFETY:`.
 - Language: `GLOSSARY.md` defines the domain words. Notable resolutions: "pin" belongs to clipboard entries, "topmost" to windows; "module" means one of the seven capabilities, never a plugin; "item" is a launcher thing, "entry" a clipboard thing.
 
@@ -868,8 +868,8 @@ Evidence behind D-034 (`docs/research/ui-prototype.md`, `.ai-workspace/.../coder
 | Idle working set | 27.3 MB (24.0 without accessibility) | 79.9 MB | 159.7 MB | 77.8 MB |
 | Private bytes | 8.5 MB | 103.5 MB | 257.6 MB | 103.5 MB |
 | Idle CPU, one core | 0.00% | 0.10% | 0.08% | 4.85% |
-| Threads | 5 | 18 | 16 | 34 |
-| Tray-ready from process start | 35 ms | 35 ms | 39 ms | not built |
+| Threads | 5 (without accessibility) | 18 | 16 | 34 |
+| Tray-ready from process start | 33 to 35 ms | 35 ms | 39 ms | not built |
 | Window created and cloaked | 249 ms | 1180 ms | 1139 ms | 1061 ms |
 | Release exe | 10.7 MB | 9.8 MB | 18.2 MB | 5.3 MB |
 | UI Automation | Edit and List exposed (+3.3 MB) | same (+1.6 MB) | not measured | none |
@@ -890,10 +890,10 @@ GPUI is rejected for no UI Automation tree, a custom text input to write, and hi
 | RK-06 | `shell:AppsFolder` enumeration is the design author's proposal, not what the references do | Fallback is the PowerToys approach; decide in the first launcher slice |
 | RK-07 | Alt+Shift+V may toggle the input language when two layouts are installed | Test; the hotkey is configurable |
 | RK-08 | A cloaked window may stay in the UI Automation tree, or the framework's window may not accept `DWMWA_CLOAK` | The spike records `hide_method`; check with Accessibility Insights (and a screen reader if adopted) |
-| RK-09 | R-019 acceptance uses `powercfg /requests`, which needs an elevated shell | The power request carries a reason string and a tier 2 test checks its state; the literal acceptance; the literal acceptance is a manual elevated check at Gate 3 |
+| RK-09 | R-019 acceptance uses `powercfg /requests`, which needs an elevated shell | The power request carries a reason string and a tier 2 test checks its state; the literal acceptance is a manual elevated check at Gate 3 |
 | RK-10 | R-009 says "at most 30 days or 1,000 entries" and R-015 says a pinned entry survives purge | Resolved by the Owner: pinned entries are exempt from the limit, capped at 100 and removed by Clear (D-015 v3) |
 | RK-11 | Mixed-DPI snapping on DPI-unaware windows leaves a few pixels off | Two-pass apply; test with synthetic monitors and by hand |
-| RK-12 | Later modules (index, icons, clipboard history, tray) add working set on top of the spike's 27.3 MB | Allocation in section 3.6; `naobi-perf idle` after each module; trim-on-hide is the held-back fallback |
+| RK-12 | Later modules (index, icons, clipboard history, tray) add working set on top of the spike's 27.3 MB | Allocation in section 3.6; `naobi-perf idle` after each module; trim-on-hide is held back; it is not a fallback under R-006 v3, so a miss needs an Owner decision on R-006 |
 | RK-13 | A pre-warmed window may cost idle CPU through framework timers | Spike idle CPU is 0.00% once the leftover repeating timer was removed; keep the window event-driven, no repeating timers; `naobi-perf idle` |
 | RK-14 | The minimum Windows 11 build is an assumption (22H2) | The Owner's PC is the reference; the target is Windows 11 only |
 | RK-15 | Keystroke-to-results p95 <= 16 ms is not proven with the software renderer: the spike's screen probe gave an upper bound of 26.7 ms (probe overhead about 7 ms, vsync 7 ms at 143 Hz), while the femtovg notifier measured 10.4 ms. Software rendering of a 940 x 594 px surface may be slower on weaker hardware | Open item for Plan: the production `naobi-perf` instruments the software renderer's present path, and the first Build slice (search box plus 10,000-item list) measures it before any other module is built. Fallback if it fails: an Owner decision at that point; there is no automatic renderer switch |
@@ -902,7 +902,7 @@ GPUI is rejected for no UI Automation tree, a custom text input to write, and hi
 
 Raycast extension compatibility, any plugin system, AI features (R-005); snippets, OCR text extractor, keyboard remapper, PowerRename, Image Resizer, Hosts editor, Peek, emoji picker (R-004); own NTFS file index (R-013); currency conversion (R-014); UIAccess build (R-011); drag-to-zone overlay (R-016); settings window (D-009); installers and auto-update (D-007); low-level keyboard hook and modifier-only hotkeys (D-012); run-as-administrator action (D-024); macOS, Linux, ARM (R-003); public distribution (R-001).
 
-### 11.4 Autonomous defaults to confirm (D-010 to D-030)
+### 11.4 Autonomous defaults (D-010 to D-030; answered ones say Owner)
 
 | Ledger id | Decision | Answer on record | Recommendation recorded in the ledger |
 |---|---|---|---|
@@ -945,11 +945,11 @@ The Owner answered the twelve open decisions of review round 1 and three more on
 | 5 | Screen reader is a weighted D-002 criterion, enabled when it costs < 5 MB working set | D-032, ADR-0002, DESIGN_SYSTEM.md |
 | 6 | Password manager is Proton Pass: default ignore entry `Proton Pass.exe` (to confirm at build); browser-extension copies are part of the accepted risk | R-015 v2, D-027 v2 |
 | 7 | Accepted risks D-026 to D-029 signed off | D-026 to D-029 v2 |
-| 8 | The previous clipboard is restored after a paste from history | D-019 v3, seq-clipboard-paste.mmd, ADR-0005, ADR-0006 |
+| 8 | The previous clipboard is restored after a paste from history | D-019 v5, seq-clipboard-paste.mmd, ADR-0005, ADR-0006 |
 | 9 | PowerToys baseline captured before PowerToys is uninstalled | D-025 v3, section 9.2 |
 | 10 | ASVS Level 1 confirmed | D-033 |
 | 11 | Topmost border: oxide in Windows light mode, `#E3BDA9` in dark mode | R-018 v2, DESIGN_SYSTEM.md |
-| 12 | Cold start split: tray-ready <= 300 ms, window ready <= 1.5 s, early hotkey served when ready; idle working set stays 40 MB until the Slint result | R-006 v2, D-013 v3 |
+| 12 | Cold start split: tray-ready <= 300 ms, window ready <= 1.5 s, early hotkey served when ready; idle working set is measured untrimmed with the Slint software renderer (D-034) | R-006 v2, D-013 v3 |
 | 13 | UI framework: Slint, software renderer, accessibility on; GPUI, femtovg, skia rejected | D-034 (D-002 superseded), ADR-0002 |
 
 Still pending: nothing in the ledger blocks Gate 1. The keystroke-latency measurement of the software renderer (RK-15) is a Plan and Build item.

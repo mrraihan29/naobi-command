@@ -13,6 +13,7 @@ pub mod notice;
 pub mod paths;
 pub mod quicklink;
 pub mod settings;
+pub mod theme;
 pub mod tokens;
 pub mod ui;
 pub mod view_source;

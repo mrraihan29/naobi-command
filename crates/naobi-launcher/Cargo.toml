@@ -1,0 +1,12 @@
+[package]
+name = "naobi-launcher"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+naobi-core = { path = "../naobi-core" }
+nucleo-matcher.workspace = true

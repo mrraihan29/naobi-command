@@ -1,0 +1,506 @@
+//! The launcher engine: root search, the view stack, the action panel, armed commands and the Esc
+//! ladder. `handle` returns the Effects for one Owner event; `screen` returns what the window draws.
+//! No Win32 and no Slint here: the controller executes the effects and posts the screen.
+use crate::armed::Armed;
+use crate::esc::{esc_step, EscStep, Level};
+use crate::frecency::Frecency;
+use crate::ports::Clock;
+use crate::rank::{Hit, Ranker, Source, EMPTY_QUERY_ROWS, MAX_FILE_ROWS, MAX_ROWS};
+use naobi_core::command::{CommandSource, Cx, Outcome, Query};
+use naobi_core::effect::Effect;
+use naobi_core::ids::{ActionId, ItemId, ViewId};
+use naobi_core::item::{Action, Item, ItemKind};
+use naobi_core::notice::{Notice, NoticeKind};
+use naobi_core::ui::{
+    ActionPanelView, ActionView, FooterView, Key, KeyChord, NoticeView, PreviewView, RowView,
+    Screen, Section, UiEvent,
+};
+use naobi_core::view_source::{Preview, ViewSource};
+use std::collections::HashSet;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Root,
+    /// Pushed from the root by an Enter that returned `Effect::PushView`.
+    Pushed(usize),
+    /// Opened by its own hotkey; Esc hides it.
+    Hotkey(usize),
+}
+
+struct Panel {
+    target: Hit,
+    actions: Vec<Action>,
+    selected: usize,
+}
+
+pub struct Launcher {
+    sources: Vec<Box<dyn CommandSource>>,
+    views: Vec<Box<dyn ViewSource>>,
+    armed_ids: HashSet<ItemId>,
+    frecency: Frecency,
+    clock: Box<dyn Clock>,
+    ranker: Ranker,
+    armed: Armed,
+    mode: Mode,
+    query: String,
+    /// Bumped on every query change and every show; file results carry the generation they answer.
+    generation: u64,
+    rows: Vec<Hit>,
+    files: Vec<Hit>,
+    selected: usize,
+    panel: Option<Panel>,
+    notice: Option<Notice>,
+}
+
+impl Launcher {
+    pub fn new(
+        sources: Vec<Box<dyn CommandSource>>,
+        views: Vec<Box<dyn ViewSource>>,
+        frecency: Frecency,
+        clock: Box<dyn Clock>,
+    ) -> Self {
+        let mut l = Self {
+            sources,
+            views,
+            armed_ids: HashSet::new(),
+            frecency,
+            clock,
+            ranker: Ranker::default(),
+            armed: Armed::default(),
+            mode: Mode::Root,
+            query: String::new(),
+            generation: 0,
+            rows: Vec::new(),
+            files: Vec::new(),
+            selected: 0,
+            panel: None,
+            notice: None,
+        };
+        l.refresh();
+        l
+    }
+
+    /// Marks items whose primary action needs a second Enter (R-020).
+    pub fn set_armed(&mut self, ids: impl IntoIterator<Item = ItemId>) {
+        self.armed_ids.extend(ids);
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Every show starts at the root with an empty query (D-021).
+    pub fn show_root(&mut self) {
+        self.mode = Mode::Root;
+        self.reset();
+    }
+
+    /// Shows a view that has its own hotkey. False when no such view is hosted.
+    pub fn show_view(&mut self, id: &ViewId) -> bool {
+        match self.view_index(id) {
+            Some(i) if self.views[i].opened_by_hotkey() => {
+                self.mode = Mode::Hotkey(i);
+                self.reset();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn handle(&mut self, ev: UiEvent) -> Vec<Effect> {
+        match ev {
+            UiEvent::TextChanged(text) => {
+                self.set_query(text);
+                vec![]
+            }
+            UiEvent::Key(chord) => self.key(chord),
+            UiEvent::RowActivated(i) => {
+                if i >= self.row_count() {
+                    return vec![];
+                }
+                self.selected = i;
+                self.run_selected(false)
+            }
+            UiEvent::Dismissed => {
+                self.armed.disarm();
+                vec![Effect::Hide]
+            }
+        }
+    }
+
+    /// Hands in a file search answer. `source` is the root source index that owns these rows, so
+    /// their actions run there. Dropped unless `generation` is current, the query is not empty and the
+    /// root is showing. The rows trail the sync rows and never reorder them.
+    pub fn file_results(&mut self, generation: u64, source: usize, items: Vec<Item>) -> bool {
+        if generation != self.generation || self.query.is_empty() || self.mode != Mode::Root {
+            return false;
+        }
+        self.files = items
+            .into_iter()
+            .take(MAX_FILE_ROWS)
+            .map(|item| Hit {
+                src: Source::Root(source),
+                item,
+                exact: false,
+                total: 0.0,
+                opens: 0.0,
+            })
+            .collect();
+        true
+    }
+
+    pub fn screen(&self) -> Screen {
+        let now = self.clock.now_ms();
+        let armed = self.armed.armed_item(now);
+        let to_row = |h: &Hit| RowView {
+            kind: kind_name(h.item.kind).to_owned(),
+            title: h.item.title.clone(),
+            subtitle: h.item.subtitle.clone(),
+            hint: None,
+            calculator: h.item.kind == ItemKind::Calculator,
+            disabled: false,
+            armed: armed == Some(h.id()),
+            pinned: false,
+            swatch: None,
+        };
+        let mut sections = Vec::new();
+        if !self.rows.is_empty() {
+            sections.push(Section {
+                header: None,
+                rows: self.rows.iter().map(&to_row).collect(),
+            });
+        }
+        if !self.files.is_empty() {
+            sections.push(Section {
+                header: Some("Files".to_owned()),
+                rows: self.files.iter().map(&to_row).collect(),
+            });
+        }
+        let target = self.selected_hit();
+        let footer = FooterView {
+            primary: target.and_then(|h| self.primary_label(h, armed == Some(h.id()))),
+            actions: target.is_some(),
+        };
+        Screen {
+            query: self.query.clone(),
+            sections,
+            selected: self.selected,
+            notice: self.notice.as_ref().map(|n| NoticeView {
+                message: format!("{}: {}", n.subject, n.message),
+            }),
+            action_panel: self.panel.as_ref().map(panel_view),
+            footer,
+            preview: self.preview(),
+            empty: None,
+            loading: false,
+            reduced_motion: false,
+            text_scale: 1.0,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.query.clear();
+        self.panel = None;
+        self.armed.disarm();
+        self.generation += 1;
+        self.refresh();
+    }
+
+    fn set_query(&mut self, text: String) {
+        self.query = text;
+        self.generation += 1;
+        self.armed.disarm();
+        self.refresh();
+    }
+
+    /// Recomputes the sync rows for the current mode and query. Empty text lists the most frecent.
+    fn refresh(&mut self) {
+        let text = self.query.trim().to_owned();
+        let q = Query { text: text.clone() };
+        let mut pool = Vec::new();
+        match self.mode {
+            Mode::Root => {
+                for (i, s) in self.sources.iter().enumerate() {
+                    pool.extend(s.items(&q).into_iter().map(|it| (Source::Root(i), it)));
+                }
+            }
+            Mode::Pushed(i) | Mode::Hotkey(i) => {
+                pool.extend(
+                    self.views[i]
+                        .items(&q)
+                        .into_iter()
+                        .map(|it| (Source::View(i), it)),
+                );
+            }
+        }
+        let limit = if text.is_empty() {
+            EMPTY_QUERY_ROWS
+        } else {
+            MAX_ROWS
+        };
+        let now = self.clock.now_ms() / 1000;
+        let frecency = &self.frecency;
+        self.rows = self
+            .ranker
+            .rank(&text, pool, |id| frecency.decayed_opens(id, now), limit);
+        self.files.clear();
+        self.selected = 0;
+    }
+
+    fn key(&mut self, c: KeyChord) -> Vec<Effect> {
+        // Any key but Enter (with or without Ctrl) disarms (R-020). Enter keeps the arming, so
+        // the second press can confirm it.
+        if c.key != Key::Enter {
+            self.armed.disarm();
+        }
+        match c.key {
+            Key::Up => {
+                self.move_by(-1);
+                vec![]
+            }
+            Key::Down => {
+                self.move_by(1);
+                vec![]
+            }
+            Key::Enter if self.panel.is_some() => self.run_panel(),
+            Key::Enter => self.run_selected(c.ctrl),
+            Key::Escape => self.escape(),
+            Key::K if c.ctrl => {
+                self.toggle_panel();
+                vec![]
+            }
+            // ponytail: PageUp, PageDown, Backspace, Ctrl+. and Ctrl+X do nothing here yet; the
+            // clipboard view (NCMD-19/20) and the page keys (NCMD-15) add them.
+            _ => vec![],
+        }
+    }
+
+    fn move_by(&mut self, delta: isize) {
+        if let Some(p) = &mut self.panel {
+            p.selected = step(p.selected, p.actions.len(), delta);
+            return;
+        }
+        self.armed.disarm();
+        self.selected = step(self.selected, self.row_count(), delta);
+    }
+
+    /// Enter (primary) or Ctrl+Enter (secondary) on the selected row. An armed command needs a
+    /// second Enter inside 5 s; the first one only arms it.
+    fn run_selected(&mut self, secondary: bool) -> Vec<Effect> {
+        let Some(hit) = self.selected_hit().cloned() else {
+            return vec![];
+        };
+        let action = if secondary {
+            match hit.item.secondary.clone() {
+                Some(a) => a,
+                None => return vec![],
+            }
+        } else {
+            hit.item.primary.clone()
+        };
+        self.run(&hit, action)
+    }
+
+    fn run_panel(&mut self) -> Vec<Effect> {
+        let Some(panel) = self.panel.take() else {
+            return vec![];
+        };
+        let Some(action) = panel.actions.get(panel.selected) else {
+            return vec![];
+        };
+        if action.enabled.is_err() {
+            // A disabled action is listed with its reason and cannot run; the panel stays open.
+            self.panel = Some(panel);
+            return vec![];
+        }
+        let id = action.id.clone();
+        self.run(&panel.target, id)
+    }
+
+    /// Runs `action` on `hit` and turns the outcome into effects. A PushView opens the view; a
+    /// failed run keeps the Launcher open with its Notice; anything else ends with Hide.
+    fn run(&mut self, hit: &Hit, action: ActionId) -> Vec<Effect> {
+        // R-020: this is the one gate. Enter, Ctrl+Enter and the action panel all end here, so an
+        // armed command runs only on the second press of the same action within 5 s.
+        let now = self.clock.now_ms();
+        if self.armed_ids.contains(hit.id()) && !self.armed.confirm(hit.id(), &action, now) {
+            self.armed.arm(hit.id().clone(), action, now);
+            return vec![];
+        }
+        let mut cx = Cx::default();
+        let outcome = self.source(hit.src).run(hit.id(), action, &mut cx);
+        let failed = matches!(outcome, Outcome::Failed(_));
+        let mut effects = cx.take();
+        match outcome {
+            Outcome::Done => {}
+            Outcome::Effects(more) => effects.extend(more),
+            Outcome::Failed(n) => effects.push(Effect::Notice(n)),
+        }
+        if matches!(hit.src, Source::Root(_)) && !failed {
+            let now = self.clock.now_ms() / 1000;
+            if self.frecency.record(hit.id(), now).is_err() {
+                effects.push(Effect::Notice(Notice {
+                    subject: "Usage".to_owned(),
+                    message: "This open was not counted.".to_owned(),
+                    kind: NoticeKind::Warning,
+                }));
+            }
+        }
+        let pushed = effects.iter().find_map(|e| match e {
+            Effect::PushView(v) => Some(v.clone()),
+            _ => None,
+        });
+        match pushed {
+            Some(v) => match self.view_index(&v) {
+                Some(i) => {
+                    self.mode = Mode::Pushed(i);
+                    self.reset();
+                }
+                None => effects.push(Effect::Notice(Notice {
+                    subject: "View".to_owned(),
+                    message: "That view is not available.".to_owned(),
+                    kind: NoticeKind::Error,
+                })),
+            },
+            None if !failed && !effects.contains(&Effect::Hide) => effects.push(Effect::Hide),
+            None => {}
+        }
+        for e in &effects {
+            if let Effect::Notice(n) = e {
+                self.notice = Some(n.clone());
+            }
+        }
+        effects
+    }
+
+    /// The Esc ladder (R-012): panel, then Notice, then query, then pop the view, then hide.
+    fn escape(&mut self) -> Vec<Effect> {
+        let level = match self.mode {
+            Mode::Root => Level::Root,
+            Mode::Pushed(_) => Level::Pushed,
+            Mode::Hotkey(_) => Level::HotkeyOpened,
+        };
+        match esc_step(
+            self.panel.is_some(),
+            self.notice.is_some(),
+            !self.query.is_empty(),
+            level,
+        ) {
+            EscStep::ClosePanel => {
+                self.panel = None;
+                vec![]
+            }
+            EscStep::DismissNotice => {
+                self.notice = None;
+                vec![]
+            }
+            EscStep::ClearQuery => {
+                self.set_query(String::new());
+                vec![]
+            }
+            EscStep::PopView => {
+                self.mode = Mode::Root;
+                self.reset();
+                vec![]
+            }
+            EscStep::Hide => vec![Effect::Hide],
+        }
+    }
+
+    fn toggle_panel(&mut self) {
+        if self.panel.is_some() {
+            self.panel = None;
+            return;
+        }
+        let Some(target) = self.selected_hit().cloned() else {
+            return;
+        };
+        let actions = self.source(target.src).actions(target.id());
+        self.panel = Some(Panel {
+            target,
+            actions,
+            selected: 0,
+        });
+    }
+
+    fn primary_label(&self, h: &Hit, armed: bool) -> Option<String> {
+        if armed {
+            return Some("Confirm".to_owned());
+        }
+        self.source(h.src)
+            .actions(h.id())
+            .into_iter()
+            .find(|a| a.id == h.item.primary)
+            .map(|a| a.label)
+    }
+
+    fn preview(&self) -> Option<PreviewView> {
+        let i = match self.mode {
+            Mode::Root => return None,
+            Mode::Pushed(i) | Mode::Hotkey(i) => i,
+        };
+        let h = self.selected_hit()?;
+        match self.views[i].preview(h.id())? {
+            Preview::Text(t) => Some(PreviewView::Text(t)),
+            Preview::Files(f) => Some(PreviewView::Text(f.join("\n"))),
+            // ponytail: image previews need a PNG decoder and RGBA conversion, not in this engine yet.
+            Preview::Image { .. } => None,
+        }
+    }
+
+    fn selected_hit(&self) -> Option<&Hit> {
+        self.rows.iter().chain(self.files.iter()).nth(self.selected)
+    }
+
+    fn row_count(&self) -> usize {
+        self.rows.len() + self.files.len()
+    }
+
+    fn source(&self, src: Source) -> &dyn CommandSource {
+        match src {
+            Source::Root(i) => &*self.sources[i],
+            Source::View(i) => &*self.views[i],
+        }
+    }
+
+    fn view_index(&self, id: &ViewId) -> Option<usize> {
+        self.views.iter().position(|v| v.view_id() == *id)
+    }
+}
+
+fn step(i: usize, n: usize, delta: isize) -> usize {
+    if n == 0 {
+        0
+    } else {
+        i.saturating_add_signed(delta).min(n - 1)
+    }
+}
+
+fn panel_view(p: &Panel) -> ActionPanelView {
+    ActionPanelView {
+        filter: String::new(),
+        actions: p
+            .actions
+            .iter()
+            .map(|a| ActionView {
+                label: a.label.clone(),
+                // ponytail: no shortcut label; naobi-core's chord type has no text form yet.
+                shortcut: None,
+                reason: a.enabled.clone().err(),
+            })
+            .collect(),
+        selected: p.selected,
+    }
+}
+
+fn kind_name(k: ItemKind) -> &'static str {
+    match k {
+        ItemKind::App => "Application",
+        ItemKind::File => "File",
+        ItemKind::Command => "Command",
+        ItemKind::Quicklink => "Quicklink",
+        ItemKind::Calculator => "Calculator",
+        ItemKind::ClipboardEntry => "Clipboard entry",
+        ItemKind::Color => "Color",
+    }
+}

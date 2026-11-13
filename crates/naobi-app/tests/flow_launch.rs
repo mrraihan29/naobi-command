@@ -42,6 +42,7 @@ fn r012_hotkey_to_app_launch() {
     let mut app = match Command::new(env!("CARGO_BIN_EXE_naobi-app"))
         .env("NAOBI_TEST_RUN_KEY", &run_key.0)
         .env("NAOBI_TEST_TARGET", &script)
+        .env("NAOBI_PERF_ITEMS", "0")
         .env("NAOBI_DATA_DIR", dir.join("data"))
         .env("NAOBI_SETTINGS_DIR", dir.join("settings"))
         .stdout(Stdio::null())
@@ -70,7 +71,12 @@ fn r012_hotkey_to_app_launch() {
         });
     let _ = app.kill();
     let _ = app.wait();
-    let _ = std::fs::remove_dir_all(&dir);
+    if cloaked {
+        let _ = std::fs::remove_dir_all(&dir);
+    } else {
+        // Kept for the post-mortem: the app's log is under it.
+        eprintln!("test data kept in {}", dir.display());
+    }
     assert!(ready, "launcher window never appeared");
     assert!(shown, "Alt+Space did not show the launcher");
     assert!(launched, "Enter did not start the target");

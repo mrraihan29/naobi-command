@@ -5,6 +5,10 @@ targets = ["x86_64-pc-windows-msvc"]
 
 [advisories]
 yanked = "deny"
+# pin-utils is unmaintained (informational, no vulnerability). It is a build-time-only dependency of
+# spin_on, pulled by slint-build and slint-macros; it never runs in the exe. Owner approved 2026-11-13.
+# Remove when slint drops spin_on.
+ignore = [{ id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained, build-time only via slint-build/slint-macros" }]
 
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0", "MPL-2.0"]

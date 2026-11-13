@@ -46,7 +46,7 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 | Budget | Value | Ledger id |
 |---|---|---|
 | Hotkey to visible | p95 <= 50 ms over 200 runs | R-006 |
-| Keystroke to results | p95 <= 16 ms over a 10,000-item index | R-006 |
+| Keystroke to results | p95_est <= 25 ms over a 10,000-item index (R-006 v5) | R-006 |
 | Idle working set | <= 40 MB total, measured without working-set trimming (spike: 27.3 MB with accessibility) | R-006 v3 |
 | Idle CPU | < 0.5% averaged over 60 s | R-006 |
 | Process start to tray-ready (tray icon shown, hotkeys registered) | <= 300 ms | R-006 |

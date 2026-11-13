@@ -145,7 +145,7 @@ Surfaces owned by `naobi-win32` (marked native) use OS drawing; the table says w
 | Notice banner | Row above results, `surface.raised`, glyph + `type.title` message naming its subject, 1 px `line.strong` bottom; sticky until seen (shown again on the next Launcher show, also via tray Open); dismiss with Esc (first Esc dismisses it) | n/a | Announced when shown; not focusable | n/a | n/a | Red `state.danger` glyph in paper, `text.primary` glyph in stone, text always present | n/a |
 | Armed row (R-020) | Selected row whose title reads "Restart: press Enter again to confirm" and shows a `state.danger` bar in paper or `text.primary` bar in stone | n/a | The armed row keeps selection; any other key or selection change disarms; 5 s timeout | n/a | n/a | n/a | n/a |
 | Clipboard entry row | Kind glyph, first line of text (or "Image 1920 x 1080", or "3 files") in `type.title`, relative time in `type.meta`, pinned marker (`accent`) | `surface.selected` | As Result row | n/a | n/a | n/a | n/a |
-| Preview pane | `surface.raised` (paper) or `surface.well` (stone), `radius.control`, text in `type.preview`, image fitted and centered | n/a | n/a | n/a | "Decrypting" text for over 150 ms | "Cannot read this entry" text | "Nothing selected" |
+| Preview pane | `surface.raised` (paper) or `surface.well` (stone), `radius.control`, text in `type.preview`, image fitted and centered | n/a | n/a | n/a | n/a (decryption is synchronous) | "Cannot read this entry" text | "Nothing selected" |
 | Clipboard list | List left, preview right (proposal: 300 px list, remainder preview) | n/a | As Result row | n/a | Rows appear as the index builds | n/a | Empty state: "Nothing copied yet" |
 | Color history row | 22 px swatch (1 px `line.strong`), HEX in `type.meta`, time | `surface.selected` | As Result row | n/a | n/a | n/a | Empty state: "No colors picked yet" |
 | Empty state | `type.result` title, `type.title` helper line in `text.muted`, centered in the list area | n/a | n/a | n/a | n/a | n/a | This is the empty state |
@@ -180,10 +180,10 @@ Everything in the MVP is reachable with the keyboard (R-007). Key meaning is dec
 | Ctrl+Enter | Secondary action (clipboard: copy only) |
 | Ctrl+K | Open or close the action panel |
 | Esc | Close the action panel or dismiss a Notice, else clear the query, else pop the view, else hide (R-012). A view opened directly by its own hotkey (clipboard history via Alt+Shift+V) hides instead of popping to the root |
-| Backspace on an empty query | Pop the view (proposal, from Raycast) |
+| Backspace on an empty query | Pop the view (from Raycast) |
 | Up, Down, PageUp, PageDown | Move selection |
-| Ctrl+. | Pin or unpin the clipboard entry (proposal, from Raycast) |
-| Ctrl+X | Delete the clipboard entry when the field has no text selection (proposal) |
+| Ctrl+. | Pin or unpin the clipboard entry (from Raycast) |
+| Ctrl+X | Delete the clipboard entry when the query is empty (with text in the field it stays a cut; use Ctrl+K for Delete) |
 | Alt+Space | Open the Launcher (R-008) |
 | Alt+Shift+V | Open clipboard history (R-015) |
 

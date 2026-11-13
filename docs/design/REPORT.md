@@ -159,7 +159,7 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 **R-006** (v4): Performance budgets: hotkey-to-visible p95 <= 50 ms; keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results; idle working set <= 40 MB total, measured without working-set trimming; idle CPU < 0.5% averaged over 60 s; process start to tray-ready (tray icon shown, hotkeys registered) <= 300 ms, pre-warmed launcher window ready <= 1.5 s after process start, and a hotkey pressed before the window is ready is served as soon as it is; release exe <= 20 MB. The installed PowerToys is measured as the baseline.
 
 - perf-harness measures hotkey-to-visible p95 <= 50 ms over 200 runs
-- perf-harness measures keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results
+- perf-harness measures keystroke-to-results p95_est <= 25 ms (p95_upper minus the measured probe cost, R-006 v5) over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results
 - Idle working set <= 40 MB and idle CPU < 0.5% over 60 s, measured without working-set trimming
 - Process start to tray-ready <= 300 ms and launcher window ready <= 1.5 s after process start; a hotkey pressed before the window is ready opens the launcher as soon as it is ready; release exe size <= 20 MB
 - A baseline report records the same metrics for the installed PowerToys
@@ -352,7 +352,7 @@ No async runtime: std threads and channels (ADR-0001).
 | Budget (R-006) | Mechanism | Evidence |
 |---|---|---|
 | Hotkey to visible p95 <= 50 ms | Pre-created cloaked window, uncloak plus foreground trick, no show animation, view model for the empty query prepared before the hotkey (ADR-0005) | Measured as defined below. Run keeps the window and toggles it; Command Palette cloaks (`docs/research/powertoys.md` §2.4); no published latency for either, so the spike and the harness are the evidence |
-| Keystroke to results p95 <= 16 ms over 10,000 items | Titles lowercased and normalized once at index time; `nucleo-matcher` subsequence match; top 50 kept with a bounded heap; file provider async | Precomputed matcher approach in PR #44090 (`docs/research/powertoys.md` §2.5); the spike measures nucleo on 10,000 items |
+| Keystroke to results p95_est <= 25 ms (p95_upper minus the measured probe cost, R-006 v5) over 10,000 items | Titles lowercased and normalized once at index time; `nucleo-matcher` subsequence match; top 50 kept with a bounded heap; file provider async | Precomputed matcher approach in PR #44090 (`docs/research/powertoys.md` §2.5); the spike measures nucleo on 10,000 items |
 | Idle working set <= 40 MB, measured without working-set trimming (R-006 v3) | One process; no webview, no Node; Slint software renderer (5 threads without accessibility, no GPU driver in the process); bounded caches (icons 100, thumbnails 8, SQLite cache 2 MiB, decrypted index dropped after 60 s); 50 rows only; no `EmptyWorkingSet` or `SetProcessWorkingSetSize` trimming, because the budget is met without it (YAGNI); private bytes are recorded next to the number | Spike, software renderer, untrimmed: 24.0 MB working set, 27.3 MB with accessibility, 8.5 MB private (`.ai-workspace/.../coder-slint-iter2.md`); femtovg 79.9 MB and skia 159.7 MB for comparison; Raycast's native helper is 16 MB |
 | Idle CPU < 0.5% | No timers or animation while cloaked; no WinEvent hooks except one scoped to the pinned window's process while a window is topmost (section 5.4); no polling (clipboard by listener, apps by watcher) | Awake in Rust uses 5.6 M cycles per 10 s timed countdown vs 114.9 M in C# (`docs/research/powertoys.md` §6.3) |
 | Process start to tray-ready <= 300 ms; launcher window ready <= 1.5 s (R-006 v2) | Hotkey thread and tray start before any UI work; the window is created on the event loop afterwards; a hotkey pressed earlier is queued and served as soon as the window is ready. Fonts via `include_bytes`; the app catalog and frecency load asynchronously and the Launcher shows an "Indexing apps" row until ready | Spike, software renderer: tray-ready 33 to 35 ms (39 ms is skia), window created and cloaked about 200 ms (249 ms with accessibility). PR #51181 Rust Awake starts in 16.5 ms |
@@ -766,7 +766,7 @@ Surfaces owned by Windows (tray menu, balloon notification) keep OS styling; the
 
 Mockups: the direction is approved by the Owner (D-031): `docs/design/mockups/launcher-mockups.html` covers the root, results with calculator, action panel, clipboard history and window management screens in `paper` and `stone`. The color picker overlay, the tray menu and the error, loading and empty states follow the same pattern and are specified per ticket in Plan from the state lists in `docs/design/mockups/README.md`.
 
-Keyboard grammar (R-012, R-007): Enter primary, Ctrl+Enter secondary, Ctrl+K action panel, Esc ladder (a view opened by its own hotkey hides on Esc). Proposals not in the ledger (Backspace on empty pops, Ctrl+. pins, Ctrl+X deletes) are marked in the design system; the topmost border follows the Windows theme (oxide in light mode, the pale earth tone in dark mode, R-018 v2).
+Keyboard grammar (R-012, R-007): Enter primary, Ctrl+Enter secondary, Ctrl+K action panel, Esc ladder (a view opened by its own hotkey hides on Esc). Keys beyond the ledger (Backspace on empty pops, Ctrl+. pins, Ctrl+X deletes while the query is empty) are accepted and listed in the design system; the topmost border follows the Windows theme (oxide in light mode, the pale earth tone in dark mode, R-018 v2).
 
 ## 8. Code standards
 
@@ -959,7 +959,7 @@ Other autonomous defaults that the Owner has not individually answered (D-010 to
 - Percent semantics in D-017: `2^10 + 15%` equals 1177.6 (15% of 1024 added); the alternative reading is 1024.15.
 - Icons for commands and modules: system app icons plus a monochrome glyph set not yet chosen; a visual direction the ledger does not settle.
 - Dark theme: the selected-row wash (`on-stone` at 8%) is derived, and `stone` has no separate secondary text tier.
-- Clipboard view keys beyond the ledger (Ctrl+. pin, Ctrl+X delete, Backspace pops) and the 300 px list / preview split.
+- Clipboard view keys beyond the ledger, accepted (Ctrl+. pin, Ctrl+X delete on an empty query, Backspace pops) and the 300 px list / preview split.
 - Hosted CI before Ship: not planned (D-025).
 
 ### 11.6 Plan backlog (review round 2 minors)

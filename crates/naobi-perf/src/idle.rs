@@ -18,8 +18,14 @@ pub fn run(exe: &Path, seconds: u64, out: &Path) -> Result<()> {
     // The release exe syncs the Owner's HKCU Run value with its settings; the guard puts it back.
     let _run_value = RunValue::save()?;
     let sandbox = std::env::temp_dir().join(format!("naobi-idle-{}", std::process::id()));
+    // A data directory seeded beforehand (for example with 1,000 clipboard entries) is used as given
+    // and left alone; otherwise the run starts from an empty one.
+    let seeded = std::env::var_os("NAOBI_IDLE_DATA_DIR").map(std::path::PathBuf::from);
     let mut child = Command::new(exe)
-        .env("NAOBI_DATA_DIR", sandbox.join("data"))
+        .env(
+            "NAOBI_DATA_DIR",
+            seeded.clone().unwrap_or_else(|| sandbox.join("data")),
+        )
         .env("NAOBI_SETTINGS_DIR", sandbox.join("settings"))
         .spawn()?;
     let result = measure(&mut child, seconds);

@@ -14,6 +14,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use zeroize::Zeroizing;
 
+/// A change event: the sequence number and the exe that owned the clipboard when it arrived.
+type Change = (u32, Option<String>);
+
 /// Perf builds measure a fixed setup, so capture stays off unless a test asks for it.
 fn enabled() -> bool {
     !cfg!(feature = "perf") || std::env::var_os("NAOBI_TEST_CLIPBOARD").is_some()
@@ -27,7 +30,7 @@ pub fn register(m: &mut Modules) {
         tracing::warn!("clipboard history is off: the store could not be opened");
         return;
     };
-    let (tx, rx): (Sender<u32>, Receiver<u32>) = mpsc::channel();
+    let (tx, rx): (Sender<Change>, Receiver<Change>) = mpsc::channel();
     let spawned = std::thread::Builder::new()
         .name("clipboard".into())
         .spawn(move || run(&rx, history));
@@ -39,7 +42,8 @@ pub fn register(m: &mut Modules) {
         EventKind::ClipboardChanged,
         Box::new(move |ev, _| {
             if let AppEvent::ClipboardChanged(seq) = ev {
-                let _ = tx.send(*seq);
+                // The owner is asked now: it may be gone by the time the worker reads.
+                let _ = tx.send((*seq, clipboard::owner_exe()));
             }
         }),
     );
@@ -88,8 +92,10 @@ impl Clock for SystemClock {
     }
 }
 
-/// The clipboard as the history reads it.
-struct WinSource;
+/// The clipboard as the history reads it. `owner` is who owned it when the change event arrived.
+struct WinSource {
+    owner: Option<String>,
+}
 
 impl ClipSource for WinSource {
     fn sequence(&self) -> u32 {
@@ -97,7 +103,9 @@ impl ClipSource for WinSource {
     }
 
     fn read(&self) -> Option<Captured> {
-        clipboard::read().and_then(to_captured)
+        let mut captured = clipboard::read().and_then(to_captured)?;
+        captured.owner_exe = self.owner.clone().or(captured.owner_exe);
+        Some(captured)
     }
 }
 
@@ -124,17 +132,17 @@ fn to_captured(s: Snapshot) -> Option<Captured> {
 
 /// Each change event waits its turn at the limiter, then captures what the clipboard holds by then:
 /// the last state of a burst is the one stored (trailing edge).
-fn run(rx: &Receiver<u32>, mut history: History) {
+fn run(rx: &Receiver<Change>, mut history: History) {
     let mut limiter = Limiter::default();
     let clock = SystemClock;
-    while let Ok(mut seq) = rx.recv() {
+    while let Ok((mut seq, mut owner)) = rx.recv() {
         while let Err(wait) = limiter.admit(clock.now_ms()) {
             std::thread::sleep(Duration::from_millis(wait));
         }
         while let Ok(newer) = rx.try_recv() {
-            seq = newer;
+            (seq, owner) = newer;
         }
-        match capture(&WinSource, seq, &mut history) {
+        match capture(&WinSource { owner }, seq, &mut history) {
             Ok(Capture::Decided(o)) => {
                 let p = o.purged;
                 if p.expired + p.excess + p.evicted > 0 {

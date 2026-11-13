@@ -21,7 +21,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 const LOGICAL_WIDTH: i32 = 750;
-const LOGICAL_HEIGHT: i32 = 475;
 
 fn hwnd(h: isize) -> HWND {
     HWND(h as *mut c_void)
@@ -87,17 +86,14 @@ pub fn hide(h: isize) {
 }
 
 /// Pixel size and top-left corner `(x, y, w, h)` for a work area `(left, top, right, bottom)` at `dpi`:
-/// 750 x 475 logical, centered horizontally, top edge at 20% of the work area height.
-fn placement(work: (i32, i32, i32, i32), dpi: u32) -> (i32, i32, i32, i32) {
+/// 750 logical wide and `height` logical tall, centered horizontally, top edge at 20% of the work
+/// area height, but never so low that the bottom edge leaves the work area.
+fn placement(work: (i32, i32, i32, i32), dpi: u32, height: i32) -> (i32, i32, i32, i32) {
     let (left, top, right, bottom) = work;
     let scale = |v: i32| v * dpi as i32 / 96;
-    let (w, h) = (scale(LOGICAL_WIDTH), scale(LOGICAL_HEIGHT));
-    (
-        left + (right - left - w) / 2,
-        top + (bottom - top) * 20 / 100,
-        w,
-        h,
-    )
+    let (w, h) = (scale(LOGICAL_WIDTH), scale(height));
+    let y = (top + (bottom - top) * 20 / 100).min(bottom - h).max(top);
+    (left + (right - left - w) / 2, y, w, h)
 }
 
 /// Height of the work area of the monitor under the cursor, in logical px (96 dpi). The Launcher is
@@ -119,8 +115,9 @@ pub fn work_height_logical() -> f32 {
     }
 }
 
-/// Moves the cloaked window to the monitor under the cursor, uncloaks it and takes the foreground.
-pub fn show(h: isize) {
+/// Moves the cloaked window to the monitor under the cursor, `height` logical px tall (the UI's own
+/// frame height), uncloaks it and takes the foreground.
+pub fn show(h: isize, height: f32) {
     let w = hwnd(h);
     // SAFETY: Win32 calls on plain values and our own window; every out-pointer outlives its call.
     unsafe {
@@ -135,7 +132,11 @@ pub fn show(h: isize) {
         let (mut dx, mut dy) = (96u32, 96u32);
         let _ = GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
         let r = mi.rcWork;
-        let (x, y, pw, ph) = placement((r.left, r.top, r.right, r.bottom), dx);
+        let (x, y, pw, ph) = placement(
+            (r.left, r.top, r.right, r.bottom),
+            dx,
+            height.round() as i32,
+        );
         let _ = SetWindowPos(w, Some(HWND_TOPMOST), x, y, pw, ph, SWP_NOACTIVATE);
         set_cloak(h, false);
         // Foreground trick (ADR-0005): an empty mouse event, then SetForegroundWindow.
@@ -176,11 +177,16 @@ mod tests {
     #[test]
     fn launcher_sits_at_a_fifth_of_the_work_area_and_scales_with_dpi() {
         // 1920 x 1040 work area, 100%: 750 x 475 centered, top at 208.
-        assert_eq!(placement((0, 0, 1920, 1040), 96), (585, 208, 750, 475));
+        assert_eq!(placement((0, 0, 1920, 1040), 96, 475), (585, 208, 750, 475));
         // Second monitor at x = 1920, 125% DPI: 937 x 593 (integer division).
         assert_eq!(
-            placement((1920, 0, 3840, 1080), 120),
+            placement((1920, 0, 3840, 1080), 120, 475),
             (1920 + (1920 - 937) / 2, 216, 937, 593)
         );
+        // A tall window (text scale 1.25, 594 logical) is lifted so its bottom stays on screen.
+        assert_eq!(placement((0, 0, 1920, 1040), 96, 594), (585, 208, 750, 594));
+        assert_eq!(placement((0, 0, 1920, 600), 96, 540), (585, 60, 750, 540));
+        // Taller than the work area: the top edge is the work area's top.
+        assert_eq!(placement((0, 0, 1920, 500), 96, 540).1, 0);
     }
 }

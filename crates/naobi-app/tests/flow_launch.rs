@@ -60,6 +60,8 @@ fn r012_hotkey_to_app_launch() {
         })
     };
     let launched = shown && {
+        // The first keys wait for the input to take focus; a person is never faster than this.
+        std::thread::sleep(Duration::from_millis(300));
         inject::text("naobitarget");
         std::thread::sleep(Duration::from_millis(300));
         inject::enter();

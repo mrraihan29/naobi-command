@@ -82,6 +82,7 @@ impl Host for AppHost {
     fn hide(&mut self) {
         // On the UI thread already: cloak now, so a focus restore right after cannot race it.
         dwm::hide(self.ui.window());
+        self.ui.set_active(false);
     }
     fn show(&mut self) {
         self.ui.show();
@@ -276,6 +277,8 @@ fn post_view(ui: &UiHandle, s: &State) {
         .clone()
         .unwrap_or_else(|| Screen::from(ViewModel::default()));
     screen.reduced_motion = s.look.reduced_motion;
+    // `ui.text_scale` from the settings (1.0, 1.125 or 1.25).
+    screen.text_scale = s.settings.as_ref().map_or(1.0, |set| set.ui.text_scale);
     screen.notice = s.notices.banner().map(|n| NoticeView {
         message: n.message.clone(),
     });
@@ -343,19 +346,23 @@ fn on_settings_changed(path: &Path) {
     if next.general.autostart != last.general.autostart {
         sync_autostart(next.general.autostart);
     }
+    let chords_changed = next.hotkeys != last.hotkeys;
+    // The settings are stored first, so a conflict event that follows names the new chord.
+    {
+        let mut s = state();
+        s.settings = Some(next.clone());
+        for n in notices {
+            raise_notice(&mut s, n);
+        }
+    }
     // Changed chords are registered now, without a restart (D-009); a refused one raises the usual
     // conflict Notice.
-    if next.hotkeys != last.hotkeys {
+    if chords_changed {
         naobi_win32::platform::reload_hotkeys(next.clone());
     }
     // Quicklinks are read live, so an edited alias works at once; an open Launcher ranks again.
-    modules::builtin::set_quicklinks(next.quicklinks.clone());
+    modules::builtin::set_quicklinks(next.quicklinks);
     to_modules(|c, h| c.refresh(h));
-    let mut s = state();
-    s.settings = Some(next);
-    for n in notices {
-        raise_notice(&mut s, n);
-    }
 }
 
 /// A module's catalog was rebuilt on the index worker: a failure raises its Notice, and the Launcher

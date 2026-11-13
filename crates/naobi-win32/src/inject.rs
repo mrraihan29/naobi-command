@@ -1,7 +1,8 @@
 //! Key injection for tier 2 tests and naobi-perf. Compiled only with feature `perf`.
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
-    VIRTUAL_KEY, VK_LCONTROL, VK_MENU, VK_RETURN, VK_SPACE,
+    RegisterHotKey, SendInput, UnregisterHotKey, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_ALT, VIRTUAL_KEY, VK_LCONTROL, VK_MENU, VK_RETURN,
+    VK_SPACE,
 };
 
 fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
@@ -75,4 +76,24 @@ pub fn enter() {
     let seq = [key(VK_RETURN, false), key(VK_RETURN, true)];
     // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
     unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
+}
+
+/// A hotkey held by this thread, released on drop. Tests use it to make another process's chord
+/// "taken", so the app under test reports a conflict.
+pub struct HeldChord(i32);
+
+impl Drop for HeldChord {
+    fn drop(&mut self) {
+        // SAFETY: unregisters the id this value registered on this thread.
+        let _ = unsafe { UnregisterHotKey(None, self.0) };
+    }
+}
+
+/// Registers Alt+Space on the calling thread. None when someone else already holds it.
+pub fn hold_alt_space() -> Option<HeldChord> {
+    const ID: i32 = 0x7E57;
+    // SAFETY: plain values; no window, so the chord belongs to this thread's message queue.
+    unsafe { RegisterHotKey(None, ID, MOD_ALT, VK_SPACE.0.into()) }
+        .ok()
+        .map(|()| HeldChord(ID))
 }

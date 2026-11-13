@@ -131,8 +131,10 @@ fn read_files() -> Vec<String> {
     }
 }
 
-/// The file name of the exe that owns the clipboard. Called with the clipboard open.
-fn owner_exe() -> Option<String> {
+/// The file name of the exe that owns the clipboard now. It needs no open clipboard, so the module
+/// asks for it as soon as the change event arrives, before a short-lived program (a script that
+/// copies and exits) is gone.
+pub fn owner_exe() -> Option<String> {
     // SAFETY: plain queries on the owner window and its process; the process handle is closed below.
     unsafe {
         let owner = GetClipboardOwner().ok()?;

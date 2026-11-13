@@ -76,7 +76,10 @@ impl UiHandle {
     }
 
     pub fn hide(&self) {
-        self.on_ui(|_, hwnd| dwm::hide(hwnd));
+        self.on_ui(|ui, hwnd| {
+            ui.set_active(false);
+            dwm::hide(hwnd)
+        });
     }
 
     /// Shows the window when it is cloaked, cloaks it otherwise.
@@ -85,9 +88,16 @@ impl UiHandle {
             if dwm::is_cloaked(hwnd) {
                 show_now(ui, hwnd)
             } else {
+                ui.set_active(false);
                 dwm::hide(hwnd)
             }
         });
+    }
+
+    /// Marks the window as cloaked, so nothing animates while it cannot be seen. Used when the
+    /// controller cloaks it directly.
+    pub fn set_active(&self, active: bool) {
+        self.on_ui(move |ui, _| ui.set_active(active));
     }
 
     /// Runs `f` on the UI thread after `ms` milliseconds.
@@ -128,8 +138,9 @@ fn flush(ui: &AppWindow, pending: &Mutex<Option<Screen>>) {
 fn show_now(ui: &AppWindow, hwnd: isize) {
     // The size follows the monitor the Launcher is about to open on.
     ui.set_work_height(dwm::work_height_logical());
-    resize(ui);
-    dwm::show(hwnd);
+    let height = resize(ui);
+    ui.set_active(true);
+    dwm::show(hwnd, height);
     ui.invoke_focus_input();
 }
 
@@ -157,9 +168,10 @@ fn set_palette(ui: &AppWindow, p: &Palette) {
 }
 
 /// Sets the window height from the text scale and the work area (model::frame_height).
-fn resize(ui: &AppWindow) {
+fn resize(ui: &AppWindow) -> f32 {
     let h = model::frame_height(ui.global::<Tokens>().get_scale(), ui.get_work_height());
     ui.window().set_size(slint::LogicalSize::new(WIDTH, h));
+    h
 }
 
 fn apply(ui: &AppWindow, s: Screen) {

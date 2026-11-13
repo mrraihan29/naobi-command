@@ -85,6 +85,8 @@ impl Controller {
 
     /// Opens the Launcher at the root with an empty query (D-021), remembering where focus was.
     pub fn show(&mut self, host: &mut dyn Host) {
+        // A copy that was waiting to close must not hide the Launcher that opens now.
+        self.pending_close = None;
         self.previous = host.foreground();
         self.launcher.show_root();
         host.post(self.view());

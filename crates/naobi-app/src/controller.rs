@@ -130,10 +130,13 @@ impl Controller {
                         ));
                         continue;
                     }
-                    launched = true;
-                    if let Err(e) = host.launch(&t) {
-                        tracing::warn!(code = ?e.raw_os_error(), "launch failed");
-                        host.notice(failure("Open", "Windows could not open it."));
+                    // Only a launch that started gives focus away; a failed one restores it (D-013).
+                    match host.launch(&t) {
+                        Ok(()) => launched = true,
+                        Err(e) => {
+                            tracing::warn!(code = ?e.raw_os_error(), "launch failed");
+                            host.notice(failure("Open", "Windows could not open it."));
+                        }
                     }
                 }
                 Effect::Hide => hide = true,

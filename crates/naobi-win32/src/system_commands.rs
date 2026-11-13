@@ -5,7 +5,7 @@ use std::io;
 
 use windows::core::{w, Error, Result, HSTRING};
 use windows::Win32::Foundation::{
-    CloseHandle, GetLastError, ERROR_NOT_ALL_ASSIGNED, HANDLE, LPARAM, LUID, WPARAM,
+    CloseHandle, GetLastError, ERROR_NOT_ALL_ASSIGNED, E_UNEXPECTED, HANDLE, LPARAM, LUID, WPARAM,
 };
 use windows::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
@@ -110,13 +110,18 @@ fn enable_shutdown_privilege() -> Result<()> {
 pub fn empty_recycle_bin() -> io::Result<()> {
     // SAFETY: no window, no path (every drive); the flags silence the dialogs, which the second
     // Enter replaced.
-    Ok(unsafe {
+    let r = unsafe {
         SHEmptyRecycleBinW(
             None,
             None,
             SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
         )
-    }?)
+    };
+    // An empty bin answers E_UNEXPECTED: nothing to do is a success.
+    match r {
+        Err(e) if e.code() != E_UNEXPECTED => Err(e.into()),
+        _ => Ok(()),
+    }
 }
 
 /// The next `AppsUseLightTheme` for the current one: light (1) becomes dark (0), anything else light.
@@ -129,6 +134,11 @@ pub fn toggle_dark_mode() -> io::Result<()> {
     let next = toggled(read_dword(APPS_VALUE));
     write_dword(APPS_VALUE, next)?;
     write_dword(SYSTEM_VALUE, next)?;
+    broadcast_theme_change();
+    Ok(())
+}
+
+fn broadcast_theme_change() {
     // SAFETY: the broadcast string is a static, NUL-terminated wide literal; the call waits at most
     // half a second per window and skips hung ones.
     unsafe {
@@ -142,7 +152,22 @@ pub fn toggle_dark_mode() -> io::Result<()> {
             None,
         );
     }
-    Ok(())
+}
+
+/// `SystemUsesLightTheme` as stored, or None when the value is missing.
+pub fn system_uses_light_theme() -> Option<u32> {
+    read_dword(SYSTEM_VALUE)
+}
+
+/// Writes both values back as read before a change (a missing one is left alone), then tells every
+/// window. For tests that toggle the theme.
+pub fn restore_theme(apps: Option<u32>, system: Option<u32>) {
+    for (name, value) in [(APPS_VALUE, apps), (SYSTEM_VALUE, system)] {
+        if let Some(v) = value {
+            let _ = write_dword(name, v);
+        }
+    }
+    broadcast_theme_change();
 }
 
 /// `AppsUseLightTheme` as stored, or None when the value is missing.

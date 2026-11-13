@@ -222,6 +222,7 @@ impl Launcher {
         let target = self.selected_hit();
         let footer = FooterView {
             primary: target.and_then(|h| self.primary_label(h, armed == Some(h.id()))),
+            secondary: target.and_then(|h| self.secondary_label(h)),
             actions: target.is_some(),
             confirmation: None,
         };
@@ -234,6 +235,11 @@ impl Launcher {
             }),
             action_panel: self.panel.as_ref().map(panel_view),
             footer,
+            placeholder: match self.mode {
+                Mode::Root => "Search apps and commands...",
+                Mode::Pushed(i) | Mode::Hotkey(i) => self.views[i].placeholder(),
+            }
+            .to_owned(),
             preview: self.preview(),
             empty: self.empty_view(),
             loading: !pending.is_empty(),
@@ -544,6 +550,15 @@ impl Launcher {
         });
     }
 
+    fn secondary_label(&self, h: &Hit) -> Option<String> {
+        let id = h.item.secondary.as_ref()?;
+        self.source(h.src)
+            .actions(h.id())
+            .into_iter()
+            .find(|a| &a.id == id)
+            .map(|a| a.label)
+    }
+
     fn primary_label(&self, h: &Hit, armed: bool) -> Option<String> {
         if armed {
             return Some("Confirm".to_owned());
@@ -613,8 +628,7 @@ fn panel_view(p: &Panel) -> ActionPanelView {
             .iter()
             .map(|a| ActionView {
                 label: a.label.clone(),
-                // ponytail: no shortcut label; naobi-core's chord type has no text form yet.
-                shortcut: None,
+                shortcut: a.shortcut.map(|c| c.to_string()),
                 reason: a.enabled.clone().err(),
             })
             .collect(),

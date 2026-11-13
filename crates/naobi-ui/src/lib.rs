@@ -194,6 +194,8 @@ fn apply(ui: &AppWindow, s: Screen) {
     ui.set_empty_helper(empty.map_or("", |e| e.helper.as_str()).into());
 
     ui.set_footer_primary(s.footer.primary.as_deref().unwrap_or_default().into());
+    ui.set_footer_secondary(s.footer.secondary.as_deref().unwrap_or_default().into());
+    ui.set_placeholder(s.placeholder.as_str().into());
     ui.set_footer_actions(s.footer.actions);
     ui.set_footer_confirmation(s.footer.confirmation.as_deref().unwrap_or_default().into());
 

@@ -265,6 +265,8 @@ export component AppWindow inherits Window {
     in property <string> notice;
     in property <string> footer-primary;
     in property <bool> footer-actions;
+    in property <string> footer-secondary;
+    in property <string> placeholder;
     in property <string> footer-confirmation;
     in property <bool> loading;
     in property <bool> empty-visible;
@@ -336,7 +338,7 @@ export component AppWindow inherits Window {
                         height: parent.height;
                         vertical-alignment: center;
                         visible: root.query == "";
-                        text: "Search apps and commands...";
+                        text: root.placeholder;
                         font-size: 16px * Tokens.scale;
                         color: Tokens.text-muted;
                     }
@@ -453,6 +455,16 @@ export component AppWindow inherits Window {
                             Chip { y: (parent.height - self.height) / 2; text: "Enter"; }
                             Text {
                                 text: root.footer-primary;
+                                font-size: 12px * Tokens.scale;
+                                color: Tokens.text-muted;
+                                vertical-alignment: center;
+                            }
+                        }
+                        if root.footer-secondary != "" && root.footer-confirmation == "" : HorizontalLayout {
+                            spacing: 6px;
+                            Chip { y: (parent.height - self.height) / 2; text: "Ctrl Enter"; }
+                            Text {
+                                text: root.footer-secondary;
                                 font-size: 12px * Tokens.scale;
                                 color: Tokens.text-muted;
                                 vertical-alignment: center;

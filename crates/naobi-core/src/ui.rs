@@ -42,6 +42,8 @@ pub struct Screen {
     pub notice: Option<NoticeView>,
     pub action_panel: Option<ActionPanelView>,
     pub footer: FooterView,
+    /// The search field's hint while it is empty.
+    pub placeholder: String,
     pub preview: Option<PreviewView>,
     pub empty: Option<EmptyView>,
     pub loading: bool,
@@ -98,6 +100,8 @@ pub struct NoticeView {
 pub struct FooterView {
     /// Label of the primary action, shown after the "Enter" chip. `None` shows only the name.
     pub primary: Option<String>,
+    /// Label of the secondary action, shown after a "Ctrl Enter" chip.
+    pub secondary: Option<String>,
     /// Shows the "Ctrl K Actions" chip.
     pub actions: bool,
     /// A short confirmation that replaces the primary action for a moment, such as "Copied". It is
@@ -155,6 +159,7 @@ impl From<ViewModel> for Screen {
             notice: None,
             action_panel: None,
             footer: FooterView::default(),
+            placeholder: "Search apps and commands...".into(),
             preview: None,
             empty: None,
             loading: false,

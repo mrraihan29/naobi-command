@@ -183,3 +183,25 @@ fn r015_the_history_command_opens_the_view() {
     assert_eq!(effects, vec![Effect::PushView(ViewId(VIEW_ID.into()))]);
     assert_eq!(titles(&l.screen()), vec!["hello"]);
 }
+
+// @R-015
+#[test]
+fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
+    let (mut l, h, _) = setup();
+    assert_eq!(l.screen().placeholder, "Search apps and commands...");
+    copy(&h, "a note");
+    open(&mut l);
+    let s = l.screen();
+    assert_eq!(s.placeholder, "Search clipboard history...");
+    assert_eq!(s.footer.primary.as_deref(), Some("Paste"));
+    assert_eq!(s.footer.secondary.as_deref(), Some("Copy"));
+    // Ctrl+K lists Pin and Delete with their keys.
+    l.handle(key(Key::K, true));
+    let panel = l.screen().action_panel.expect("panel");
+    let keys: Vec<_> = panel
+        .actions
+        .iter()
+        .filter_map(|a| a.shortcut.clone())
+        .collect();
+    assert_eq!(keys, vec!["Ctrl+.", "Ctrl+X"]);
+}

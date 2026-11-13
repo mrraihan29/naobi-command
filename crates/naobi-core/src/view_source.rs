@@ -29,6 +29,10 @@ pub trait ViewSource: CommandSource {
     fn ranked(&self) -> bool {
         true
     }
+    /// The search field's hint while the query is empty.
+    fn placeholder(&self) -> &'static str {
+        "Search..."
+    }
     /// The empty state's title when the view lists nothing and the query is empty.
     fn empty_title(&self) -> &'static str {
         "Nothing here yet"

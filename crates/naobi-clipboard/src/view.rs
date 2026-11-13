@@ -190,6 +190,10 @@ impl ViewSource for ClipboardView {
         false
     }
 
+    fn placeholder(&self) -> &'static str {
+        "Search clipboard history..."
+    }
+
     fn empty_title(&self) -> &'static str {
         "Nothing copied yet"
     }

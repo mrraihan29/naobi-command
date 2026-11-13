@@ -415,6 +415,17 @@ fn sync_autostart(enabled: bool) {
     }
 }
 
+/// The argument of the scan child: the process lists the installed apps on stdout and exits.
+pub use modules::apps::LIST_APPS_ARG;
+
+/// The scan child (`--list-apps`): one line per app, `id<TAB>name`. It runs in its own process so the
+/// shell and COM libraries the scan loads (about 19 MB of working set) never enter the resident one.
+pub fn list_apps() -> anyhow::Result<()> {
+    let apps = naobi_win32::apps::list()?;
+    modules::apps::write_list(&mut std::io::stdout().lock(), &apps)?;
+    Ok(())
+}
+
 pub fn run() -> anyhow::Result<()> {
     // Single instance (D-013): a second launch shows the first one's Launcher and exits. The first
     // instance may still be creating its window (tray-ready takes tens of ms), so retry briefly.

@@ -2,5 +2,11 @@
 
 fn main() -> anyhow::Result<()> {
     naobi_win32::dll_hardening::harden(); // T-025: first call
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|a| a == naobi_app::LIST_APPS_ARG)
+    {
+        return naobi_app::list_apps();
+    }
     naobi_app::run()
 }

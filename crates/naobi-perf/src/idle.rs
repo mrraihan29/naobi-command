@@ -1,5 +1,6 @@
 use crate::verdict::{record, verdict};
 use anyhow::{bail, Result};
+use naobi_win32::autostart;
 use naobi_win32::process::ProcessMetrics;
 use serde_json::json;
 use std::path::Path;
@@ -14,10 +15,17 @@ const SETTLE: Duration = Duration::from_secs(3);
 /// prints working set, private bytes and CPU percent of one core as JSON. Records the R-006
 /// verdicts. Fails if the process exits before the end. The process is never trimmed.
 pub fn run(exe: &Path, seconds: u64, out: &Path) -> Result<()> {
-    let mut child = Command::new(exe).spawn()?;
+    // The release exe syncs the Owner's HKCU Run value with its settings; the guard puts it back.
+    let _run_value = RunValue::save()?;
+    let sandbox = std::env::temp_dir().join(format!("naobi-idle-{}", std::process::id()));
+    let mut child = Command::new(exe)
+        .env("NAOBI_DATA_DIR", sandbox.join("data"))
+        .env("NAOBI_SETTINGS_DIR", sandbox.join("settings"))
+        .spawn()?;
     let result = measure(&mut child, seconds);
     let _ = child.kill();
     let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&sandbox);
     let (m, cpu) = result?;
     println!(
         "{}",
@@ -29,6 +37,37 @@ pub fn run(exe: &Path, seconds: u64, out: &Path) -> Result<()> {
     )?;
     // The budget is "< 0.5%"; the verdict file uses <=, the same at this precision.
     record(out, verdict("idle_cpu", cpu, 0.5, "percent"))
+}
+
+/// The Owner's Run value as it was, written back on drop (or removed again when there was none).
+struct RunValue(Option<String>);
+
+impl RunValue {
+    fn save() -> Result<Self> {
+        let saved = autostart::value(autostart::RUN_KEY);
+        if let Some(v) = &saved {
+            let plain = v.len() >= 2
+                && v.starts_with('"')
+                && v.ends_with('"')
+                && !v[1..v.len() - 1].contains('"');
+            if !plain {
+                bail!("ENV: the Run value has a form this harness cannot restore exactly; stop the run");
+            }
+        }
+        Ok(Self(saved))
+    }
+}
+
+impl Drop for RunValue {
+    fn drop(&mut self) {
+        let (path, enabled) = match &self.0 {
+            Some(v) => (v.trim_matches('"').to_owned(), true),
+            None => (String::new(), false),
+        };
+        if let Err(e) = autostart::set_enabled(autostart::RUN_KEY, Path::new(&path), enabled) {
+            eprintln!("could not restore the Owner's Run value: {e}");
+        }
+    }
 }
 
 /// An exited child still has a queryable (torn-down) process object, so exit is checked

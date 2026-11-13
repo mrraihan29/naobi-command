@@ -914,3 +914,78 @@ fn only_the_armed_row_is_flagged() {
         .collect();
     assert_eq!(armed, vec!["Restart"]);
 }
+
+fn selected_title(l: &Launcher) -> String {
+    let s = l.screen();
+    titles(&s)[s.selected].clone()
+}
+
+fn many(n: usize) -> Vec<Item> {
+    (0..n)
+        .map(|i| item(&format!("app:{i}"), &format!("App {i:02}")))
+        .collect()
+}
+
+// @R-012
+#[test]
+fn r012_page_keys_move_a_page_and_stop_at_the_ends() {
+    let (mut l, _) = engine(many(20), vec![]);
+    // An empty query lists only the ten most frecent; a query lists up to fifty.
+    type_text(&mut l, "app");
+    assert_eq!(selected_title(&l), "App 00");
+    assert!(key(&mut l, Key::PageDown).is_empty());
+    assert_eq!(selected_title(&l), "App 08");
+    key(&mut l, Key::PageDown);
+    key(&mut l, Key::PageDown);
+    assert_eq!(selected_title(&l), "App 19", "stops at the last row");
+    key(&mut l, Key::PageUp);
+    assert_eq!(selected_title(&l), "App 11");
+    key(&mut l, Key::PageUp);
+    key(&mut l, Key::PageUp);
+    assert_eq!(selected_title(&l), "App 00", "stops at the first row");
+}
+
+// @R-012
+#[test]
+fn r012_backspace_on_an_empty_field_pops_a_pushed_view_only() {
+    let (mut l, _) = engine(
+        vec![
+            item("push:clip", "Clipboard history"),
+            item("app:notepad", "Notepad"),
+        ],
+        clip_view(true),
+    );
+    // Root: nothing to pop.
+    assert!(key(&mut l, Key::Backspace).is_empty());
+    assert_eq!(titles(&l.screen()), vec!["Clipboard history", "Notepad"]);
+    type_text(&mut l, "clip");
+    key(&mut l, Key::Enter);
+    assert_eq!(titles(&l.screen()), vec!["entry one", "entry two"]);
+    // A query is still there: the field owns Backspace, the engine leaves the view alone.
+    type_text(&mut l, "one");
+    assert!(key(&mut l, Key::Backspace).is_empty());
+    assert_eq!(titles(&l.screen()), vec!["entry one"]);
+    type_text(&mut l, "");
+    assert!(key(&mut l, Key::Backspace).is_empty());
+    assert_eq!(titles(&l.screen()), vec!["Clipboard history", "Notepad"]);
+}
+
+// @R-012
+#[test]
+fn r012_backspace_does_not_leave_a_view_opened_by_its_own_hotkey() {
+    let (mut l, _) = engine(vec![], clip_view(true));
+    assert!(l.show_view(&ViewId("clip".into())));
+    assert!(key(&mut l, Key::Backspace).is_empty());
+    assert_eq!(titles(&l.screen()), vec!["entry one", "entry two"]);
+    assert_eq!(key(&mut l, Key::Escape), vec![Effect::Hide]);
+}
+
+// @R-012
+#[test]
+fn clear_notice_drops_the_engine_banner() {
+    let (mut l, _) = engine(vec![item("fail:x", "Broken")], vec![]);
+    key(&mut l, Key::Enter);
+    assert!(l.screen().notice.is_some());
+    l.clear_notice();
+    assert!(l.screen().notice.is_none());
+}

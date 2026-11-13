@@ -85,6 +85,11 @@ impl UiHandle {
         });
     }
 
+    /// Runs `f` on the UI thread, where the controller lives.
+    pub fn run_on_ui(&self, f: impl FnOnce() + Send + 'static) {
+        let _ = self.ui.upgrade_in_event_loop(move |_| f());
+    }
+
     fn on_ui(&self, f: impl FnOnce(&AppWindow, isize) + Send + 'static) {
         let hwnd = self.hwnd;
         let _ = self.ui.upgrade_in_event_loop(move |ui| f(&ui, hwnd));

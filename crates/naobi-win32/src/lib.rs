@@ -4,6 +4,7 @@ pub mod clipboard_marker;
 pub mod dirwatch;
 pub mod dll_hardening;
 pub mod dwm;
+pub mod foreground;
 pub mod hotkeys;
 #[cfg(feature = "perf")]
 pub mod inject;
@@ -14,6 +15,7 @@ pub mod platform;
 pub mod probe;
 pub mod process;
 pub mod random;
+pub mod shell;
 #[cfg(feature = "perf")]
 pub mod subclass;
 pub mod theme;

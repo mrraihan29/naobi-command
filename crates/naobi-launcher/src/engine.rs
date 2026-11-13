@@ -85,6 +85,12 @@ impl Launcher {
         self.armed_ids.extend(ids);
     }
 
+    /// Drops the engine's own Notice. The controller shows every Notice (balloon, tray and one
+    /// banner), so the engine keeps none once its effects have been handed over.
+    pub fn clear_notice(&mut self) {
+        self.notice = None;
+    }
+
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -269,8 +275,24 @@ impl Launcher {
                 self.toggle_panel();
                 vec![]
             }
-            // ponytail: PageUp, PageDown, Backspace, Ctrl+. and Ctrl+X do nothing here yet; the
-            // clipboard view (NCMD-19/20) and the page keys (NCMD-15) add them.
+            Key::PageUp => {
+                self.move_by(-PAGE_ROWS);
+                vec![]
+            }
+            Key::PageDown => {
+                self.move_by(PAGE_ROWS);
+                vec![]
+            }
+            // The field passes Backspace on only when it is empty: that pops a pushed view, like Esc
+            // does once the query is clear.
+            Key::Backspace if self.query.is_empty() && self.panel.is_none() => {
+                if matches!(self.mode, Mode::Pushed(_)) {
+                    self.mode = Mode::Root;
+                    self.reset();
+                }
+                vec![]
+            }
+            // ponytail: Ctrl+. and Ctrl+X do nothing here; the clipboard view (NCMD-19/20) adds them.
             _ => vec![],
         }
     }
@@ -467,6 +489,9 @@ impl Launcher {
         self.views.iter().position(|v| v.view_id() == *id)
     }
 }
+
+/// Rows PageUp and PageDown move by (one screenful of the list).
+const PAGE_ROWS: isize = 8;
 
 fn step(i: usize, n: usize, delta: isize) -> usize {
     if n == 0 {

@@ -1,6 +1,7 @@
 //! Composition root: starts the platform thread, then the pre-warmed Launcher window.
 #![forbid(unsafe_code)]
 
+mod controller;
 mod index_worker;
 mod logging;
 mod notices;
@@ -10,16 +11,24 @@ mod perf_fixture;
 mod perf_report;
 mod settings_runtime;
 
+use controller::{Controller, Host, SystemClock};
+use naobi_core::db::Db;
+use naobi_core::effect::LaunchTarget;
 use naobi_core::event::AppEvent;
-use naobi_core::notice::Notice;
+use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::Settings;
 use naobi_core::theme::{self, Look};
-use naobi_core::ui::{Key, NoticeView, Row, Screen, Theme, UiEvent, ViewModel};
+use naobi_core::ui::{Key, NoticeView, Screen, Theme, UiEvent, ViewModel};
+use naobi_launcher::frecency::Frecency;
+use naobi_launcher::{Clock, Launcher};
 use naobi_ui::UiHandle;
 use naobi_win32::theme::SystemTheme;
 use naobi_win32::tray::{Overlay, TrayState};
-use naobi_win32::{autostart, instance, notice, platform};
+use naobi_win32::{
+    autostart, clipboard_marker, dwm, foreground, instance, notice, platform, shell,
+};
 use notices::NoticeCenter;
+use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -28,7 +37,8 @@ use std::sync::Mutex;
 struct State {
     ui: Option<UiHandle>,
     early_show: bool,
-    view: ViewModel,
+    /// The newest snapshot of the engine; every post carries the look and the banner on top of it.
+    screen: Option<Screen>,
     settings: Option<Settings>,
     look: Look,
     notices: NoticeCenter,
@@ -37,11 +47,7 @@ struct State {
 static STATE: Mutex<State> = Mutex::new(State {
     ui: None,
     early_show: false,
-    view: ViewModel {
-        query: String::new(),
-        rows: Vec::new(),
-        selected: 0,
-    },
+    screen: None,
     settings: None,
     look: Look {
         theme: Theme::Paper,
@@ -54,6 +60,11 @@ fn state() -> std::sync::MutexGuard<'static, State> {
     STATE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+thread_local! {
+    /// The controller lives on the UI thread, where the window and every UI event are.
+    static CONTROLLER: RefCell<Option<Controller>> = const { RefCell::new(None) };
+}
+
 #[cfg(feature = "perf")]
 fn report(ev: &str) {
     perf_report::emit(ev);
@@ -61,117 +72,185 @@ fn report(ev: &str) {
 #[cfg(not(feature = "perf"))]
 fn report(_ev: &str) {}
 
-/// The synthetic 10,000-item index (`NAOBI_PERF_ITEMS` overrides the count), the real event path's data.
-#[cfg(feature = "perf")]
-static FIXTURE: std::sync::OnceLock<Mutex<perf_fixture::Fixture>> = std::sync::OnceLock::new();
-
-#[cfg(feature = "perf")]
-fn fixture_rows(q: &str) -> Vec<Row> {
-    let n = std::env::var("NAOBI_PERF_ITEMS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(10_000);
-    let f = FIXTURE.get_or_init(|| Mutex::new(perf_fixture::Fixture::new(n)));
-    f.lock().unwrap_or_else(|e| e.into_inner()).top(q)
+/// What the controller needs, backed by the window and Win32.
+struct AppHost {
+    ui: UiHandle,
 }
 
-fn placeholder() -> ViewModel {
-    let row = |t: &str, s: &str| Row {
-        title: t.into(),
-        subtitle: s.into(),
-    };
-    ViewModel {
-        query: String::new(),
-        rows: vec![
-            row("Visual Studio Code", "Application"),
-            row("Windows Terminal", "Application"),
-            row("Calculator", "Application"),
-            row("Settings", "System"),
-            row("Notepad", "Application"),
-        ],
-        selected: 0,
+impl Host for AppHost {
+    fn hide(&mut self) {
+        // On the UI thread already: cloak now, so a focus restore right after cannot race it.
+        dwm::hide(self.ui.window());
+    }
+    fn show(&mut self) {
+        self.ui.show();
+    }
+    fn is_visible(&self) -> bool {
+        !dwm::is_cloaked(self.ui.window())
+    }
+    fn foreground(&self) -> Option<isize> {
+        foreground::remember(self.ui.window())
+    }
+    fn restore_focus(&mut self, window: isize) {
+        foreground::restore(window);
+    }
+    fn launch(&mut self, target: &LaunchTarget) -> std::io::Result<()> {
+        match target {
+            LaunchTarget::ShellItem(item) => shell::open(item),
+            // A quicklink is a web search: nothing but http(s) is opened for a URL.
+            LaunchTarget::Url(url) if shell::is_web_url(url) => shell::open(url),
+            LaunchTarget::Url(_) => Err(std::io::ErrorKind::InvalidInput.into()),
+        }
+    }
+    fn copy_text(&mut self, text: &str) -> std::io::Result<()> {
+        clipboard_marker::write_text(text).map_err(std::io::Error::other)
+    }
+    fn notice(&mut self, n: Notice) {
+        raise_notice(&mut state(), n);
+    }
+    fn post(&mut self, screen: Screen) {
+        let mut s = state();
+        s.screen = Some(screen);
+        post_view(&self.ui, &s);
     }
 }
 
-fn on_hotkey() {
+/// Runs `f` with the controller and its host. Call it on the UI thread without holding the state
+/// lock: the host takes the lock itself.
+fn with_controller(ui: UiHandle, f: impl FnOnce(&mut Controller, &mut AppHost)) {
+    CONTROLLER.with_borrow_mut(|c| {
+        if let Some(c) = c {
+            f(c, &mut AppHost { ui });
+        }
+    });
+}
+
+/// Hands `f` to the UI thread. Before the window is ready the request is kept, and served as soon
+/// as it is.
+fn dispatch(f: fn(&mut Controller, &mut AppHost)) {
     let mut s = state();
-    match &s.ui {
-        Some(ui) => ui.toggle(),
-        // Pressed before the window is ready: served as soon as it is.
+    match s.ui.clone() {
+        Some(ui) => {
+            drop(s);
+            let on_ui = ui.clone();
+            ui.run_on_ui(move || with_controller(on_ui, f));
+        }
         None => s.early_show = true,
     }
+}
+
+/// The Launcher hotkey (R-023).
+fn on_hotkey() {
+    dispatch(|c, h| c.toggle(h));
 }
 
 /// Shows the Launcher (second instance, tray Open). Never toggles it off.
 fn on_show() {
-    let mut s = state();
-    match &s.ui {
-        Some(ui) => ui.show(),
-        None => s.early_show = true,
-    }
+    dispatch(|c, h| c.show(h));
 }
 
-fn on_ready(ui: UiHandle) {
-    let mut s = state();
-    s.view = placeholder();
+/// The sources the Launcher searches. The perf build searches the synthetic 10,000-item index
+/// (`NAOBI_PERF_ITEMS` overrides the count), so the latency runs cross the real engine.
+fn sources() -> Vec<Box<dyn naobi_core::command::CommandSource>> {
     #[cfg(feature = "perf")]
     {
-        s.view.rows = fixture_rows("");
-        // Same UI thread as the window: t0 of the keystroke metric is taken in this subclass.
-        naobi_win32::subclass::install(ui.window());
+        let n = std::env::var("NAOBI_PERF_ITEMS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10_000);
+        vec![Box::new(perf_fixture::PerfSource::new(n))]
     }
-    post_view(&ui, &s);
-    report("window_ready");
-    if std::mem::take(&mut s.early_show) {
-        ui.show();
+    #[cfg(not(feature = "perf"))]
+    {
+        // seam NCMD-16 to 18: the apps, files, commands, quicklinks and calculator sources.
+        Vec::new()
     }
-    s.ui = Some(ui);
 }
 
-fn on_event(ev: UiEvent) {
-    let mut s = state();
-    let Some(ui) = s.ui.clone() else { return };
-    match ev {
-        UiEvent::Key(c) => match c.key {
-            // Esc first dismisses the banner (D-018); with no banner it hides the Launcher as before.
-            Key::Escape if s.notices.banner().is_some() => {
-                s.notices.dismiss();
-                sync_tray(&s.notices);
-                post_view(&ui, &s);
+/// The engine with the Owner's frecency. When the store cannot be opened the history is kept in
+/// memory for this run, with a Notice.
+fn build_controller() -> (Option<Controller>, Option<Notice>) {
+    let now = SystemClock.now_ms() / 1000;
+    let on_disk = naobi_core::paths::data_dir().and_then(|dir| {
+        std::fs::create_dir_all(&dir).ok()?;
+        let random = naobi_win32::random::random16().ok()?;
+        Db::open(&dir.join("naobi.db"), move || random).ok()
+    });
+    let (db, warn) = match on_disk {
+        Some(db) => (db, None),
+        None => match Db::open_in_memory() {
+            Ok(db) => (
+                db,
+                Some(Notice {
+                    subject: "History".into(),
+                    message: "The data file could not be opened; usage is not saved this run."
+                        .into(),
+                    kind: NoticeKind::Warning,
+                }),
+            ),
+            Err(e) => {
+                tracing::error!(error = %e, "no data store: the Launcher is off");
+                return (None, None);
             }
-            Key::Escape | Key::Enter => ui.hide(),
-            Key::Up => move_selection(&mut s, &ui, -1),
-            Key::Down => move_selection(&mut s, &ui, 1),
-            // Routed by NCMD-15 (page moves, Backspace pop, Ctrl+. pin, Ctrl+X delete, Ctrl+K panel).
-            Key::PageUp | Key::PageDown | Key::Backspace | Key::Period | Key::X | Key::K => {}
         },
-        UiEvent::RowActivated(_) | UiEvent::Dismissed => ui.hide(),
-        // Search is not wired yet: the placeholder list stays as it is (perf: the fixture answers).
-        UiEvent::TextChanged(q) => {
-            #[cfg(feature = "perf")]
-            {
-                s.view.rows = fixture_rows(&q);
-                s.view.selected = 0;
-                s.view.query = q;
-                post_view(&ui, &s);
-            }
-            #[cfg(not(feature = "perf"))]
-            {
-                s.view.query = q;
-            }
+    };
+    match Frecency::open(db, now) {
+        Ok(frecency) => {
+            let launcher = Launcher::new(sources(), Vec::new(), frecency, Box::new(SystemClock));
+            (Some(Controller::new(launcher)), warn)
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "frecency did not load: the Launcher is off");
+            (None, None)
         }
     }
 }
 
-fn move_selection(s: &mut State, ui: &UiHandle, delta: isize) {
-    s.view.move_selection(delta);
-    post_view(ui, s);
+fn on_ready(ui: UiHandle) {
+    #[cfg(feature = "perf")]
+    // Same UI thread as the window: t0 of the keystroke metric is taken in this subclass.
+    naobi_win32::subclass::install(ui.window());
+    let (controller, warn) = build_controller();
+    CONTROLLER.with_borrow_mut(|c| *c = controller);
+    let show_now = {
+        let mut s = state();
+        s.ui = Some(ui.clone());
+        if let Some(n) = warn {
+            raise_notice(&mut s, n);
+        }
+        std::mem::take(&mut s.early_show)
+    };
+    report("window_ready");
+    if show_now {
+        // Pressed before the window was ready: served as soon as it is.
+        with_controller(ui, |c, h| c.show(h));
+    } else {
+        with_controller(ui, |c, h| h.post(c.screen()));
+    }
 }
 
-/// Posts the list with the Launcher's look and banner. Every post carries both, so the banner shows on
-/// the next show.
+fn on_event(ev: UiEvent) {
+    let Some(ui) = state().ui.clone() else { return };
+    // Esc first dismisses the banner (D-018); with no banner it goes to the engine's ladder.
+    if matches!(&ev, UiEvent::Key(c) if c.key == Key::Escape) {
+        let mut s = state();
+        if s.notices.banner().is_some() {
+            s.notices.dismiss();
+            sync_tray(&s.notices);
+            post_view(&ui, &s);
+            return;
+        }
+    }
+    with_controller(ui, |c, h| c.on_ui_event(ev, h));
+}
+
+/// Posts the engine's snapshot with the Launcher's look and banner. Every post carries both, so the
+/// banner shows on the next show.
 fn post_view(ui: &UiHandle, s: &State) {
-    let mut screen = Screen::from(s.view.clone());
+    let mut screen = s
+        .screen
+        .clone()
+        .unwrap_or_else(|| Screen::from(ViewModel::default()));
     screen.reduced_motion = s.look.reduced_motion;
     screen.notice = s.notices.banner().map(|n| NoticeView {
         message: n.message.clone(),

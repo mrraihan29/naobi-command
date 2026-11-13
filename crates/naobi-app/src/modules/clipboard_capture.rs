@@ -5,12 +5,14 @@ use super::{EventKind, Modules};
 use crate::logging;
 use naobi_clipboard::capture::{capture, Capture};
 use naobi_clipboard::limits::Limiter;
+use naobi_clipboard::view::{share, Shared};
 use naobi_clipboard::{Captured, Cipher, ClipSource, Clock, Content, Flags, History};
 use naobi_core::db::Db;
 use naobi_core::event::AppEvent;
 use naobi_win32::clipboard::{self, Snapshot};
 use naobi_win32::{dpapi, random};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::OnceLock;
 use std::time::Duration;
 use zeroize::Zeroizing;
 
@@ -22,6 +24,13 @@ fn enabled() -> bool {
     !cfg!(feature = "perf") || std::env::var_os("NAOBI_TEST_CLIPBOARD").is_some()
 }
 
+/// The history the capture thread writes and the Launcher view reads.
+static SHARED: OnceLock<Shared> = OnceLock::new();
+
+pub fn shared() -> Option<Shared> {
+    SHARED.get().cloned()
+}
+
 pub fn register(m: &mut Modules) {
     if !enabled() {
         return;
@@ -30,10 +39,11 @@ pub fn register(m: &mut Modules) {
         tracing::warn!("clipboard history is off: the store could not be opened");
         return;
     };
+    let history = SHARED.get_or_init(|| share(history)).clone();
     let (tx, rx): (Sender<Change>, Receiver<Change>) = mpsc::channel();
     let spawned = std::thread::Builder::new()
         .name("clipboard".into())
-        .spawn(move || run(&rx, history));
+        .spawn(move || run(&rx, &history));
     if spawned.is_err() {
         tracing::warn!("clipboard history is off: the worker did not start");
         return;
@@ -110,7 +120,7 @@ impl ClipSource for WinSource {
 }
 
 /// Files first, then text, then a bitmap, as the reader filled them. None when there is nothing.
-fn to_captured(s: Snapshot) -> Option<Captured> {
+pub(super) fn to_captured(s: Snapshot) -> Option<Captured> {
     let content = if !s.files.is_empty() {
         Content::Files(s.files)
     } else if let Some(t) = s.text {
@@ -132,7 +142,7 @@ fn to_captured(s: Snapshot) -> Option<Captured> {
 
 /// Each change event waits its turn at the limiter, then captures what the clipboard holds by then:
 /// the last state of a burst is the one stored (trailing edge).
-fn run(rx: &Receiver<Change>, mut history: History) {
+fn run(rx: &Receiver<Change>, history: &Shared) {
     let mut limiter = Limiter::default();
     let clock = SystemClock;
     while let Ok((mut seq, mut owner)) = rx.recv() {
@@ -142,7 +152,10 @@ fn run(rx: &Receiver<Change>, mut history: History) {
         while let Ok(newer) = rx.try_recv() {
             (seq, owner) = newer;
         }
-        match capture(&WinSource { owner }, seq, &mut history) {
+        let mut guard = history.lock().unwrap_or_else(|e| e.into_inner());
+        let result = capture(&WinSource { owner }, seq, &mut guard);
+        drop(guard);
+        match result {
             Ok(Capture::Decided(o)) => {
                 let p = o.purged;
                 if p.expired + p.excess + p.evicted > 0 {

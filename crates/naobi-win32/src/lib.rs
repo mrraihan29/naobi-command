@@ -7,12 +7,15 @@ pub mod dirwatch;
 pub mod dll_hardening;
 pub mod dpapi;
 pub mod dwm;
+#[cfg(feature = "perf")]
+pub mod edit_window;
 pub mod foreground;
 pub mod hotkeys;
 #[cfg(feature = "perf")]
 pub mod inject;
 pub mod instance;
 pub mod notice;
+pub mod paste;
 pub mod platform;
 #[cfg(feature = "perf")]
 pub mod probe;

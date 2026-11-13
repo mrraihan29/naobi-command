@@ -36,6 +36,8 @@ pub enum Effect {
     Notice(Notice),
     PushView(ViewId),
     Paste(EntryId),
+    /// Puts a clipboard entry on the clipboard without pasting it (Ctrl+Enter in the history).
+    CopyEntry(EntryId),
 }
 
 #[cfg(test)]

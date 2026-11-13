@@ -40,7 +40,7 @@ pub fn marker_format() -> u32 {
 }
 
 /// Copies `bytes` into a new movable global block. The clipboard owns the block after SetClipboardData.
-fn global(bytes: &[u8]) -> Result<HGLOBAL> {
+pub(crate) fn global(bytes: &[u8]) -> Result<HGLOBAL> {
     // SAFETY: allocates a movable block of `bytes.len()` bytes and fills it under lock.
     unsafe {
         let mem = GlobalAlloc(GMEM_MOVEABLE, bytes.len())?;

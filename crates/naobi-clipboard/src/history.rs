@@ -174,6 +174,7 @@ impl History {
                 }
                 let kept = &paths[..paths.len().min(MAX_FILE_PATHS)];
                 let list = kept.join("\n");
+                let n = kept.len();
                 let first: Vec<&str> = kept
                     .iter()
                     .take(5)
@@ -181,7 +182,12 @@ impl History {
                     .collect();
                 Ok(Prepared {
                     kind: Kind::Files,
-                    preview: Zeroizing::new(first.join("\n")),
+                    // The first line is what the list shows: how many files, then some names.
+                    preview: Zeroizing::new(format!(
+                        "{n} {}\n{}",
+                        if n == 1 { "file" } else { "files" },
+                        first.join("\n")
+                    )),
                     payload: Zeroizing::new(list.into_bytes()),
                 })
             }
@@ -304,6 +310,34 @@ impl History {
         Ok((plain.as_slice() == p.payload.as_slice()).then_some(id))
     }
 
+    /// The clock's time in Unix seconds, the unit the store uses.
+    pub fn now_s(&self) -> i64 {
+        self.clock.now_ms() / 1000
+    }
+
+    /// One entry's listing data, or None when it is gone.
+    pub fn get(&self, id: i64) -> Result<Option<EntryMeta>, Error> {
+        Ok(self
+            .db
+            .conn()
+            .query_row(
+                "SELECT id, kind, last_copied_at, pinned, source_exe, byte_size FROM clip_entry WHERE id = ?1",
+                [id],
+                |r| {
+                    let kind: String = r.get(1)?;
+                    Ok(EntryMeta {
+                        id: r.get(0)?,
+                        kind: Kind::from_column(&kind).unwrap_or(Kind::Text),
+                        last_copied_at: r.get(2)?,
+                        pinned: r.get::<_, i64>(3)? == 1,
+                        source_exe: r.get(4)?,
+                        byte_size: r.get(5)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
     /// Newest first.
     pub fn list(&self, limit: usize) -> Result<Vec<EntryMeta>, Error> {
         let mut stmt = self.db.conn().prepare(
@@ -341,6 +375,30 @@ impl History {
             ))),
             None => Ok(None),
         }
+    }
+
+    /// What goes back on the clipboard for entry `id`, or None when it is gone or unreadable.
+    pub fn entry_payload(&self, id: i64) -> Result<Option<crate::paste::Payload>, Error> {
+        use crate::paste::Payload;
+        let Some(meta) = self.get(id)? else {
+            return Ok(None);
+        };
+        let Some(data) = self.payload(id)? else {
+            return Ok(None);
+        };
+        Ok(match meta.kind {
+            Kind::Text => Some(Payload::Text(String::from_utf8_lossy(&data).into_owned())),
+            Kind::Files => Some(Payload::Files(
+                String::from_utf8_lossy(&data)
+                    .lines()
+                    .map(str::to_owned)
+                    .collect(),
+            )),
+            Kind::Image => crate::image::png_to_dib(&data).map(|dib| Payload::Image {
+                png: data.to_vec(),
+                dib,
+            }),
+        })
     }
 
     /// The decrypted payload; the buffer is zeroed when dropped (T-014).

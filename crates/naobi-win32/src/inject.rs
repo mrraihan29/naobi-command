@@ -2,7 +2,7 @@
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, SendInput, UnregisterHotKey, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
     KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_ALT, VIRTUAL_KEY, VK_LCONTROL, VK_MENU, VK_RETURN,
-    VK_SPACE,
+    VK_SHIFT, VK_SPACE,
 };
 
 fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
@@ -96,4 +96,19 @@ pub fn hold_alt_space() -> Option<HeldChord> {
     unsafe { RegisterHotKey(None, ID, MOD_ALT, VK_SPACE.0.into()) }
         .ok()
         .map(|()| HeldChord(ID))
+}
+
+/// Presses and releases Alt+Shift+V (the clipboard history hotkey).
+pub fn alt_shift_v() {
+    let v = VIRTUAL_KEY(0x56);
+    let seq = [
+        key(VK_MENU, false),
+        key(VK_SHIFT, false),
+        key(v, false),
+        key(v, true),
+        key(VK_SHIFT, true),
+        key(VK_MENU, true),
+    ];
+    // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
+    unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
 }

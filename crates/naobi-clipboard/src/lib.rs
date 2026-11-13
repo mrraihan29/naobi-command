@@ -7,8 +7,10 @@ pub mod filters;
 pub mod history;
 pub mod image;
 pub mod limits;
+pub mod paste;
 pub mod ports;
 pub mod testing;
+pub mod view;
 
 pub use history::{Error, History, Purged, Stored};
 pub use ports::{Captured, Cipher, ClipSource, Clock, Content, Flags};

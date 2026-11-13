@@ -2653,6 +2653,7 @@ name = "naobi-clipboard"
 version = "0.0.0"
 dependencies = [
  "naobi-core",
+ "naobi-launcher",
  "png",
  "rusqlite",
  "thiserror 2.0.21",

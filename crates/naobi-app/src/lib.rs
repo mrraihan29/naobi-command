@@ -113,6 +113,12 @@ impl Host for AppHost {
         self.ui
             .run_on_ui_after(ms, move || on_ui(ui, |c, h| c.finish_close(h)));
     }
+    fn copy_entry(&mut self, id: naobi_core::ids::EntryId) -> std::io::Result<()> {
+        modules::clipboard::copy_entry(id)
+    }
+    fn paste(&mut self, id: naobi_core::ids::EntryId, target: Option<isize>) {
+        modules::clipboard::paste_entry(id, target, |n| raise_notice(&mut state(), n));
+    }
     fn post(&mut self, screen: Screen) {
         let mut s = state();
         s.screen = Some(screen);

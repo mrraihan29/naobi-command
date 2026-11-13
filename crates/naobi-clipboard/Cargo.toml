@@ -13,3 +13,6 @@ rusqlite.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 png.workspace = true
+
+[dev-dependencies]
+naobi-launcher = { path = "../naobi-launcher" }

@@ -12,8 +12,8 @@ use naobi_core::ids::{ActionId, ItemId, ViewId};
 use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{
-    ActionPanelView, ActionView, FooterView, Key, KeyChord, NoticeView, PreviewView, RowView,
-    Screen, Section, UiEvent,
+    ActionPanelView, ActionView, EmptyView, FooterView, Key, KeyChord, NoticeView, PreviewView,
+    RowView, Screen, Section, UiEvent,
 };
 use naobi_core::view_source::{Preview, ViewSource};
 use std::collections::HashSet;
@@ -235,11 +235,30 @@ impl Launcher {
             action_panel: self.panel.as_ref().map(panel_view),
             footer,
             preview: self.preview(),
-            empty: None,
+            empty: self.empty_view(),
             loading: !pending.is_empty(),
             reduced_motion: false,
             text_scale: 1.0,
         }
+    }
+
+    /// A view with nothing to list says so; the root has the "Indexing" status row or nothing.
+    fn empty_view(&self) -> Option<EmptyView> {
+        let (Mode::Pushed(i) | Mode::Hotkey(i)) = self.mode else {
+            return None;
+        };
+        if !self.rows.is_empty() {
+            return None;
+        }
+        let title = if self.query.is_empty() {
+            self.views[i].empty_title()
+        } else {
+            "No results"
+        };
+        Some(EmptyView {
+            title: title.to_owned(),
+            helper: String::new(),
+        })
     }
 
     fn reset(&mut self) {
@@ -281,6 +300,23 @@ impl Launcher {
         } else {
             MAX_ROWS
         };
+        if let Mode::Pushed(i) | Mode::Hotkey(i) = self.mode {
+            if !self.views[i].ranked() {
+                self.rows = pool
+                    .map(|(src, item)| Hit {
+                        src,
+                        item: item.clone(),
+                        exact: false,
+                        total: 0.0,
+                        opens: 0.0,
+                    })
+                    .take(limit)
+                    .collect();
+                self.files.clear();
+                self.selected = 0;
+                return;
+            }
+        }
         let now = self.clock.now_ms() / 1000;
         let frecency = &self.frecency;
         self.rows = self
@@ -329,7 +365,9 @@ impl Launcher {
                 }
                 vec![]
             }
-            // ponytail: Ctrl+. and Ctrl+X do nothing here; the clipboard view (NCMD-19/20) adds them.
+            // Ctrl+. and Ctrl+X run the selected item's "pin" and "delete" actions, when it has them.
+            Key::Period if c.ctrl => self.run_named("pin"),
+            Key::X if c.ctrl => self.run_named("delete"),
             _ => vec![],
         }
     }
@@ -358,6 +396,21 @@ impl Launcher {
             hit.item.primary.clone()
         };
         self.run(&hit, action)
+    }
+
+    /// Runs the selected item's action `name` if it lists one that is enabled.
+    fn run_named(&mut self, name: &str) -> Vec<Effect> {
+        if self.panel.is_some() {
+            return vec![];
+        }
+        let Some(hit) = self.selected_hit().cloned() else {
+            return vec![];
+        };
+        let actions = self.source(hit.src).actions(hit.id());
+        match actions.iter().find(|a| a.id.0 == name && a.enabled.is_ok()) {
+            Some(a) => self.run(&hit, a.id.clone()),
+            None => vec![],
+        }
     }
 
     fn run_panel(&mut self) -> Vec<Effect> {
@@ -389,9 +442,10 @@ impl Launcher {
         let mut cx = Cx::default();
         let outcome = self.source(hit.src).run(hit.id(), action, &mut cx);
         let failed = matches!(outcome, Outcome::Failed(_));
+        let stay = matches!(outcome, Outcome::Refresh);
         let mut effects = cx.take();
         match outcome {
-            Outcome::Done => {}
+            Outcome::Done | Outcome::Refresh => {}
             Outcome::Effects(more) => effects.extend(more),
             Outcome::Failed(n) => effects.push(Effect::Notice(n)),
         }
@@ -423,6 +477,12 @@ impl Launcher {
                     kind: NoticeKind::Error,
                 })),
             },
+            None if stay => {
+                // The list changed under the selection: rank again and keep the place.
+                let at = self.selected;
+                self.refresh();
+                self.selected = at.min(self.row_count().saturating_sub(1));
+            }
             None if !failed && !effects.contains(&Effect::Hide) => effects.push(Effect::Hide),
             None => {}
         }
@@ -506,6 +566,11 @@ impl Launcher {
             Preview::Files(f) => Some(PreviewView::Text(f.join("\n"))),
             // ponytail: image previews need a PNG decoder and RGBA conversion, not in this engine yet.
             Preview::Image { .. } => None,
+            Preview::Rgba { w, h, rgba } => Some(PreviewView::Image {
+                width: w,
+                height: h,
+                rgba,
+            }),
         }
     }
 

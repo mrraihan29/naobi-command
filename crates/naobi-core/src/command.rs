@@ -29,6 +29,10 @@ impl Cx {
     pub fn launch(&mut self, t: LaunchTarget) {
         self.effects.push(Effect::Launch(t));
     }
+    /// Opens a view that has its own hotkey (a module's hotkey handler asks for it).
+    pub fn open_view(&mut self, id: crate::ids::ViewId) {
+        self.effects.push(Effect::PushView(id));
+    }
     /// Takes the effects raised so far.
     pub fn take(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.effects)
@@ -38,6 +42,8 @@ impl Cx {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     Done,
+    /// The action changed what the view lists (pin, delete): the Launcher stays open and ranks again.
+    Refresh,
     Effects(Vec<Effect>),
     Failed(Notice),
 }

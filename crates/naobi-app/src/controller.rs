@@ -5,7 +5,7 @@ use crate::modules::Router;
 use naobi_core::command::Cx;
 use naobi_core::effect::{Effect, LaunchTarget};
 use naobi_core::event::AppEvent;
-use naobi_core::ids::HotkeyId;
+use naobi_core::ids::{EntryId, HotkeyId, ViewId};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{Screen, UiEvent};
 use naobi_launcher::{Clock, Launcher};
@@ -30,6 +30,11 @@ pub trait Host {
     fn post(&mut self, screen: Screen);
     /// Calls `Controller::finish_close` after `ms` milliseconds.
     fn close_later(&mut self, ms: u64);
+    /// Puts a clipboard history entry on the clipboard (Ctrl+Enter).
+    fn copy_entry(&mut self, id: EntryId) -> std::io::Result<()>;
+    /// Pastes a history entry into `target`, the window that had focus before the Launcher. The
+    /// Launcher is already hidden; the host does the sequence off the UI thread.
+    fn paste(&mut self, id: EntryId, target: Option<isize>);
 }
 
 pub struct SystemClock;
@@ -131,8 +136,30 @@ impl Controller {
     pub fn on_hotkey(&mut self, id: &HotkeyId, host: &mut dyn Host) -> bool {
         let mut cx = Cx::default();
         let handled = self.router.hotkey(id, &mut cx);
-        self.execute(cx.take(), true, host);
+        let (opens, rest): (Vec<_>, Vec<_>) = cx
+            .take()
+            .into_iter()
+            .partition(|e| matches!(e, Effect::PushView(_)));
+        self.execute(rest, true, host);
+        // A module's hotkey that asks for its view opens the Launcher on it (D-021 for hotkey views).
+        if let Some(Effect::PushView(view)) = opens.into_iter().next() {
+            self.open_view(&view, host);
+        }
         handled
+    }
+
+    /// Opens the Launcher on a view that has its own hotkey; pressing it again closes the Launcher.
+    fn open_view(&mut self, view: &ViewId, host: &mut dyn Host) {
+        if host.is_visible() {
+            self.close(host, true);
+            return;
+        }
+        self.pending_close = None;
+        self.previous = host.foreground();
+        if self.launcher.show_view(view) {
+            host.post(self.view());
+            host.show();
+        }
     }
 
     /// An event for the modules (clipboard change, resume, timer...). False when nobody listens.
@@ -149,6 +176,9 @@ impl Controller {
         let mut hide = false;
         let mut launched = false;
         let mut copied = false;
+        let mut paste = None;
+        // Where a paste goes: the window that had focus before the Launcher (`close` forgets it).
+        let target = self.previous;
         for e in effects {
             match e {
                 Effect::Launch(t) => {
@@ -180,12 +210,12 @@ impl Controller {
                 Effect::Notice(n) => host.notice(n),
                 // The engine switched the view itself.
                 Effect::PushView(_) => {}
-                // ponytail: the clipboard view (NCMD-20) adds this arm.
-                Effect::Paste(_) => host.notice(Notice {
-                    subject: "Clipboard".to_owned(),
-                    message: "Paste is not available yet.".to_owned(),
-                    kind: NoticeKind::Info,
-                }),
+                // The paste runs after the Launcher is hidden.
+                Effect::Paste(id) => paste = Some(id),
+                Effect::CopyEntry(id) => match host.copy_entry(id) {
+                    Ok(()) => copied = true,
+                    Err(_) => host.notice(failure("Copy", "The clipboard is busy, try again.")),
+                },
             }
         }
         // Every Notice was handed to the host, which shows it once.
@@ -195,7 +225,11 @@ impl Controller {
             self.pending_close = Some(restore);
             host.close_later(CONFIRM_MS);
         } else if hide {
-            self.close(host, restore && !launched);
+            // A paste gives focus to its target itself.
+            self.close(host, restore && !launched && paste.is_none());
+        }
+        if let Some(id) = paste {
+            host.paste(id, target);
         }
     }
 }
@@ -274,6 +308,13 @@ mod tests {
         }
         fn close_later(&mut self, ms: u64) {
             self.log.push(format!("close_later {ms}"));
+        }
+        fn copy_entry(&mut self, id: EntryId) -> std::io::Result<()> {
+            self.log.push(format!("copy_entry {}", id.0));
+            Ok(())
+        }
+        fn paste(&mut self, id: EntryId, target: Option<isize>) {
+            self.log.push(format!("paste {} {target:?}", id.0));
         }
     }
 
@@ -537,21 +578,45 @@ mod tests {
         );
     }
 
+    // @R-015
     #[test]
-    fn paste_shows_a_notice_until_the_clipboard_view_exists() {
+    fn r015_paste_runs_after_the_launcher_is_hidden_and_does_not_restore_focus() {
         let mut c = controller_with(
-            Box::new(One(Outcome::Effects(vec![Effect::Paste(
-                naobi_core::ids::EntryId(1),
-            )]))),
+            Box::new(One(Outcome::Effects(vec![Effect::Paste(EntryId(4))]))),
             Router::default(),
         );
-        let mut h = Fake::default();
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
         c.show(&mut h);
         h.log.clear();
         c.on_ui_event(key(Key::Enter, false), &mut h);
-        assert!(h
-            .log
-            .contains(&"notice Clipboard: Paste is not available yet.".to_string()));
+        // Hidden first, then the paste into the window that had focus; no separate focus restore.
+        assert_eq!(
+            h.log,
+            vec!["hide".to_string(), "paste 4 Some(77)".to_string()]
+        );
+    }
+
+    // @R-015
+    #[test]
+    fn r015_a_module_hotkey_opens_its_view_and_pressing_it_again_closes() {
+        use crate::modules::{Modules, Parts};
+        let mut m = Modules::new();
+        m.subscribe(
+            HotkeyId("clipboard".into()),
+            Box::new(|_, cx| cx.open_view(ViewId("clipboard".into()))),
+        );
+        let Parts { router, .. } = m.into_parts();
+        // The fake engine hosts no view, so opening reports nothing to show; the handler still runs
+        // and a visible Launcher is closed by the same hotkey.
+        let mut c = controller_with(Box::new(Apps), router);
+        let mut h = Fake::default();
+        c.show(&mut h);
+        h.log.clear();
+        assert!(c.on_hotkey(&HotkeyId("clipboard".into()), &mut h));
+        assert_eq!(h.log, vec!["hide".to_string()]);
     }
 
     #[test]

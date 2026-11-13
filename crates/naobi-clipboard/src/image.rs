@@ -88,3 +88,40 @@ pub fn dib_to_png(dib: &[u8]) -> Result<Png, ImageError> {
         height: h as u32,
     })
 }
+
+/// The bitmap form (`CF_DIB`, 24 bit, bottom-up) of a PNG this crate wrote, so a picture can be put
+/// back on the clipboard for programs that do not read PNG. None for anything else or when the
+/// result would pass the 64 MiB limit.
+pub fn png_to_dib(png: &[u8]) -> Option<Vec<u8>> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png));
+    decoder.set_transformations(png::Transformations::EXPAND);
+    let mut reader = decoder.read_info().ok()?;
+    let (w, h) = (reader.info().width as usize, reader.info().height as usize);
+    let stride = (w * 3).div_ceil(4) * 4;
+    if stride.checked_mul(h)? > MAX_BITMAP_BYTES || w == 0 || h == 0 {
+        return None;
+    }
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let frame = reader.next_frame(&mut buf).ok()?;
+    let channels = match frame.color_type {
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        _ => return None,
+    };
+    let mut dib = Vec::with_capacity(40 + stride * h);
+    dib.extend_from_slice(&40u32.to_le_bytes());
+    dib.extend_from_slice(&(w as u32).to_le_bytes());
+    dib.extend_from_slice(&(h as u32).to_le_bytes());
+    dib.extend_from_slice(&1u16.to_le_bytes());
+    dib.extend_from_slice(&24u16.to_le_bytes());
+    dib.extend_from_slice(&[0; 24]);
+    for y in (0..h).rev() {
+        let row = &buf[y * w * channels..(y + 1) * w * channels];
+        let start = dib.len();
+        for px in row.chunks_exact(channels) {
+            dib.extend_from_slice(&[px[2], px[1], px[0]]);
+        }
+        dib.resize(start + stride, 0);
+    }
+    Some(dib)
+}

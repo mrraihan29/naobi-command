@@ -58,6 +58,7 @@ impl std::fmt::Display for KeyChord {
             0x26 => write!(f, "Up"),
             0x27 => write!(f, "Right"),
             0x28 => write!(f, "Down"),
+            0xBE => write!(f, "."),
             v @ (0x30..=0x39 | 0x41..=0x5A) => write!(f, "{}", char::from(v as u8)),
             v @ 0x70..=0x87 => write!(f, "F{}", v - 0x6F),
             v => write!(f, "0x{v:X}"),
@@ -85,6 +86,7 @@ fn key_code(k: &str) -> Option<u32> {
         "up" => 0x26,
         "right" => 0x27,
         "down" => 0x28,
+        "." | "period" => 0xBE,
         _ if b.len() == 1 && b[0].is_ascii_alphanumeric() => u32::from(b[0].to_ascii_uppercase()),
         _ => match k.strip_prefix('f')?.parse::<u32>() {
             Ok(n @ 1..=24) => 0x6F + n,

@@ -155,6 +155,8 @@ pub fn paste_entry(id: EntryId, target: Option<isize>, raise: fn(Notice)) {
                 return;
             };
             if let Outcome::Aborted(why) = paste(&payload, target, &mut Board, &mut Foreground) {
+                // The reason only (T-010): never the entry.
+                tracing::info!(reason = ?why, "paste aborted");
                 raise(notice(abort_message(why), NoticeKind::Warning));
             }
         });

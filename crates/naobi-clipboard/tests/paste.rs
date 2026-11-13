@@ -22,6 +22,7 @@ struct Board {
     w: Rc<World>,
     excluded: bool,
     unreadable: bool,
+    fail_write: bool,
 }
 
 impl Pasteboard for Board {
@@ -32,6 +33,11 @@ impl Pasteboard for Board {
         })
     }
     fn write(&mut self, payload: &Payload) -> bool {
+        if self.fail_write {
+            // Like the real thing: the clipboard was emptied before the failure.
+            *self.w.clipboard.borrow_mut() = None;
+            return false;
+        }
         self.w.seq.set(self.w.seq.get() + 1);
         self.w.log.borrow_mut().push("write".into());
         if let Payload::Text(t) = payload {
@@ -114,6 +120,7 @@ fn run(excluded: bool, tweak: impl FnOnce(&mut Fg)) -> (Outcome, Rc<World>) {
         w: w.clone(),
         excluded,
         unreadable: false,
+        fail_write: false,
     };
     let mut f = fg(&w);
     tweak(&mut f);
@@ -208,6 +215,7 @@ fn r015_no_target_pastes_nothing() {
         w: w.clone(),
         excluded: false,
         unreadable: false,
+        fail_write: false,
     };
     let mut f = fg(&w);
     let out = paste(
@@ -229,6 +237,7 @@ fn r015_unreadable_clipboard_aborts_before_writing() {
         w: w.clone(),
         excluded: false,
         unreadable: true,
+        fail_write: false,
     };
     let mut f = fg(&w);
     let out = paste(
@@ -239,4 +248,26 @@ fn r015_unreadable_clipboard_aborts_before_writing() {
     );
     assert_eq!(out, Outcome::Aborted(Abort::WriteFailed));
     assert!(log(&w).is_empty());
+}
+
+// @R-015
+#[test]
+fn r015_failed_write_puts_the_previous_clipboard_back() {
+    let w = Rc::new(World::default());
+    *w.clipboard.borrow_mut() = Some(Content::Text("previous".into()));
+    let mut board = Board {
+        w: w.clone(),
+        excluded: false,
+        unreadable: false,
+        fail_write: true,
+    };
+    let mut f = fg(&w);
+    let out = paste(
+        &Payload::Text("x".to_owned().into()),
+        Some(TARGET),
+        &mut board,
+        &mut f,
+    );
+    assert_eq!(out, Outcome::Aborted(Abort::WriteFailed));
+    assert_eq!(text(&w).as_deref(), Some("previous"));
 }

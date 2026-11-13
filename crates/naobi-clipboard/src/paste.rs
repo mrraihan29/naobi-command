@@ -85,6 +85,12 @@ pub fn paste(
         return Outcome::Aborted(Abort::WriteFailed);
     };
     if !board.write(payload) {
+        // A write that fails half way has already emptied the clipboard: bring the snapshot back.
+        if !snapshot.excluded {
+            if let Some(content) = &snapshot.content {
+                board.restore(content);
+            }
+        }
         return Outcome::Aborted(Abort::WriteFailed);
     }
     let written = board.sequence();

@@ -144,6 +144,9 @@ pub fn paste_entry(id: EntryId, target: Option<isize>, raise: fn(Notice)) {
     let spawned = std::thread::Builder::new()
         .name("paste".into())
         .spawn(move || {
+            // One paste at a time: a second one would snapshot the first one's entry as "previous".
+            static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
             let Some(payload) = shared().and_then(|h| payload_of(&h, id)) else {
                 raise(notice(
                     "That entry is no longer there.",

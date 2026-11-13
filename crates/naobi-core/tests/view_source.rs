@@ -3,13 +3,13 @@ use naobi_core::command::{CommandSource, Cx, Outcome, Query};
 use naobi_core::ids::{ActionId, ItemId, ViewId};
 use naobi_core::item::{Action, Item};
 use naobi_core::view_source::{Preview, ViewSource};
-use std::borrow::Cow;
+use std::sync::Arc;
 
 struct FakeView;
 
 impl CommandSource for FakeView {
-    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
-        Cow::Borrowed(&[])
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
+        Arc::from(Vec::new())
     }
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
         vec![]

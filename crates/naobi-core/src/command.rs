@@ -3,7 +3,7 @@ use crate::effect::{Effect, LaunchTarget};
 use crate::ids::{ActionId, ItemId};
 use crate::item::{Action, Item};
 use crate::notice::Notice;
-use std::borrow::Cow;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Query {
@@ -43,10 +43,16 @@ pub enum Outcome {
 }
 
 pub trait CommandSource: Send + Sync {
-    /// The candidates for `q`. A source with a fixed index lends it (`Cow::Borrowed`), so a
-    /// keystroke clones nothing; a source that builds items per query (a calculator) returns them
-    /// owned. The engine ranks the list and clones only the rows it shows (R-006).
-    fn items(&self, q: &Query) -> Cow<'_, [Item]>;
+    /// The candidates for `q`. A source with an index hands out a shared snapshot (an `Arc` clone),
+    /// so a keystroke copies nothing and the index can be swapped while the Launcher is open; a
+    /// source that builds items per query (a calculator) returns a fresh list. The engine ranks the
+    /// list and clones only the rows it shows (R-006).
+    fn items(&self, q: &Query) -> Arc<[Item]>;
+    /// What this source is still loading ("Indexing apps"), or None when it is ready. The
+    /// Launcher shows it as a status row while any root source is loading.
+    fn pending(&self) -> Option<&'static str> {
+        None
+    }
     fn actions(&self, id: &ItemId) -> Vec<Action>;
     fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome;
 }

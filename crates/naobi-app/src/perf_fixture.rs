@@ -3,7 +3,7 @@
 use naobi_core::command::{CommandSource, Cx, Outcome, Query};
 use naobi_core::ids::{ActionId, ItemId};
 use naobi_core::item::{Action, Item, ItemKind};
-use std::borrow::Cow;
+use std::sync::Arc;
 
 const WORDS: [&str; 64] = [
     "visual",
@@ -75,7 +75,7 @@ const WORDS: [&str; 64] = [
 /// The synthetic index as a root source: the real engine ranks it, so the latency runs cross the
 /// engine's own path (the candidate clone per keystroke included).
 pub struct PerfSource {
-    items: Vec<Item>,
+    items: Arc<[Item]>,
 }
 
 impl PerfSource {
@@ -100,8 +100,8 @@ impl PerfSource {
 }
 
 impl CommandSource for PerfSource {
-    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
-        Cow::Borrowed(&self.items)
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
+        self.items.clone()
     }
 
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
@@ -123,7 +123,7 @@ impl CommandSource for PerfSource {
 pub struct TestTarget(pub String);
 
 impl CommandSource for TestTarget {
-    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
         vec![Item {
             id: ItemId("test:target".into()),
             title: "naobitarget".into(),

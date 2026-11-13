@@ -57,17 +57,18 @@ impl Controller {
         }
     }
 
-    /// The engine's current snapshot.
-    pub fn screen(&self) -> Screen {
-        self.launcher.screen()
-    }
-
     /// Opens the Launcher at the root with an empty query (D-021), remembering where focus was.
     pub fn show(&mut self, host: &mut dyn Host) {
         self.previous = host.foreground();
         self.launcher.show_root();
         host.post(self.launcher.screen());
         host.show();
+    }
+
+    /// A source's index changed: ranks the current query again and posts it.
+    pub fn refresh(&mut self, host: &mut dyn Host) {
+        self.launcher.refresh_sources();
+        host.post(self.launcher.screen());
     }
 
     /// The Launcher hotkey: closes an open Launcher like Esc does, otherwise opens it.
@@ -177,7 +178,7 @@ mod tests {
     use naobi_core::item::{Action, Item, ItemKind};
     use naobi_core::ui::{Key, KeyChord};
     use naobi_launcher::frecency::Frecency;
-    use std::borrow::Cow;
+    use std::sync::Arc;
 
     #[derive(Default)]
     struct Fake {
@@ -236,7 +237,7 @@ mod tests {
     struct Apps;
 
     impl CommandSource for Apps {
-        fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
+        fn items(&self, _q: &Query) -> Arc<[Item]> {
             vec![Item {
                 id: ItemId("app:notepad".into()),
                 title: "Notepad".into(),
@@ -273,7 +274,7 @@ mod tests {
     struct One(Outcome);
 
     impl CommandSource for One {
-        fn items(&self, q: &Query) -> Cow<'_, [Item]> {
+        fn items(&self, q: &Query) -> Arc<[Item]> {
             Apps.items(q)
         }
         fn actions(&self, _id: &ItemId) -> Vec<Action> {

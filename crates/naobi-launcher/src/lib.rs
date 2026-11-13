@@ -6,6 +6,7 @@ pub mod engine;
 pub mod esc;
 pub mod frecency;
 pub mod ports;
+pub mod providers;
 pub mod rank;
 
 pub use engine::Launcher;

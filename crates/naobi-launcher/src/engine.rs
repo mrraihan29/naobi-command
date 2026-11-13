@@ -16,8 +16,8 @@ use naobi_core::ui::{
     Screen, Section, UiEvent,
 };
 use naobi_core::view_source::{Preview, ViewSource};
-use std::borrow::Cow;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -135,6 +135,11 @@ impl Launcher {
         }
     }
 
+    /// A source's index changed (the app catalog finished): ranks the current query again.
+    pub fn refresh_sources(&mut self) {
+        self.refresh();
+    }
+
     /// Hands in a file search answer. `source` is the root source index that owns these rows, so
     /// their actions run there. Dropped unless `generation` is current, the query is not empty and the
     /// root is showing. The rows trail the sync rows and never reorder them.
@@ -183,6 +188,31 @@ impl Launcher {
                 rows: self.files.iter().map(&to_row).collect(),
             });
         }
+        // A root source that is still loading shows one status row at the end. It is not a hit, so
+        // the selection never reaches it.
+        let pending: Vec<&str> = match self.mode {
+            Mode::Root => self.sources.iter().filter_map(|s| s.pending()).collect(),
+            _ => Vec::new(),
+        };
+        if !pending.is_empty() {
+            sections.push(Section {
+                header: None,
+                rows: pending
+                    .iter()
+                    .map(|what| RowView {
+                        kind: "Status".to_owned(),
+                        title: (*what).to_owned(),
+                        subtitle: String::new(),
+                        hint: None,
+                        calculator: false,
+                        disabled: true,
+                        armed: false,
+                        pinned: false,
+                        swatch: None,
+                    })
+                    .collect(),
+            });
+        }
         let target = self.selected_hit();
         let footer = FooterView {
             primary: target.and_then(|h| self.primary_label(h, armed == Some(h.id()))),
@@ -199,7 +229,7 @@ impl Launcher {
             footer,
             preview: self.preview(),
             empty: None,
-            loading: false,
+            loading: !pending.is_empty(),
             reduced_motion: false,
             text_scale: 1.0,
         }
@@ -224,8 +254,8 @@ impl Launcher {
     fn refresh(&mut self) {
         let text = self.query.trim().to_owned();
         let q = Query { text: text.clone() };
-        // Each source lends or hands over its list; ranking borrows from these and clones the winners.
-        let lists: Vec<(Source, Cow<[Item]>)> = match self.mode {
+        // Each source hands over a shared snapshot or a fresh list; ranking borrows from these and clones the winners.
+        let lists: Vec<(Source, Arc<[Item]>)> = match self.mode {
             Mode::Root => self
                 .sources
                 .iter()

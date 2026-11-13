@@ -243,7 +243,8 @@ fn on_ready(ui: UiHandle) {
         // Pressed before the window was ready: served as soon as it is.
         with_controller(ui, |c, h| c.show(h));
     } else {
-        with_controller(ui, |c, h| h.post(c.screen()));
+        // A catalog scan may have finished before the controller existed.
+        with_controller(ui, |c, h| c.refresh(h));
     }
 }
 
@@ -339,6 +340,16 @@ fn on_settings_changed(path: &Path) {
     for n in notices {
         raise_notice(&mut s, n);
     }
+}
+
+/// A module's catalog was rebuilt on the index worker: a failure raises its Notice, and the Launcher
+/// ranks the current query again. Before the window is ready the controller is not there; `on_ready`
+/// ranks once when it is, so nothing is lost.
+fn on_catalog(failure: Option<Notice>) {
+    if let Some(n) = failure {
+        raise_notice(&mut state(), n);
+    }
+    to_modules(|c, h| c.refresh(h));
 }
 
 /// Routes what P1 forwards: the Launcher's own events here, the modules' through the registry.
@@ -438,11 +449,19 @@ pub fn run() -> anyhow::Result<()> {
     // P1 first: hotkeys registered and tray icon shown before any UI work.
     platform::start_with(&settings, route, || std::process::exit(0))?;
     report("tray_ready");
+    let mut jobs = Vec::new();
     if let Some(dir) = settings_dir {
         let path = dir.join(settings_runtime::FILE_NAME);
-        if let Err(e) = index_worker::start(&dir, move || on_settings_changed(&path)) {
-            tracing::warn!(error = %e, "settings hot reload is off");
-        }
+        jobs.push(index_worker::Job {
+            dirs: vec![(dir, false)],
+            initial: false,
+            settle: None,
+            run: Box::new(move || on_settings_changed(&path)),
+        });
+    }
+    jobs.extend(modules::apps::job(on_catalog));
+    if let Err(e) = index_worker::start(jobs) {
+        tracing::warn!(error = %e, "the index worker did not start: hot reload and the app catalog are off");
     }
     {
         let mut s = state();

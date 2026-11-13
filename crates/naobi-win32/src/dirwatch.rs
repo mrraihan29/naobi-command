@@ -12,7 +12,9 @@ use windows::Win32::Storage::FileSystem::{
     FILE_LIST_DIRECTORY, FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE,
     FILE_NOTIFY_CHANGE_SIZE, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+use windows::Win32::System::Threading::{
+    CreateEventW, WaitForMultipleObjects, WaitForSingleObject,
+};
 use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 
 /// Room for the change records: 16 KiB. An overflow reports as a change with no records.
@@ -37,6 +39,8 @@ pub struct DirWatcher {
     dir: HANDLE,
     event: HANDLE,
     io: Box<Io>,
+    /// Also report changes in the folders below `dir`.
+    subtree: bool,
 }
 
 // SAFETY: the handles and the boxed read belong to this value alone and are touched only by the thread
@@ -46,6 +50,15 @@ unsafe impl Send for DirWatcher {}
 impl DirWatcher {
     /// Opens `dir` and starts one read for creations, renames, writes and size changes.
     pub fn open(dir: &Path) -> Result<Self> {
+        Self::open_with(dir, false)
+    }
+
+    /// Like `open`, and the folders below `dir` are watched too (the Start Menu has sub-folders).
+    pub fn open_subtree(dir: &Path) -> Result<Self> {
+        Self::open_with(dir, true)
+    }
+
+    fn open_with(dir: &Path, subtree: bool) -> Result<Self> {
         let name = HSTRING::from(dir.as_os_str());
         // SAFETY: `name` outlives the call; no security attributes and no template handle.
         let dir_handle = unsafe {
@@ -77,6 +90,7 @@ impl DirWatcher {
             dir: dir_handle,
             event,
             io,
+            subtree,
         };
         watcher.arm()?;
         Ok(watcher)
@@ -94,7 +108,7 @@ impl DirWatcher {
                 self.dir,
                 io.buf.as_mut_ptr().cast::<c_void>(),
                 (BUF_WORDS * std::mem::size_of::<u32>()) as u32,
-                false,
+                self.subtree,
                 FILE_NOTIFY_CHANGE_FILE_NAME
                     | FILE_NOTIFY_CHANGE_LAST_WRITE
                     | FILE_NOTIFY_CHANGE_SIZE,
@@ -119,12 +133,36 @@ impl DirWatcher {
         if signalled != WAIT_OBJECT_0 {
             return Err(Error::from_thread());
         }
+        self.collect()?;
+        Ok(Wake::Changed)
+    }
+
+    /// The event fired: takes the completed read and re-arms.
+    fn collect(&mut self) -> Result<()> {
         let io = &mut *self.io;
         // SAFETY: the event fired, so the read has completed and the overlapped struct is final; the
         // byte count goes into `io.bytes`, which lives in the box.
         unsafe { GetOverlappedResult(self.dir, &io.ov, &mut io.bytes, false)? };
-        self.arm()?;
-        Ok(Wake::Changed)
+        self.arm()
+    }
+}
+
+/// Waits up to `timeout` (forever when None) for a change in any of `watchers` (at most 64). Returns
+/// the index of the watcher that changed, already re-armed, or None on timeout.
+pub fn wait_any(watchers: &mut [DirWatcher], timeout: Option<Duration>) -> Result<Option<usize>> {
+    let ms = timeout.map_or(u32::MAX, |t| {
+        t.as_millis().min(u128::from(u32::MAX - 1)) as u32
+    });
+    let events: Vec<HANDLE> = watchers.iter().map(|w| w.event).collect();
+    // SAFETY: waits on the watchers' own event handles, which stay open while the slice is borrowed.
+    let r = unsafe { WaitForMultipleObjects(&events, false, ms) };
+    if r == WAIT_TIMEOUT {
+        return Ok(None);
+    }
+    let i = r.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+    match watchers.get_mut(i) {
+        Some(w) => w.collect().map(|()| Some(i)),
+        None => Err(Error::from_thread()),
     }
 }
 

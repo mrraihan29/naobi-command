@@ -10,9 +10,9 @@ use naobi_core::ui::{Key, KeyChord, PreviewView, Screen, UiEvent};
 use naobi_core::view_source::{Preview, ViewSource};
 use naobi_launcher::frecency::Frecency;
 use naobi_launcher::{Clock, Launcher};
-use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Milliseconds the fake clock starts at.
 const T0_MS: i64 = 1_000_000_000_000;
@@ -55,8 +55,8 @@ struct Apps {
 }
 
 impl CommandSource for Apps {
-    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
-        Cow::Borrowed(&self.items)
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
+        self.items.clone().into()
     }
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
         vec![action("open", "Open"), action("copy", "Copy path")]
@@ -95,8 +95,8 @@ struct Clip {
 }
 
 impl CommandSource for Clip {
-    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
-        Cow::Borrowed(&self.entries)
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
+        self.entries.clone().into()
     }
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
         vec![]

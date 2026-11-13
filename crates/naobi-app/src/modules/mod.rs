@@ -1,5 +1,7 @@
 //! The module registry (REPORT 3.4): where each module plugs into the controller. A module item adds
 //! one line to `register_all` and never edits `controller.rs`.
+pub mod apps;
+
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;
 use naobi_core::ids::HotkeyId;
@@ -127,8 +129,10 @@ impl Router {
 }
 
 /// One line per module. The module items add theirs here.
-// seam NCMD-16 to 24: apps, files, commands, clipboard, snap, topmost, awake and picker register here.
-pub fn register_all(_modules: &mut Modules) {}
+// seam NCMD-17 to 24: files, commands, clipboard, snap, topmost, awake and picker register here.
+pub fn register_all(modules: &mut Modules) {
+    apps::register(modules);
+}
 
 #[cfg(test)]
 mod tests {
@@ -141,8 +145,8 @@ mod tests {
 
     struct Empty;
     impl CommandSource for Empty {
-        fn items(&self, _q: &naobi_core::command::Query) -> std::borrow::Cow<'_, [Item]> {
-            std::borrow::Cow::Borrowed(&[])
+        fn items(&self, _q: &naobi_core::command::Query) -> std::sync::Arc<[Item]> {
+            std::sync::Arc::from(Vec::new())
         }
         fn actions(&self, _id: &ItemId) -> Vec<Action> {
             vec![]

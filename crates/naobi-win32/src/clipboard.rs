@@ -39,7 +39,7 @@ pub struct Snapshot {
     pub can_upload_to_cloud: Option<u32>,
     /// The write carries the Launcher's private marker.
     pub marker: bool,
-    /// The file name of the owning exe, such as `Proton Pass.exe`. Never a path.
+    /// The file name of the owning exe, such as `ProtonPass.exe`. Never a path.
     pub owner_exe: Option<String>,
 }
 

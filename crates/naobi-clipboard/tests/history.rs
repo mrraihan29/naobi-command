@@ -247,7 +247,7 @@ fn d015_pinned_cap_100() {
 #[test]
 fn r015_ignored_app_not_stored() {
     let (mut h, _) = history();
-    for owner in ["Proton Pass.exe", "proton pass.EXE"] {
+    for owner in ["ProtonPass.exe", "protonpass.EXE"] {
         let mut c = text("hunter2");
         c.owner_exe = Some(owner.into());
         assert_eq!(store(&mut h, c).result, Err(Skip::IgnoredApp), "{owner}");

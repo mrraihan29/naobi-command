@@ -23,7 +23,7 @@ pub struct Captured {
     pub flags: Flags,
     /// True when the write carries the Launcher's own marker (D-019).
     pub marker: bool,
-    /// The file name of the exe that owns the clipboard, such as `Proton Pass.exe`. Never a path.
+    /// The file name of the exe that owns the clipboard, such as `ProtonPass.exe`. Never a path.
     pub owner_exe: Option<String>,
     pub content: Content,
 }

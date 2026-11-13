@@ -2,8 +2,9 @@
 //! and copies made by an ignored app.
 use crate::ports::Captured;
 
-/// The password manager the Owner uses (R-015 v2). Confirmed against the installed exe name at build.
-pub const DEFAULT_IGNORED: [&str; 1] = ["Proton Pass.exe"];
+/// The password manager the Owner uses (R-015 v2). The exe name is confirmed on the Owner's PC:
+/// `ProtonPass.exe` under `%LOCALAPPDATA%\ProtonPass` (the plan said "Proton Pass.exe", the window title).
+pub const DEFAULT_IGNORED: [&str; 1] = ["ProtonPass.exe"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Skip {

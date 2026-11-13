@@ -113,8 +113,11 @@ fn r015_copy_open_enter_pastes_into_previous_app() {
     }
     if !pasted {
         let log = data.join("logs").join("naobi-command.log");
-        eprintln!("app log:
-{}", std::fs::read_to_string(log).unwrap_or_default());
+        eprintln!(
+            "app log:
+{}",
+            std::fs::read_to_string(log).unwrap_or_default()
+        );
     }
     let _ = std::fs::remove_dir_all(&dir);
     assert!(ready, "launcher window never appeared");

@@ -14,6 +14,8 @@ struct World {
     seq: Cell<u32>,
     log: RefCell<Vec<String>>,
     clipboard: RefCell<Option<Content>>,
+    /// Total milliseconds the sequence slept.
+    slept: Cell<u64>,
 }
 
 struct Board {
@@ -85,6 +87,7 @@ impl ForegroundOps for Fg {
         true
     }
     fn sleep_ms(&mut self, ms: u64) {
+        self.w.slept.set(self.w.slept.get() + ms);
         if ms == RESTORE_AFTER_MS && self.copy_during_wait {
             self.w.seq.set(self.w.seq.get() + 1);
             *self.w.clipboard.borrow_mut() = Some(Content::Text("another copy".into()));
@@ -184,6 +187,7 @@ fn r015_paste_aborts_if_foreground_changed() {
     // The target never gets focus within 100 ms.
     let (out, w) = run(false, |f| f.focus_after = 1000);
     assert_eq!(out, Outcome::Aborted(Abort::ForegroundChanged));
+    assert_eq!(w.slept.get(), 100, "the target gets exactly 100 ms");
     assert!(!log(&w).contains(&"ctrl+v".to_owned()));
 }
 

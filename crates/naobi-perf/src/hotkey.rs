@@ -10,8 +10,9 @@ use naobi_win32::probe::{self, Backdrop, Screen};
 use naobi_win32::{dwm, inject, process::ProcessMetrics};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
@@ -37,12 +38,23 @@ pub fn launcher_bg() -> u32 {
 pub struct App {
     pub child: Child,
     pub lines: Receiver<(String, i64)>,
+    /// Throwaway data and settings folders, so a run never touches the Owner's `naobi.db` or
+    /// `settings.toml` (the perf build writes no Run value without an override).
+    sandbox: PathBuf,
 }
 
 impl App {
     pub fn spawn(exe: &Path, items: usize) -> Result<App> {
+        static RUN: AtomicUsize = AtomicUsize::new(0);
+        let sandbox = std::env::temp_dir().join(format!(
+            "naobi-perf-{}-{}",
+            std::process::id(),
+            RUN.fetch_add(1, Ordering::Relaxed)
+        ));
         let mut child = Command::new(exe)
             .env("NAOBI_PERF_ITEMS", items.to_string())
+            .env("NAOBI_DATA_DIR", sandbox.join("data"))
+            .env("NAOBI_SETTINGS_DIR", sandbox.join("settings"))
             .stdout(Stdio::piped())
             .spawn()?;
         let out = child
@@ -57,7 +69,11 @@ impl App {
                 }
             }
         });
-        Ok(App { child, lines })
+        Ok(App {
+            child,
+            lines,
+            sandbox,
+        })
     }
 
     /// Waits for the readiness line `ev`; returns its QPC ticks. Fails if the exe exits (e.g. Alt+Space is taken).
@@ -84,6 +100,7 @@ impl Drop for App {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.sandbox);
     }
 }
 

@@ -2633,6 +2633,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "naobi-app",
+ "naobi-clipboard",
  "naobi-core",
  "naobi-launcher",
  "naobi-ui",
@@ -2640,6 +2641,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]

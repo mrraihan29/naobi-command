@@ -133,6 +133,16 @@ pub fn system_command(id: &str) {
     tracing::info!(command = id, "system command ran");
 }
 
+/// The clipboard retention removed entries (T-010): counts and the reason, never content.
+pub fn clipboard_purge(expired: usize, excess: usize, evicted: usize) {
+    tracing::info!(
+        expired,
+        excess,
+        evicted,
+        "clipboard purge: retention, entry count and size cap"
+    );
+}
+
 /// A Notice was raised. Its kind only: the message can echo settings text.
 pub fn notice(kind: NoticeKind) {
     tracing::info!(kind = ?kind, "notice raised");

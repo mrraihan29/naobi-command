@@ -2,6 +2,7 @@
 //! one line to `register_all` and never edits `controller.rs`.
 pub mod apps;
 pub mod builtin;
+pub mod clipboard_capture;
 
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;
@@ -130,9 +131,10 @@ impl Router {
 }
 
 /// One line per module. The module items add theirs here.
-// seam NCMD-17, 19 to 24: files, clipboard, snap, topmost, awake and picker register here.
+// seam NCMD-17, 20 to 24: files, the clipboard view, snap, topmost, awake and picker register here.
 pub fn register_all(modules: &mut Modules) {
     builtin::register(modules);
+    clipboard_capture::register(modules);
     apps::register(modules);
 }
 

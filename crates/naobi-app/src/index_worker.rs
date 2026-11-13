@@ -60,15 +60,10 @@ impl Pending {
     }
 }
 
-/// Starts the worker. A folder that cannot be watched is logged and skipped; the other jobs go on.
+/// Starts the worker. The folders are opened here, before the thread starts, so a change made right
+/// after `start` returns is not missed. A folder that cannot be watched is logged and skipped; the
+/// other jobs go on.
 pub fn start(jobs: Vec<Job>) -> anyhow::Result<()> {
-    std::thread::Builder::new()
-        .name("index".into())
-        .spawn(move || run(&jobs))?;
-    Ok(())
-}
-
-fn run(jobs: &[Job]) {
     let mut watchers = Vec::new();
     let mut owner = Vec::new();
     for (j, job) in jobs.iter().enumerate() {
@@ -84,12 +79,19 @@ fn run(jobs: &[Job]) {
                     owner.push(j);
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "a folder cannot be watched; its changes are not seen")
+                    tracing::warn!(error = %e, "a folder cannot be watched; its changes are not seen");
                 }
             }
         }
     }
-    // Watches are open first, so a change during the first scan is not lost.
+    std::thread::Builder::new()
+        .name("index".into())
+        .spawn(move || run(&jobs, watchers, &owner))?;
+    Ok(())
+}
+
+fn run(jobs: &[Job], mut watchers: Vec<DirWatcher>, owner: &[usize]) {
+    // The watches are already open, so a change during the first scan is not lost.
     for job in jobs.iter().filter(|j| j.initial) {
         (job.run)();
     }

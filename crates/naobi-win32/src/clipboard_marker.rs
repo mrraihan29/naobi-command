@@ -15,7 +15,7 @@ use windows::Win32::System::Memory::{
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 
 /// Opens the clipboard, retrying three times at 10 ms: another process may hold it for a moment.
-fn open_clipboard() -> Result<()> {
+pub(crate) fn open_clipboard() -> Result<()> {
     let mut attempt = 0;
     loop {
         // SAFETY: opens the clipboard for this thread; the caller closes it.

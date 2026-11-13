@@ -2705,6 +2705,7 @@ version = "0.0.0"
 dependencies = [
  "naobi-core",
  "windows",
+ "zeroize",
 ]
 
 [[package]]

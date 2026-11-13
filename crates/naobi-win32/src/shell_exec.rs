@@ -35,26 +35,9 @@ pub fn open(target: &str) -> std::io::Result<()> {
     }
 }
 
-/// True for the URLs the Launcher may open: http and https only (a quicklink is a web search).
-pub fn is_web_url(url: &str) -> bool {
-    let u = url.trim_start().to_ascii_lowercase();
-    u.starts_with("http://") || u.starts_with("https://")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn only_http_and_https_are_web_urls() {
-        assert!(is_web_url("https://naobi.dev/work/"));
-        assert!(is_web_url("  HTTP://example.com"));
-        assert!(!is_web_url("file:///C:/Windows/System32/calc.exe"));
-        assert!(!is_web_url("javascript:alert(1)"));
-        assert!(!is_web_url("ms-settings:display"));
-        assert!(!is_web_url("httpx://x"));
-        assert!(!is_web_url(""));
-    }
 
     #[test]
     fn a_missing_file_is_an_error() {

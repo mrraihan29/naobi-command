@@ -4,6 +4,7 @@
 mod controller;
 mod index_worker;
 mod logging;
+mod modules;
 mod notices;
 #[cfg(feature = "perf")]
 mod perf_fixture;
@@ -25,7 +26,7 @@ use naobi_ui::UiHandle;
 use naobi_win32::theme::SystemTheme;
 use naobi_win32::tray::{Overlay, TrayState};
 use naobi_win32::{
-    autostart, clipboard_marker, dwm, foreground, instance, notice, platform, shell,
+    autostart, clipboard_marker, dwm, foreground, instance, notice, platform, shell_exec,
 };
 use notices::NoticeCenter;
 use std::cell::RefCell;
@@ -95,11 +96,9 @@ impl Host for AppHost {
         foreground::restore(window);
     }
     fn launch(&mut self, target: &LaunchTarget) -> std::io::Result<()> {
+        // The controller refused every URL that is not http or https before this.
         match target {
-            LaunchTarget::ShellItem(item) => shell::open(item),
-            // A quicklink is a web search: nothing but http(s) is opened for a URL.
-            LaunchTarget::Url(url) if shell::is_web_url(url) => shell::open(url),
-            LaunchTarget::Url(_) => Err(std::io::ErrorKind::InvalidInput.into()),
+            LaunchTarget::ShellItem(t) | LaunchTarget::Url(t) => shell_exec::open(t),
         }
     }
     fn copy_text(&mut self, text: &str) -> std::io::Result<()> {
@@ -132,10 +131,23 @@ fn dispatch(f: fn(&mut Controller, &mut AppHost)) {
     match s.ui.clone() {
         Some(ui) => {
             drop(s);
-            let on_ui = ui.clone();
-            ui.run_on_ui(move || with_controller(on_ui, f));
+            on_ui(ui, f);
         }
         None => s.early_show = true,
+    }
+}
+
+/// Runs `f` with the controller on the UI thread.
+fn on_ui(ui: UiHandle, f: impl FnOnce(&mut Controller, &mut AppHost) + Send + 'static) {
+    let handle = ui.clone();
+    ui.run_on_ui(move || with_controller(handle, f));
+}
+
+/// An event for the modules. Before the window is ready there is no controller, so it is dropped.
+fn to_modules(f: impl FnOnce(&mut Controller, &mut AppHost) + Send + 'static) {
+    let ui = state().ui.clone();
+    if let Some(ui) = ui {
+        on_ui(ui, f);
     }
 }
 
@@ -149,22 +161,23 @@ fn on_show() {
     dispatch(|c, h| c.show(h));
 }
 
-/// The sources the Launcher searches. The perf build searches the synthetic 10,000-item index
+/// Every module's registration. The perf build adds the synthetic 10,000-item index
 /// (`NAOBI_PERF_ITEMS` overrides the count), so the latency runs cross the real engine.
-fn sources() -> Vec<Box<dyn naobi_core::command::CommandSource>> {
+fn registry() -> modules::Modules {
+    let mut m = modules::Modules::new();
     #[cfg(feature = "perf")]
     {
         let n = std::env::var("NAOBI_PERF_ITEMS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(10_000);
-        vec![Box::new(perf_fixture::PerfSource::new(n))]
+        m.register_source(Box::new(perf_fixture::PerfSource::new(n)));
+        if let Ok(target) = std::env::var("NAOBI_TEST_TARGET") {
+            m.register_source(Box::new(perf_fixture::TestTarget(target)));
+        }
     }
-    #[cfg(not(feature = "perf"))]
-    {
-        // seam NCMD-16 to 18: the apps, files, commands, quicklinks and calculator sources.
-        Vec::new()
-    }
+    modules::register_all(&mut m);
+    m
 }
 
 /// The engine with the Owner's frecency. When the store cannot be opened the history is kept in
@@ -196,8 +209,13 @@ fn build_controller() -> (Option<Controller>, Option<Notice>) {
     };
     match Frecency::open(db, now) {
         Ok(frecency) => {
-            let launcher = Launcher::new(sources(), Vec::new(), frecency, Box::new(SystemClock));
-            (Some(Controller::new(launcher)), warn)
+            let modules::Parts {
+                sources,
+                views,
+                router,
+            } = registry().into_parts();
+            let launcher = Launcher::new(sources, views, frecency, Box::new(SystemClock));
+            (Some(Controller::new(launcher, router)), warn)
         }
         Err(e) => {
             tracing::error!(error = %e, "frecency did not load: the Launcher is off");
@@ -323,10 +341,7 @@ fn on_settings_changed(path: &Path) {
     }
 }
 
-/// Event routing into the controller belongs to NCMD-15. NCMD-13 adds the hotkey-conflict Notice and
-/// the theme; the launcher hotkey and `ShowRequested` stay as NCMD-12 left them (R-023, tray Open).
-// seam NCMD-15: every other hotkey, Resume, DisplayChanged, Timer, ClipboardChanged and SettingsChanged
-// are routed here.
+/// Routes what P1 forwards: the Launcher's own events here, the modules' through the registry.
 fn route(ev: AppEvent) {
     match ev {
         AppEvent::Hotkey(id) if id.0 == "launcher" => {
@@ -334,9 +349,19 @@ fn route(ev: AppEvent) {
             on_hotkey();
         }
         AppEvent::ShowRequested => on_show(),
+        // A module's own hotkey, and the events modules subscribe to, run on the UI thread.
+        AppEvent::Hotkey(id) => to_modules(move |c, h| {
+            c.on_hotkey(&id, h);
+        }),
+        ev @ (AppEvent::ClipboardChanged(_)
+        | AppEvent::Resume
+        | AppEvent::DisplayChanged
+        | AppEvent::SettingsChanged
+        | AppEvent::Timer(_)) => to_modules(move |c, h| {
+            c.on_app_event(&ev, h);
+        }),
         AppEvent::HotkeyConflict(id) => on_conflict(&id.0),
         AppEvent::ThemeChanged => on_theme(),
-        _ => {}
     }
 }
 

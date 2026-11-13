@@ -15,7 +15,7 @@ pub mod platform;
 pub mod probe;
 pub mod process;
 pub mod random;
-pub mod shell;
+pub mod shell_exec;
 #[cfg(feature = "perf")]
 pub mod subclass;
 pub mod theme;

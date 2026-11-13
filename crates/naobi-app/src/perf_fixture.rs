@@ -118,6 +118,33 @@ impl CommandSource for PerfSource {
     }
 }
 
+/// Tier 2 target (`NAOBI_TEST_TARGET` = a script path): one item, "naobitarget", that opens it.
+pub struct TestTarget(pub String);
+
+impl CommandSource for TestTarget {
+    fn items(&self, _q: &Query) -> Vec<Item> {
+        vec![Item {
+            id: ItemId("test:target".into()),
+            title: "naobitarget".into(),
+            subtitle: String::new(),
+            keywords: Vec::new(),
+            alias: None,
+            kind: ItemKind::App,
+            primary: ActionId("open".into()),
+            secondary: None,
+        }]
+    }
+
+    fn actions(&self, _id: &ItemId) -> Vec<Action> {
+        Vec::new()
+    }
+
+    fn run(&self, _id: &ItemId, _action: ActionId, cx: &mut Cx) -> Outcome {
+        cx.launch(naobi_core::effect::LaunchTarget::ShellItem(self.0.clone()));
+        Outcome::Done
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

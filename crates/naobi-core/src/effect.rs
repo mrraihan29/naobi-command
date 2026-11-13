@@ -9,6 +9,25 @@ pub enum LaunchTarget {
     Url(String),
 }
 
+impl LaunchTarget {
+    /// For a URL that is not http or https, the scheme that was refused (T-006). Items and
+    /// quicklinks are the only source of targets, and a quicklink is a web search.
+    pub fn refused_scheme(&self) -> Option<String> {
+        let Self::Url(url) = self else { return None };
+        let url = url.trim_start();
+        let lower = url.to_ascii_lowercase();
+        if lower.starts_with("http://") || lower.starts_with("https://") {
+            return None;
+        }
+        let scheme = url.split([':', '/']).next().unwrap_or("");
+        Some(if scheme.is_empty() || scheme.len() > 20 {
+            "(none)".to_owned()
+        } else {
+            scheme.to_ascii_lowercase()
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     Launch(LaunchTarget),
@@ -17,4 +36,41 @@ pub enum Effect {
     Notice(Notice),
     PushView(ViewId),
     Paste(EntryId),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(u: &str) -> LaunchTarget {
+        LaunchTarget::Url(u.into())
+    }
+
+    #[test]
+    fn only_http_and_https_urls_are_allowed() {
+        assert_eq!(url("https://naobi.dev/work/").refused_scheme(), None);
+        assert_eq!(url("  HTTP://example.com").refused_scheme(), None);
+        assert_eq!(
+            url("file:///C:/Windows/System32/calc.exe").refused_scheme(),
+            Some("file".into())
+        );
+        assert_eq!(
+            url("JavaScript:alert(1)").refused_scheme(),
+            Some("javascript".into())
+        );
+        assert_eq!(
+            url("ms-settings:display").refused_scheme(),
+            Some("ms-settings".into())
+        );
+        assert_eq!(url("httpx://x").refused_scheme(), Some("httpx".into()));
+        assert_eq!(url("").refused_scheme(), Some("(none)".into()));
+        assert_eq!(
+            url(r"C:\Windows\notepad.exe").refused_scheme(),
+            Some("c".into())
+        );
+        assert_eq!(
+            LaunchTarget::ShellItem("anything".into()).refused_scheme(),
+            None
+        );
+    }
 }

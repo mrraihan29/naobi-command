@@ -1,7 +1,11 @@
 //! The controller (REPORT 3.4): owns the launcher engine, runs its Effects and keeps focus return.
 //! Everything that touches Windows or the window sits behind `Host`, so the tests below assert the
 //! effects without a desktop.
+use crate::modules::Router;
+use naobi_core::command::Cx;
 use naobi_core::effect::{Effect, LaunchTarget};
+use naobi_core::event::AppEvent;
+use naobi_core::ids::HotkeyId;
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{Screen, UiEvent};
 use naobi_launcher::{Clock, Launcher};
@@ -38,14 +42,17 @@ impl Clock for SystemClock {
 
 pub struct Controller {
     launcher: Launcher,
+    /// Where the modules' hotkeys and events go.
+    router: Router,
     /// The window that had focus when the Launcher opened (D-013).
     previous: Option<isize>,
 }
 
 impl Controller {
-    pub fn new(launcher: Launcher) -> Self {
+    pub fn new(launcher: Launcher, router: Router) -> Self {
         Self {
             launcher,
+            router,
             previous: None,
         }
     }
@@ -89,6 +96,23 @@ impl Controller {
         host.post(self.launcher.screen());
     }
 
+    /// A module's hotkey: runs its handlers and executes what they asked for. False when no module
+    /// subscribed to it.
+    pub fn on_hotkey(&mut self, id: &HotkeyId, host: &mut dyn Host) -> bool {
+        let mut cx = Cx::default();
+        let handled = self.router.hotkey(id, &mut cx);
+        self.execute(cx.take(), true, host);
+        handled
+    }
+
+    /// An event for the modules (clipboard change, resume, timer...). False when nobody listens.
+    pub fn on_app_event(&mut self, ev: &AppEvent, host: &mut dyn Host) -> bool {
+        let mut cx = Cx::default();
+        let handled = self.router.event(ev, &mut cx);
+        self.execute(cx.take(), true, host);
+        handled
+    }
+
     /// Executes what the engine asked for. A Launch hides the Launcher without giving focus back:
     /// the launched program takes it.
     fn execute(&mut self, effects: Vec<Effect>, restore: bool, host: &mut dyn Host) {
@@ -97,6 +121,14 @@ impl Controller {
         for e in effects {
             match e {
                 Effect::Launch(t) => {
+                    // T-006 in depth: only http and https URLs are opened.
+                    if let Some(scheme) = t.refused_scheme() {
+                        host.notice(failure(
+                            "Open",
+                            &format!("The {scheme}: scheme is not allowed."),
+                        ));
+                        continue;
+                    }
                     launched = true;
                     if let Err(e) = host.launch(&t) {
                         tracing::warn!(code = ?e.raw_os_error(), "launch failed");
@@ -112,8 +144,12 @@ impl Controller {
                 Effect::Notice(n) => host.notice(n),
                 // The engine switched the view itself.
                 Effect::PushView(_) => {}
-                // ponytail: no clipboard view yet (NCMD-19/20), so nothing can ask for a paste.
-                Effect::Paste(_) => {}
+                // ponytail: the clipboard view (NCMD-20) adds this arm.
+                Effect::Paste(_) => host.notice(Notice {
+                    subject: "Clipboard".to_owned(),
+                    message: "Paste is not available yet.".to_owned(),
+                    kind: NoticeKind::Info,
+                }),
             }
         }
         // Every Notice was handed to the host, which shows it once.
@@ -231,15 +267,37 @@ mod tests {
         }
     }
 
+    /// One item whose Enter runs `outcome`.
+    struct One(Outcome);
+
+    impl CommandSource for One {
+        fn items(&self, q: &Query) -> Vec<Item> {
+            Apps.items(q)
+        }
+        fn actions(&self, _id: &ItemId) -> Vec<Action> {
+            vec![]
+        }
+        fn run(&self, _id: &ItemId, _a: ActionId, _cx: &mut Cx) -> Outcome {
+            self.0.clone()
+        }
+    }
+
+    fn controller_with(source: Box<dyn CommandSource>, router: Router) -> Controller {
+        let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        Controller::new(
+            Launcher::new(vec![source], vec![], frecency, Box::new(Zero)),
+            router,
+        )
+    }
+
     fn controller() -> Controller {
         let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
         let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
-        Controller::new(Launcher::new(
-            vec![Box::new(Apps)],
-            vec![],
-            frecency,
-            Box::new(Zero),
-        ))
+        Controller::new(
+            Launcher::new(vec![Box::new(Apps)], vec![], frecency, Box::new(Zero)),
+            Router::default(),
+        )
     }
 
     fn key(k: Key, ctrl: bool) -> UiEvent {
@@ -363,5 +421,105 @@ mod tests {
         let before = h.posts;
         c.on_ui_event(UiEvent::TextChanged("note".into()), &mut h);
         assert_eq!(h.posts, before + 1);
+    }
+
+    // @R-021
+    #[test]
+    fn r021_controller_refuses_non_http_url() {
+        for (url, scheme) in [
+            ("file:///C:/Windows/System32/cmd.exe", "file"),
+            ("ms-settings:display", "ms-settings"),
+        ] {
+            let mut c = controller_with(
+                Box::new(One(Outcome::Effects(vec![Effect::Launch(
+                    LaunchTarget::Url(url.into()),
+                )]))),
+                Router::default(),
+            );
+            let mut h = Fake::default();
+            c.show(&mut h);
+            h.log.clear();
+            c.on_ui_event(key(Key::Enter, false), &mut h);
+            assert!(
+                !h.log.iter().any(|l| l.starts_with("launch")),
+                "nothing was opened for {url}"
+            );
+            assert!(
+                h.log.contains(&format!(
+                    "notice Open: The {scheme}: scheme is not allowed."
+                )),
+                "{:?}",
+                h.log
+            );
+        }
+    }
+
+    // @R-021
+    #[test]
+    fn r021_https_url_is_opened() {
+        let mut c = controller_with(
+            Box::new(One(Outcome::Effects(vec![Effect::Launch(
+                LaunchTarget::Url("https://naobi.dev/work/".into()),
+            )]))),
+            Router::default(),
+        );
+        let mut h = Fake::default();
+        c.show(&mut h);
+        h.log.clear();
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.log,
+            vec![
+                r#"launch Url("https://naobi.dev/work/")"#.to_string(),
+                "hide".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn paste_shows_a_notice_until_the_clipboard_view_exists() {
+        let mut c = controller_with(
+            Box::new(One(Outcome::Effects(vec![Effect::Paste(
+                naobi_core::ids::EntryId(1),
+            )]))),
+            Router::default(),
+        );
+        let mut h = Fake::default();
+        c.show(&mut h);
+        h.log.clear();
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert!(h
+            .log
+            .contains(&"notice Clipboard: Paste is not available yet.".to_string()));
+    }
+
+    #[test]
+    fn module_hotkeys_and_events_run_their_handlers_and_their_effects() {
+        use crate::modules::{EventKind, Modules, Parts};
+        let mut m = Modules::new();
+        m.subscribe(
+            HotkeyId("topmost".into()),
+            Box::new(|_, cx| {
+                cx.notice(Notice {
+                    subject: "Topmost".into(),
+                    message: "on".into(),
+                    kind: NoticeKind::Info,
+                })
+            }),
+        );
+        m.subscribe_event(
+            EventKind::Resume,
+            Box::new(|_, cx| cx.copy_text("woke".into())),
+        );
+        let Parts { router, .. } = m.into_parts();
+        let mut c = controller_with(Box::new(Apps), router);
+        let mut h = Fake::default();
+        assert!(c.on_hotkey(&HotkeyId("topmost".into()), &mut h));
+        assert_eq!(h.log, vec!["notice Topmost: on".to_string()]);
+        h.log.clear();
+        assert!(c.on_app_event(&AppEvent::Resume, &mut h));
+        assert_eq!(h.log, vec!["copy woke".to_string()]);
+        assert!(!c.on_hotkey(&HotkeyId("nobody".into()), &mut h));
+        assert!(!c.on_app_event(&AppEvent::DisplayChanged, &mut h));
     }
 }

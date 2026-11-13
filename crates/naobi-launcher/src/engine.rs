@@ -60,10 +60,16 @@ impl Launcher {
         frecency: Frecency,
         clock: Box<dyn Clock>,
     ) -> Self {
+        // Each source says which of its items need a second Enter (R-020).
+        let armed_ids = sources
+            .iter()
+            .flat_map(|s| s.armed())
+            .chain(views.iter().flat_map(|v| v.armed()))
+            .collect();
         let mut l = Self {
             sources,
             views,
-            armed_ids: HashSet::new(),
+            armed_ids,
             frecency,
             clock,
             ranker: Ranker::default(),
@@ -388,7 +394,9 @@ impl Launcher {
             Outcome::Effects(more) => effects.extend(more),
             Outcome::Failed(n) => effects.push(Effect::Notice(n)),
         }
-        if matches!(hit.src, Source::Root(_)) && !failed {
+        // A calculator or quicklink row exists only for the text just typed: nothing to rank by later.
+        let ephemeral = matches!(hit.item.kind, ItemKind::Calculator | ItemKind::Quicklink);
+        if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
             if self.frecency.record(hit.id(), now).is_err() {
                 effects.push(Effect::Notice(Notice {

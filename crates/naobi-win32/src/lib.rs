@@ -19,6 +19,7 @@ pub mod random;
 pub mod shell_exec;
 #[cfg(feature = "perf")]
 pub mod subclass;
+pub mod system_commands;
 pub mod theme;
 pub mod token;
 pub mod tray;

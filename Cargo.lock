@@ -2661,6 +2661,7 @@ dependencies = [
 name = "naobi-launcher"
 version = "0.0.0"
 dependencies = [
+ "naobi-calc",
  "naobi-core",
  "nucleo-matcher",
 ]

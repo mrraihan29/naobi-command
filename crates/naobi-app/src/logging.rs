@@ -128,6 +128,11 @@ pub fn hotkey(name: &str) {
     tracing::info!(hotkey = name, "hotkey pressed");
 }
 
+/// A system command ran (T-009): its id only. The log line carries the time.
+pub fn system_command(id: &str) {
+    tracing::info!(command = id, "system command ran");
+}
+
 /// A Notice was raised. Its kind only: the message can echo settings text.
 pub fn notice(kind: NoticeKind) {
     tracing::info!(kind = ?kind, "notice raised");
@@ -202,6 +207,16 @@ mod tests {
         for marker in MARKERS {
             assert!(!text.contains(marker), "log leaked {marker}: {text}");
         }
+    }
+
+    // @R-020
+    #[test]
+    fn t009_system_command_log_has_id_and_time_only() {
+        let text = capture(|| system_command("sys.restart"));
+        assert!(text.contains("sys.restart"), "{text}");
+        assert!(text.contains("system command ran"), "{text}");
+        // The line starts with the timestamp tracing adds.
+        assert!(text.trim_start().starts_with("20"), "{text}");
     }
 
     #[test]

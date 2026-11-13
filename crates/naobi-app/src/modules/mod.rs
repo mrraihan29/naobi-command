@@ -1,6 +1,7 @@
 //! The module registry (REPORT 3.4): where each module plugs into the controller. A module item adds
 //! one line to `register_all` and never edits `controller.rs`.
 pub mod apps;
+pub mod builtin;
 
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;
@@ -129,8 +130,9 @@ impl Router {
 }
 
 /// One line per module. The module items add theirs here.
-// seam NCMD-17 to 24: files, commands, clipboard, snap, topmost, awake and picker register here.
+// seam NCMD-17, 19 to 24: files, clipboard, snap, topmost, awake and picker register here.
 pub fn register_all(modules: &mut Modules) {
+    builtin::register(modules);
     apps::register(modules);
 }
 

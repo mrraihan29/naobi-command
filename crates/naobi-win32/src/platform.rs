@@ -132,6 +132,16 @@ pub fn set_hotkeys_paused(paused: bool) -> bool {
     post_to_p1(Box::new(move || apply_pause(paused)))
 }
 
+/// Removes the tray icon and ends the app, as the tray's Quit does. Any thread may call it.
+pub fn quit() -> bool {
+    post_to_p1(Box::new(|| {
+        tray::remove(hwnd_of(p1_hwnd()));
+        if let Some(c) = CALLBACKS.get() {
+            (c.quit)();
+        }
+    }))
+}
+
 /// Replaces the tray icon state. Any thread may call it. While hotkeys are paused the overlay stays
 /// Paused, so a state update (Awake) cannot hide the pause or flip the menu check.
 pub fn set_tray_state(mut state: TrayState) -> bool {

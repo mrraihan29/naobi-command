@@ -53,6 +53,10 @@ pub trait CommandSource: Send + Sync {
     fn pending(&self) -> Option<&'static str> {
         None
     }
+    /// Ids of items whose primary action needs a second Enter (R-020).
+    fn armed(&self) -> Vec<ItemId> {
+        Vec::new()
+    }
     fn actions(&self, id: &ItemId) -> Vec<Action>;
     fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome;
 }

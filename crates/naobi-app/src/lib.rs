@@ -335,6 +335,9 @@ fn on_settings_changed(path: &Path) {
     if next.general.autostart != last.general.autostart {
         sync_autostart(next.general.autostart);
     }
+    // Quicklinks are read live, so an edited alias works at once; an open Launcher ranks again.
+    modules::builtin::set_quicklinks(next.quicklinks.clone());
+    to_modules(|c, h| c.refresh(h));
     let mut s = state();
     s.settings = Some(next);
     for n in notices {
@@ -452,6 +455,7 @@ pub fn run() -> anyhow::Result<()> {
         None => (Settings::default(), Vec::new()),
     };
     sync_autostart(settings.general.autostart);
+    modules::builtin::set_quicklinks(settings.quicklinks.clone());
     {
         let mut s = state();
         s.settings = Some(settings.clone());

@@ -10,3 +10,4 @@ workspace = true
 [dependencies]
 naobi-core = { path = "../naobi-core" }
 nucleo-matcher.workspace = true
+naobi-calc = { path = "../naobi-calc" }

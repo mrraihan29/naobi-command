@@ -48,13 +48,9 @@ impl SystemOps for AppOps {
             SystemCommand::ToggleDarkMode => done(system_commands::toggle_dark_mode()),
             SystemCommand::OpenWindowsSettings => shell_exec::open("ms-settings:")
                 .map_err(|_| "Windows could not open Settings.".to_owned()),
-            SystemCommand::OpenSettingsFile => {
-                let path = naobi_core::paths::settings_dir()
-                    .map(|d| d.join(crate::settings_runtime::FILE_NAME))
-                    .ok_or_else(|| "There is no settings folder.".to_owned())?;
-                shell_exec::open(&path.to_string_lossy())
-                    .map_err(|_| "Windows could not open the settings file.".to_owned())
-            }
+            SystemCommand::OpenSettingsFile => platform::open_settings()
+                .then_some(())
+                .ok_or_else(|| "Windows could not open the settings file.".to_owned()),
             // Resuming is in the tray menu: the Launcher hotkey is off while they are paused.
             SystemCommand::PauseHotkeys => platform::set_hotkeys_paused(true)
                 .then_some(())

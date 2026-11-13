@@ -66,6 +66,18 @@ impl Registry {
         }
     }
 
+    /// The settings changed: releases the old chords and registers the new ones, unless paused. A
+    /// chord that did not change is released and taken again, which is harmless.
+    pub fn reconfigure(&mut self, r: &mut impl Registrar, settings: &Settings) -> Vec<AppEvent> {
+        for (id, _, _) in &self.entries {
+            r.unregister(*id);
+        }
+        let paused = self.paused;
+        *self = Self::new(settings);
+        self.paused = paused;
+        self.register_all(r)
+    }
+
     pub fn is_paused(&self) -> bool {
         self.paused
     }
@@ -109,6 +121,32 @@ mod tests {
     use std::collections::BTreeSet;
 
     /// Fake OS: `taken` chords belong to another process, `live` ids are what we hold.
+    // @R-008
+    #[test]
+    fn r008_reconfigure_moves_chords_and_keeps_pause() {
+        let mut fake = Fake::default();
+        let mut reg = Registry::new(&Settings::default());
+        assert!(reg.register_all(&mut fake).is_empty());
+        let live_before = fake.live.len();
+        // The launcher chord moves to a key another process owns: one conflict, the rest stay.
+        let mut next = Settings::default();
+        next.hotkeys
+            .insert("launcher".into(), KeyChord::parse("Alt+F9").expect("chord"));
+        fake.taken.insert(0x78);
+        let events = reg.reconfigure(&mut fake, &next);
+        assert_eq!(
+            events,
+            vec![AppEvent::HotkeyConflict(HotkeyId("launcher".into()))]
+        );
+        assert_eq!(fake.live.len(), live_before - 1);
+        // Paused stays paused through a reload: nothing is registered until resume.
+        reg.set_paused(&mut fake, true);
+        assert!(reg.reconfigure(&mut fake, &Settings::default()).is_empty());
+        assert!(fake.live.is_empty() && reg.is_paused());
+        assert!(reg.set_paused(&mut fake, false).is_empty());
+        assert_eq!(fake.live.len(), live_before);
+    }
+
     #[derive(Default)]
     struct Fake {
         taken: BTreeSet<u32>,

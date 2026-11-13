@@ -107,6 +107,11 @@ impl Host for AppHost {
     fn notice(&mut self, n: Notice) {
         raise_notice(&mut state(), n);
     }
+    fn close_later(&mut self, ms: u64) {
+        let ui = self.ui.clone();
+        self.ui
+            .run_on_ui_after(ms, move || on_ui(ui, |c, h| c.finish_close(h)));
+    }
     fn post(&mut self, screen: Screen) {
         let mut s = state();
         s.screen = Some(screen);
@@ -315,13 +320,16 @@ fn on_conflict(name: &str) {
     raise_notice(&mut s, notices::hotkey_conflict(name, chord));
 }
 
-/// R-007: Windows changed its theme or animation setting. The look follows it. The palette itself
-/// waits for a `UiHandle` theme setter in naobi-ui, which NCMD-13 does not own.
+/// R-007: Windows changed its theme or animation setting. The look follows it, palette included.
 fn on_theme() {
     let mut s = state();
     if let Some(look) = theme::follow(&AppEvent::ThemeChanged, &SystemTheme, s.look) {
+        let palette_changed = look.theme != s.look.theme;
         s.look = look;
         if let Some(ui) = s.ui.clone() {
+            if palette_changed {
+                ui.set_theme(look.theme);
+            }
             post_view(&ui, &s);
         }
     }
@@ -334,6 +342,11 @@ fn on_settings_changed(path: &Path) {
     let (next, notices) = settings_runtime::reload(path, &last);
     if next.general.autostart != last.general.autostart {
         sync_autostart(next.general.autostart);
+    }
+    // Changed chords are registered now, without a restart (D-009); a refused one raises the usual
+    // conflict Notice.
+    if next.hotkeys != last.hotkeys {
+        naobi_win32::platform::reload_hotkeys(next.clone());
     }
     // Quicklinks are read live, so an edited alias works at once; an open Launcher ranks again.
     modules::builtin::set_quicklinks(next.quicklinks.clone());

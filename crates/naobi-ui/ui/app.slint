@@ -270,6 +270,7 @@ export component AppWindow inherits Window {
     in property <string> notice;
     in property <string> footer-primary;
     in property <bool> footer-actions;
+    in property <string> footer-confirmation;
     in property <bool> loading;
     in property <bool> empty-visible;
     in property <string> empty-title;
@@ -364,13 +365,28 @@ export component AppWindow inherits Window {
                         accessible-live-region: polite;
                     }
                 }
-                // Loading bar: a static bar under the field. Reduced motion shows the word instead.
+                // Loading bar: a short accent segment sweeping along a track under the field. Reduced
+                // motion shows the word instead.
                 Rectangle {
                     height: root.loading && Tokens.motion > 0 ? 2px : 0px;
-                    background: Tokens.accent;
+                    background: Tokens.line-hair;
+                    clip: true;
+                    if root.loading && Tokens.motion > 0 : Rectangle {
+                        property <float> sweep: 0;
+                        width: parent.width * 0.3;
+                        x: (parent.width * 1.3) * sweep - self.width;
+                        background: Tokens.accent;
+                        animate sweep { duration: 900ms; iteration-count: -1; easing: ease-in-out; }
+                        init => { self.sweep = 1; }
+                    }
                 }
                 Rectangle { height: 1px; background: Tokens.line-hair; }
                 if root.notice != "" : Rectangle {
+                    // The banner fades in (150 ms); under reduced motion it appears at once.
+                    property <float> fade: 0;
+                    opacity: self.fade;
+                    animate fade { duration: 150ms * Tokens.motion; }
+                    init => { self.fade = 1; }
                     height: 36px * Tokens.scale;
                     background: Tokens.surface-raised;
                     accessible-role: AccessibleRole.text;
@@ -430,7 +446,14 @@ export component AppWindow inherits Window {
                             vertical-alignment: center;
                             horizontal-stretch: 1;
                         }
-                        if root.footer-primary != "" : HorizontalLayout {
+                        if root.footer-confirmation != "" : Text {
+                            text: root.footer-confirmation;
+                            font-size: 12px * Tokens.scale;
+                            color: Tokens.accent;
+                            vertical-alignment: center;
+                            accessible-role: text;
+                        }
+                        if root.footer-primary != "" && root.footer-confirmation == "" : HorizontalLayout {
                             spacing: 6px;
                             Chip { y: (parent.height - self.height) / 2; text: "Enter"; }
                             Text {

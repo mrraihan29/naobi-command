@@ -171,6 +171,21 @@ fn apply_pause(paused: bool) {
     tray::set_paused(hwnd, paused);
 }
 
+/// Applies new hotkey chords from a reloaded settings file (D-009). A refused chord raises the usual
+/// conflict event. Any thread may call it.
+pub fn reload_hotkeys(settings: naobi_core::settings::Settings) -> bool {
+    post_to_p1(Box::new(move || {
+        let hwnd = hwnd_of(p1_hwnd());
+        let events = match lock_registry().as_mut() {
+            Some(reg) => reg.reconfigure(&mut Win32 { hwnd }, &settings),
+            None => Vec::new(),
+        };
+        for ev in events {
+            emit(ev);
+        }
+    }))
+}
+
 /// Retry after sleep: registers again whatever another process took meanwhile.
 fn retry_registrations(hwnd: HWND) {
     let events = match lock_registry().as_mut() {
@@ -279,7 +294,9 @@ fn on_tray(h: HWND, w: WPARAM, l: LPARAM) {
     match tray::menu(h) {
         Some(MenuChoice::Open) => emit(AppEvent::ShowRequested),
         Some(MenuChoice::Pause) => apply_pause(!is_paused()),
-        Some(MenuChoice::Settings) => open_settings(),
+        Some(MenuChoice::Settings) => {
+            open_settings();
+        }
         Some(MenuChoice::Quit) => {
             tray::remove(h);
             if let Some(c) = CALLBACKS.get() {
@@ -290,16 +307,27 @@ fn on_tray(h: HWND, w: WPARAM, l: LPARAM) {
     }
 }
 
-/// Opens `settings.toml` with the Owner's default editor (the tray's Settings item).
-// seam NCMD-13: the first-run default file is created there; until then the shell shows its own
-// "cannot find the file" prompt.
-fn open_settings() {
-    let Some(path) = naobi_core::paths::settings_dir().map(|d| d.join("settings.toml")) else {
-        return;
+/// Opens `settings.toml` with the Owner's default editor (the tray's Settings item). False when it
+/// could not be opened.
+pub fn open_settings() -> bool {
+    let Some(dir) = naobi_core::paths::settings_dir() else {
+        return false;
     };
+    let path = dir.join("settings.toml");
+    // A deleted file is made again from the default text, as at startup, instead of the shell's
+    // "cannot find the file" prompt. An existing file is never touched.
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        use std::io::Write;
+        let _ = f.write_all(naobi_core::settings::Settings::default_toml().as_bytes());
+    }
     let file = HSTRING::from(path.to_string_lossy().as_ref());
     // SAFETY: `file` and the static verb outlive the call; the other pointers are null.
-    let _ = unsafe {
+    let r = unsafe {
         ShellExecuteW(
             None,
             w!("open"),
@@ -309,6 +337,7 @@ fn open_settings() {
             SW_SHOWNORMAL,
         )
     };
+    r.0 as isize > 32
 }
 
 fn handle(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> Option<LRESULT> {

@@ -100,6 +100,9 @@ pub struct FooterView {
     pub primary: Option<String>,
     /// Shows the "Ctrl K Actions" chip.
     pub actions: bool,
+    /// A short confirmation that replaces the primary action for a moment, such as "Copied". It is
+    /// not a Notice: nothing is raised, nothing sticks.
+    pub confirmation: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

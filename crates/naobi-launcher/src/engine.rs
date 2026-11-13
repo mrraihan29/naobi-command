@@ -223,6 +223,7 @@ impl Launcher {
         let footer = FooterView {
             primary: target.and_then(|h| self.primary_label(h, armed == Some(h.id()))),
             actions: target.is_some(),
+            confirmation: None,
         };
         Screen {
             query: self.query.clone(),

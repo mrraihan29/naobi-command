@@ -39,6 +39,32 @@ impl KeyChord {
     }
 }
 
+/// The text `parse` reads back: "Ctrl+Alt+Left". A key outside the parser's table prints as "0x.."
+/// and does not parse, which only a hand-built chord can have.
+impl std::fmt::Display for KeyChord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (flag, name) in [(CTRL, "Ctrl"), (ALT, "Alt"), (SHIFT, "Shift"), (WIN, "Win")] {
+            if self.mods & flag != 0 {
+                write!(f, "{name}+")?;
+            }
+        }
+        match self.vk {
+            0x08 => write!(f, "Backspace"),
+            0x09 => write!(f, "Tab"),
+            0x0D => write!(f, "Enter"),
+            0x1B => write!(f, "Esc"),
+            0x20 => write!(f, "Space"),
+            0x25 => write!(f, "Left"),
+            0x26 => write!(f, "Up"),
+            0x27 => write!(f, "Right"),
+            0x28 => write!(f, "Down"),
+            v @ (0x30..=0x39 | 0x41..=0x5A) => write!(f, "{}", char::from(v as u8)),
+            v @ 0x70..=0x87 => write!(f, "F{}", v - 0x6F),
+            v => write!(f, "0x{v:X}"),
+        }
+    }
+}
+
 impl TryFrom<String> for KeyChord {
     type Error = ChordError;
     fn try_from(s: String) -> Result<Self, ChordError> {

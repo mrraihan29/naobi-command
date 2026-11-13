@@ -28,6 +28,8 @@ pub trait Host {
     fn notice(&mut self, n: Notice);
     /// Draws a new snapshot.
     fn post(&mut self, screen: Screen);
+    /// Calls `Controller::finish_close` after `ms` milliseconds.
+    fn close_later(&mut self, ms: u64);
 }
 
 pub struct SystemClock;
@@ -46,7 +48,13 @@ pub struct Controller {
     router: Router,
     /// The window that had focus when the Launcher opened (D-013).
     previous: Option<isize>,
+    /// A copy asked to hide: the Launcher shows "Copied" first and closes (with this focus choice)
+    /// when `finish_close` runs.
+    pending_close: Option<bool>,
 }
+
+/// How long "Copied" shows before the Launcher hides (DESIGN_SYSTEM).
+const CONFIRM_MS: u64 = 120;
 
 impl Controller {
     pub fn new(launcher: Launcher, router: Router) -> Self {
@@ -54,6 +62,24 @@ impl Controller {
             launcher,
             router,
             previous: None,
+            pending_close: None,
+        }
+    }
+
+    /// The engine's snapshot, with the "Copied" confirmation while a copy waits to close.
+    fn view(&self) -> Screen {
+        let mut s = self.launcher.screen();
+        if self.pending_close.is_some() {
+            s.footer.confirmation = Some("Copied".to_owned());
+        }
+        s
+    }
+
+    /// The confirmation has shown long enough: hides the Launcher now.
+    pub fn finish_close(&mut self, host: &mut dyn Host) {
+        if let Some(restore) = self.pending_close.take() {
+            self.close(host, restore);
+            host.post(self.view());
         }
     }
 
@@ -61,14 +87,14 @@ impl Controller {
     pub fn show(&mut self, host: &mut dyn Host) {
         self.previous = host.foreground();
         self.launcher.show_root();
-        host.post(self.launcher.screen());
+        host.post(self.view());
         host.show();
     }
 
     /// A source's index changed: ranks the current query again and posts it.
     pub fn refresh(&mut self, host: &mut dyn Host) {
         self.launcher.refresh_sources();
-        host.post(self.launcher.screen());
+        host.post(self.view());
     }
 
     /// The Launcher hotkey: closes an open Launcher like Esc does, otherwise opens it.
@@ -83,6 +109,7 @@ impl Controller {
     /// Hides the Launcher. `restore` gives focus back to the window that had it; a click elsewhere
     /// (`Dismissed`) must not take focus back from where the Owner clicked.
     fn close(&mut self, host: &mut dyn Host, restore: bool) {
+        self.pending_close = None;
         host.hide();
         let previous = self.previous.take();
         if let (true, Some(w)) = (restore, previous) {
@@ -94,7 +121,7 @@ impl Controller {
         let restore = !matches!(ev, UiEvent::Dismissed);
         let effects = self.launcher.handle(ev);
         self.execute(effects, restore, host);
-        host.post(self.launcher.screen());
+        host.post(self.view());
     }
 
     /// A module's hotkey: runs its handlers and executes what they asked for. False when no module
@@ -119,6 +146,7 @@ impl Controller {
     fn execute(&mut self, effects: Vec<Effect>, restore: bool, host: &mut dyn Host) {
         let mut hide = false;
         let mut launched = false;
+        let mut copied = false;
         for e in effects {
             match e {
                 Effect::Launch(t) => {
@@ -143,6 +171,8 @@ impl Controller {
                 Effect::CopyText(text) => {
                     if host.copy_text(&text).is_err() {
                         host.notice(failure("Copy", "The clipboard is busy, try again."));
+                    } else {
+                        copied = true;
                     }
                 }
                 Effect::Notice(n) => host.notice(n),
@@ -158,7 +188,11 @@ impl Controller {
         }
         // Every Notice was handed to the host, which shows it once.
         self.launcher.clear_notice();
-        if hide {
+        if hide && copied && !launched {
+            // Say "Copied" for 120 ms, then hide: a Notice would stay until seen.
+            self.pending_close = Some(restore);
+            host.close_later(CONFIRM_MS);
+        } else if hide {
             self.close(host, restore && !launched);
         }
     }
@@ -191,6 +225,7 @@ mod tests {
         launch_fails: bool,
         copy_fails: bool,
         posts: usize,
+        last_post: Option<Screen>,
     }
 
     impl Host for Fake {
@@ -231,8 +266,12 @@ mod tests {
             self.log
                 .push(format!("notice {}: {}", n.subject, n.message));
         }
-        fn post(&mut self, _s: Screen) {
+        fn post(&mut self, s: Screen) {
             self.posts += 1;
+            self.last_post = Some(s);
+        }
+        fn close_later(&mut self, ms: u64) {
+            self.log.push(format!("close_later {ms}"));
         }
     }
 
@@ -345,14 +384,28 @@ mod tests {
     fn r012_ctrl_enter_copies_then_hides_and_gives_focus_back() {
         let (mut c, mut h) = shown(Some(77));
         c.on_ui_event(key(Key::Enter, true), &mut h);
+        // "Copied" shows first; the Launcher hides when the 120 ms are over.
         assert_eq!(
             h.log,
             vec![
                 r"copy C:\Windows\notepad.exe".to_string(),
-                "hide".to_string(),
-                "restore 77".to_string()
+                "close_later 120".to_string()
             ]
         );
+        let confirmation = |h: &Fake| {
+            h.last_post
+                .as_ref()
+                .and_then(|s| s.footer.confirmation.clone())
+        };
+        assert_eq!(confirmation(&h).as_deref(), Some("Copied"));
+        h.log.clear();
+        c.finish_close(&mut h);
+        assert_eq!(h.log, vec!["hide".to_string(), "restore 77".to_string()]);
+        assert_eq!(confirmation(&h), None, "gone once the Launcher closed");
+        // A second call does nothing.
+        h.log.clear();
+        c.finish_close(&mut h);
+        assert!(h.log.is_empty());
     }
 
     // @R-012

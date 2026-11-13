@@ -100,6 +100,25 @@ fn placement(work: (i32, i32, i32, i32), dpi: u32) -> (i32, i32, i32, i32) {
     )
 }
 
+/// Height of the work area of the monitor under the cursor, in logical px (96 dpi). The Launcher is
+/// clamped to 90% of it, so a short screen or a large text scale never pushes the footer off.
+pub fn work_height_logical() -> f32 {
+    // SAFETY: Win32 calls on plain values; every out-pointer outlives its call.
+    unsafe {
+        let mut pt = POINT::default();
+        let _ = GetCursorPos(&mut pt);
+        let mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let _ = GetMonitorInfoW(mon, &mut mi);
+        let (mut dx, mut dy) = (96u32, 96u32);
+        let _ = GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
+        (mi.rcWork.bottom - mi.rcWork.top) as f32 * 96.0 / dx.max(1) as f32
+    }
+}
+
 /// Moves the cloaked window to the monitor under the cursor, uncloaks it and takes the foreground.
 pub fn show(h: isize) {
     let w = hwnd(h);

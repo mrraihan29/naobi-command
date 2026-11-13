@@ -66,6 +66,11 @@ impl UiHandle {
         });
     }
 
+    /// Switches the palette while the window lives (R-007: Windows changed light or dark).
+    pub fn set_theme(&self, theme: Theme) {
+        self.on_ui(move |ui, _| set_palette(ui, palette_of(theme)));
+    }
+
     pub fn show(&self) {
         self.on_ui(show_now);
     }
@@ -82,6 +87,13 @@ impl UiHandle {
             } else {
                 dwm::hide(hwnd)
             }
+        });
+    }
+
+    /// Runs `f` on the UI thread after `ms` milliseconds.
+    pub fn run_on_ui_after(&self, ms: u64, f: impl FnOnce() + Send + 'static) {
+        let _ = self.ui.upgrade_in_event_loop(move |_| {
+            slint::Timer::single_shot(Duration::from_millis(ms), f);
         });
     }
 
@@ -114,8 +126,18 @@ fn flush(ui: &AppWindow, pending: &Mutex<Option<Screen>>) {
 }
 
 fn show_now(ui: &AppWindow, hwnd: isize) {
+    // The size follows the monitor the Launcher is about to open on.
+    ui.set_work_height(dwm::work_height_logical());
+    resize(ui);
     dwm::show(hwnd);
     ui.invoke_focus_input();
+}
+
+fn palette_of(theme: Theme) -> &'static Palette {
+    match theme {
+        Theme::Paper => &tokens::PAPER,
+        Theme::Stone => &tokens::STONE,
+    }
 }
 
 fn set_palette(ui: &AppWindow, p: &Palette) {
@@ -161,6 +183,7 @@ fn apply(ui: &AppWindow, s: Screen) {
 
     ui.set_footer_primary(s.footer.primary.as_deref().unwrap_or_default().into());
     ui.set_footer_actions(s.footer.actions);
+    ui.set_footer_confirmation(s.footer.confirmation.as_deref().unwrap_or_default().into());
 
     let (kind, text, picture) = model::preview(s.preview.as_ref());
     ui.set_preview_kind(kind);
@@ -209,13 +232,7 @@ pub fn run(
     on_ready: impl FnOnce(UiHandle) + Send + 'static,
 ) -> Result<(), slint::PlatformError> {
     let ui = AppWindow::new()?;
-    set_palette(
-        &ui,
-        match theme {
-            Theme::Paper => &tokens::PAPER,
-            Theme::Stone => &tokens::STONE,
-        },
-    );
+    set_palette(&ui, palette_of(theme));
     // The window size comes from Rust only: 750 x frame_height, here at 100% and no work area.
     resize(&ui);
     let on_event = Rc::new(on_event);
@@ -410,6 +427,7 @@ mod ui_check {
         results.footer = FooterView {
             primary: Some("Open".into()),
             actions: true,
+            ..FooterView::default()
         };
 
         let mut panel = results.clone();
@@ -473,6 +491,7 @@ mod ui_check {
         notice.footer = FooterView {
             primary: Some("Confirm".into()),
             actions: true,
+            ..FooterView::default()
         };
         let mut empty = screen(vec![]);
         empty.empty = Some(EmptyView {

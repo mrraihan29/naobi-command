@@ -12,10 +12,11 @@ pub const MAX_ROWS: usize = 50;
 pub const EMPTY_QUERY_ROWS: usize = 10;
 /// File rows kept in the trailing section (D-016).
 pub const MAX_FILE_ROWS: usize = 30;
-/// Weak-match floor for queries of three or more characters (D-016). Three-letter matches in a
-/// word score 60 or more; on a synthetic 10,000-title set nothing useful scores between 55 and 62.
-/// Not yet tuned on the real catalog (see coder-ncmd14.md).
-pub const MIN_FUZZY: u32 = 60;
+/// Weak-match floor for queries of three or more characters (D-016). Tuned on the Owner's real
+/// catalog (202 apps, 2026-11-14): matches at the start of a word score 71 to 88, while letters
+/// scattered across a title ("wor" in Windows Memory Diagnostic, "cal" in ArtCraft Launcher) score
+/// 60 to 68. The floor sits between the two.
+pub const MIN_FUZZY: u32 = 70;
 /// A frecency boost is worth 5 points per decayed open (min with the cap below).
 const BOOST_PER_OPEN: f64 = 5.0;
 /// The boost never exceeds this share of the fuzzy score (R-012 v2).
@@ -204,8 +205,8 @@ mod tests {
 
     #[test]
     fn floor_is_inclusive_at_three_letters() {
-        assert!(passes_floor(60, 3));
-        assert!(!passes_floor(59, 3));
+        assert!(passes_floor(MIN_FUZZY, 3));
+        assert!(!passes_floor(MIN_FUZZY - 1, 3));
         assert_eq!(floor_for(3), MIN_FUZZY);
     }
 

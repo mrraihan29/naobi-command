@@ -113,6 +113,23 @@ fn r009_retention_purges_old_and_excess() {
 
 // @R-009
 #[test]
+fn r009_start_up_purge_removes_old_entries_without_a_new_copy() {
+    let (mut h, clock) = history();
+    let old = id_of(&store(&mut h, text("old")));
+    let pinned = id_of(&store(&mut h, text("kept")));
+    h.pin(pinned).expect("pin");
+    clock.advance(31 * DAY_MS);
+    let p = h.purge_now().expect("purge");
+    assert_eq!((p.expired, p.excess, p.evicted), (1, 0, 0));
+    assert!(h.get(old).ok().flatten().is_none());
+    assert!(
+        h.get(pinned).ok().flatten().is_some(),
+        "pinned entries stay"
+    );
+}
+
+// @R-009
+#[test]
 fn r009_exclusion_flag_not_stored() {
     let (mut h, _) = history();
     let flagged = [

@@ -45,12 +45,14 @@ fn restorable(content: Content) -> Option<Content> {
 struct Board;
 
 impl Pasteboard for Board {
-    fn snapshot(&mut self) -> Snapshot {
-        let Some(captured) = clipboard::read().and_then(to_captured) else {
-            return Snapshot {
+    fn snapshot(&mut self) -> Option<Snapshot> {
+        // None: the clipboard is busy. An empty one is a snapshot with nothing to restore.
+        let read = clipboard::read()?;
+        let Some(captured) = to_captured(read) else {
+            return Some(Snapshot {
                 content: None,
                 excluded: false,
-            };
+            });
         };
         // The same list the capture uses, so the two cannot disagree.
         let ignored = shared()
@@ -67,10 +69,10 @@ impl Pasteboard for Board {
             skip_reason(&captured, &ignored),
             Some(Skip::Excluded | Skip::IgnoredApp)
         );
-        Snapshot {
+        Some(Snapshot {
             content: restorable(captured.content),
             excluded,
-        }
+        })
     }
 
     fn write(&mut self, payload: &Payload) -> bool {

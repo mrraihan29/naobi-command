@@ -3,13 +3,18 @@
 //! foreground and not elevated, send Ctrl+V, and about 300 ms later put the previous clipboard back
 //! unless another copy happened or that clipboard was meant to stay out of history.
 use crate::ports::Content;
+use zeroize::Zeroizing;
 
 /// What goes on the clipboard: text, a picture (the PNG and its bitmap form, so every program can
 /// read one of them) or a list of files.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Payload {
-    Text(String),
-    Image { png: Vec<u8>, dib: Vec<u8> },
+    Text(Zeroizing<String>),
+    Image {
+        png: Zeroizing<Vec<u8>>,
+        dib: Zeroizing<Vec<u8>>,
+    },
+    // ponytail: paths only, not wiped; wrap them if file names ever count as secrets.
     Files(Vec<String>),
 }
 
@@ -23,7 +28,8 @@ pub struct Snapshot {
 }
 
 pub trait Pasteboard {
-    fn snapshot(&mut self) -> Snapshot;
+    /// None when the clipboard cannot be read (busy): an empty clipboard is `Some` with no content.
+    fn snapshot(&mut self) -> Option<Snapshot>;
     /// Writes with the private marker (D-019), so the capture never stores it.
     fn write(&mut self, payload: &Payload) -> bool;
     /// Writes the snapshot back, with the private marker.
@@ -74,7 +80,10 @@ pub fn paste(
     let Some(target) = target else {
         return Outcome::Aborted(Abort::NoTarget);
     };
-    let snapshot = board.snapshot();
+    // Without the previous clipboard there would be no way back from the write.
+    let Some(snapshot) = board.snapshot() else {
+        return Outcome::Aborted(Abort::WriteFailed);
+    };
     if !board.write(payload) {
         return Outcome::Aborted(Abort::WriteFailed);
     }

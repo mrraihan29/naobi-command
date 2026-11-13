@@ -136,7 +136,6 @@ pub fn preview(p: Option<&PreviewView>) -> (i32, SharedString, Image) {
             Some(img) => (2, blank().0, img),
             None => (4, "Cannot read this entry".into(), Image::default()),
         },
-        Some(PreviewView::Loading) => (3, blank().0, Image::default()),
         Some(PreviewView::Error(message)) => (4, message.as_str().into(), Image::default()),
         Some(PreviewView::Empty) => (5, blank().0, Image::default()),
     }
@@ -385,7 +384,6 @@ mod tests {
     fn preview_kinds_match_the_slint_codes() {
         let text = preview(Some(&PreviewView::Text("hello".into())));
         assert_eq!((text.0, text.1.as_str()), (1, "hello"));
-        assert_eq!(preview(Some(&PreviewView::Loading)).0, 3);
         let error = preview(Some(&PreviewView::Error("Cannot read this entry".into())));
         assert_eq!((error.0, error.1.as_str()), (4, "Cannot read this entry"));
         assert_eq!(preview(Some(&PreviewView::Empty)).0, 5);

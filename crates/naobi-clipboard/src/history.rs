@@ -132,6 +132,51 @@ pub fn prepare(c: &Captured, ignored: &[String]) -> Result<Prepared, Skip> {
     Ok(p)
 }
 
+/// Retention in the caller's transaction: age, entry count, then the size cap, oldest first. Pinned
+/// entries are exempt from every purge; `keep` is never evicted by the size cap.
+fn purge(
+    tx: &rusqlite::Connection,
+    now: i64,
+    limits: &Limits,
+    keep: Option<i64>,
+) -> rusqlite::Result<Purged> {
+    let expired = tx.execute(
+        "DELETE FROM clip_entry WHERE pinned = 0 AND last_copied_at < ?1",
+        [now - limits.retention_days * 86_400],
+    )?;
+    let excess = tx.execute(
+        "DELETE FROM clip_entry WHERE pinned = 0 AND id NOT IN
+           (SELECT id FROM clip_entry WHERE pinned = 0
+            ORDER BY last_copied_at DESC, id DESC LIMIT ?1)",
+        [limits.max_entries as i64],
+    )?;
+    let mut evicted = 0;
+    loop {
+        let total: i64 = tx.query_row(
+            "SELECT COALESCE(SUM(byte_size), 0) FROM clip_entry",
+            [],
+            |r| r.get(0),
+        )?;
+        if total <= limits.store_cap_bytes {
+            break;
+        }
+        let n = tx.execute(
+            "DELETE FROM clip_entry WHERE id = (SELECT id FROM clip_entry
+               WHERE pinned = 0 AND id IS NOT ?1 ORDER BY last_copied_at ASC, id ASC LIMIT 1)",
+            [keep],
+        )?;
+        if n == 0 {
+            break;
+        }
+        evicted += n;
+    }
+    Ok(Purged {
+        expired,
+        excess,
+        evicted,
+    })
+}
+
 impl History {
     pub fn new(db: Db, cipher: Box<dyn Cipher>, clock: Box<dyn Clock>) -> Self {
         Self {
@@ -210,6 +255,15 @@ impl History {
         }
     }
 
+    /// Retention without a new copy: called once at start-up, so entries past 30 days go even when
+    /// nothing is copied for a while.
+    pub fn purge_now(&mut self) -> Result<Purged, Error> {
+        let (now, limits) = (self.now_s(), self.limits);
+        let purged = self.db.transaction(|tx| purge(tx, now, &limits, None))?;
+        self.index = None;
+        Ok(purged)
+    }
+
     /// The exe names whose copies are never kept.
     pub fn ignored(&self) -> &[String] {
         &self.ignored
@@ -259,41 +313,11 @@ impl History {
                     Stored::New(id)
                 }
             };
-            // Pinned entries are exempt from every purge below.
-            let expired = tx.execute(
-                "DELETE FROM clip_entry WHERE pinned = 0 AND last_copied_at < ?1",
-                [now - limits.retention_days * 86_400],
-            )?;
-            let excess = tx.execute(
-                "DELETE FROM clip_entry WHERE pinned = 0 AND id NOT IN
-                   (SELECT id FROM clip_entry WHERE pinned = 0
-                    ORDER BY last_copied_at DESC, id DESC LIMIT ?1)",
-                [limits.max_entries as i64],
-            )?;
-            let mut evicted = 0;
-            loop {
-                let total: i64 =
-                    tx.query_row("SELECT COALESCE(SUM(byte_size), 0) FROM clip_entry", [], |r| {
-                        r.get(0)
-                    })?;
-                if total <= limits.store_cap_bytes {
-                    break;
-                }
-                // The oldest unpinned entry that is not the one just stored goes first.
-                let keep = match stored {
-                    Stored::New(id) | Stored::Refreshed(id) => id,
-                };
-                let n = tx.execute(
-                    "DELETE FROM clip_entry WHERE id = (SELECT id FROM clip_entry
-                       WHERE pinned = 0 AND id <> ?1 ORDER BY last_copied_at ASC, id ASC LIMIT 1)",
-                    [keep],
-                )?;
-                if n == 0 {
-                    break;
-                }
-                evicted += n;
-            }
-            Ok((stored, Purged { expired, excess, evicted }))
+            let keep = match stored {
+                Stored::New(id) | Stored::Refreshed(id) => id,
+            };
+            let purged = purge(tx, now, &limits, Some(keep))?;
+            Ok((stored, purged))
         })?;
         // The index no longer matches the table.
         self.index = None;
@@ -404,7 +428,9 @@ impl History {
             return Ok(None);
         };
         Ok(match meta.kind {
-            Kind::Text => Some(Payload::Text(String::from_utf8_lossy(&data).into_owned())),
+            Kind::Text => Some(Payload::Text(Zeroizing::new(
+                String::from_utf8_lossy(&data).into_owned(),
+            ))),
             Kind::Files => Some(Payload::Files(
                 String::from_utf8_lossy(&data)
                     .lines()
@@ -412,8 +438,8 @@ impl History {
                     .collect(),
             )),
             Kind::Image => crate::image::png_to_dib(&data).map(|dib| Payload::Image {
-                png: data.to_vec(),
-                dib,
+                png: Zeroizing::new(data.to_vec()),
+                dib: Zeroizing::new(dib),
             }),
         })
     }

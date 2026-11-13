@@ -19,20 +19,21 @@ struct World {
 struct Board {
     w: Rc<World>,
     excluded: bool,
+    unreadable: bool,
 }
 
 impl Pasteboard for Board {
-    fn snapshot(&mut self) -> Snapshot {
-        Snapshot {
+    fn snapshot(&mut self) -> Option<Snapshot> {
+        (!self.unreadable).then(|| Snapshot {
             content: self.w.clipboard.borrow().clone(),
             excluded: self.excluded,
-        }
+        })
     }
     fn write(&mut self, payload: &Payload) -> bool {
         self.w.seq.set(self.w.seq.get() + 1);
         self.w.log.borrow_mut().push("write".into());
         if let Payload::Text(t) = payload {
-            *self.w.clipboard.borrow_mut() = Some(Content::Text(t.clone()));
+            *self.w.clipboard.borrow_mut() = Some(Content::Text((**t).clone()));
         }
         true
     }
@@ -109,11 +110,12 @@ fn run(excluded: bool, tweak: impl FnOnce(&mut Fg)) -> (Outcome, Rc<World>) {
     let mut board = Board {
         w: w.clone(),
         excluded,
+        unreadable: false,
     };
     let mut f = fg(&w);
     tweak(&mut f);
     let out = paste(
-        &Payload::Text("entry".into()),
+        &Payload::Text("entry".to_owned().into()),
         Some(TARGET),
         &mut board,
         &mut f,
@@ -201,9 +203,36 @@ fn r015_no_target_pastes_nothing() {
     let mut board = Board {
         w: w.clone(),
         excluded: false,
+        unreadable: false,
     };
     let mut f = fg(&w);
-    let out = paste(&Payload::Text("x".into()), None, &mut board, &mut f);
+    let out = paste(
+        &Payload::Text("x".to_owned().into()),
+        None,
+        &mut board,
+        &mut f,
+    );
     assert_eq!(out, Outcome::Aborted(Abort::NoTarget));
     assert!(log(&w).is_empty(), "the clipboard is not touched");
+}
+
+// @R-015
+#[test]
+fn r015_unreadable_clipboard_aborts_before_writing() {
+    // Busy clipboard: the previous content could not be put back, so nothing is written.
+    let w = Rc::new(World::default());
+    let mut board = Board {
+        w: w.clone(),
+        excluded: false,
+        unreadable: true,
+    };
+    let mut f = fg(&w);
+    let out = paste(
+        &Payload::Text("x".to_owned().into()),
+        Some(TARGET),
+        &mut board,
+        &mut f,
+    );
+    assert_eq!(out, Outcome::Aborted(Abort::WriteFailed));
+    assert!(log(&w).is_empty());
 }

@@ -13,26 +13,26 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
 };
+use zeroize::Zeroizing;
 
 use crate::clipboard_marker::{global, marker_format, open_clipboard};
 
 /// One clipboard format and its bytes.
-type Format = (u32, Vec<u8>);
+type Format<'a> = (u32, &'a [u8]);
 
 /// Replaces the clipboard with `formats` plus the private marker, in one open.
-fn write_formats(formats: &[Format]) -> std::io::Result<()> {
+fn write_formats(formats: &[Format<'_>]) -> std::io::Result<()> {
     open_clipboard()?;
     let result = (|| {
         // SAFETY: the clipboard is open on this thread; each block is handed to SetClipboardData,
         // which owns it after a successful call, and freed here after a failed one.
         unsafe {
             EmptyClipboard()?;
-            for (format, bytes) in formats
+            for &(format, bytes) in formats
                 .iter()
-                .cloned()
-                .chain(std::iter::once((marker_format(), vec![1u8])))
+                .chain(std::iter::once(&(marker_format(), &[1u8][..])))
             {
-                let mem = global(&bytes)?;
+                let mem = global(bytes)?;
                 if let Err(e) = SetClipboardData(format, Some(HANDLE(mem.0))) {
                     let _ = GlobalFree(Some(mem));
                     return Err(e);
@@ -46,31 +46,31 @@ fn write_formats(formats: &[Format]) -> std::io::Result<()> {
     Ok(result.and(closed)?)
 }
 
-fn wide_bytes(s: &str) -> Vec<u8> {
-    s.encode_utf16()
-        .chain(std::iter::once(0))
-        .flat_map(u16::to_le_bytes)
-        .collect()
+/// UTF-16 with a NUL; wiped on drop because it can hold a copied secret (T-014).
+fn wide_bytes(s: &str) -> Zeroizing<Vec<u8>> {
+    Zeroizing::new(
+        s.encode_utf16()
+            .chain(std::iter::once(0))
+            .flat_map(u16::to_le_bytes)
+            .collect(),
+    )
 }
 
 /// Text, with the marker.
 pub fn write_text(text: &str) -> std::io::Result<()> {
-    write_formats(&[(u32::from(CF_UNICODETEXT.0), wide_bytes(text))])
+    write_formats(&[(u32::from(CF_UNICODETEXT.0), &wide_bytes(text))])
 }
 
 /// A picture as the bitmap every program reads and as PNG for the ones that prefer it.
 pub fn write_image(png: &[u8], dib: &[u8]) -> std::io::Result<()> {
     // SAFETY: a static format name; the id is plain data.
     let png_format = unsafe { RegisterClipboardFormatW(w!("PNG")) };
-    write_formats(&[
-        (u32::from(CF_DIB.0), dib.to_vec()),
-        (png_format, png.to_vec()),
-    ])
+    write_formats(&[(u32::from(CF_DIB.0), dib), (png_format, png)])
 }
 
 /// A bitmap only (the previous clipboard coming back).
 pub fn write_dib(dib: &[u8]) -> std::io::Result<()> {
-    write_formats(&[(u32::from(CF_DIB.0), dib.to_vec())])
+    write_formats(&[(u32::from(CF_DIB.0), dib)])
 }
 
 /// A file list as `CF_HDROP`: a DROPFILES header, then each path and an extra NUL.
@@ -82,10 +82,10 @@ pub fn write_files(paths: &[String]) -> std::io::Result<()> {
     data.extend_from_slice(&0u32.to_le_bytes());
     data.extend_from_slice(&1u32.to_le_bytes());
     for p in paths {
-        data.extend(wide_bytes(p));
+        data.extend_from_slice(&wide_bytes(p));
     }
     data.extend_from_slice(&[0, 0]);
-    write_formats(&[(u32::from(CF_HDROP.0), data)])
+    write_formats(&[(u32::from(CF_HDROP.0), &data)])
 }
 
 /// The foreground window now, as a plain value (0 when there is none).

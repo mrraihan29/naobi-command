@@ -516,7 +516,6 @@ mod ui_check {
         loading.action_panel = None;
         loading.loading = true;
         loading.text_scale = 1.25;
-        loading.preview = Some(PreviewView::Loading);
 
         vec![
             ("results", results),

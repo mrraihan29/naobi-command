@@ -40,6 +40,15 @@ pub fn register(m: &mut Modules) {
         return;
     };
     let history = SHARED.get_or_init(|| share(history)).clone();
+    if let Ok(p) = history
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .purge_now()
+    {
+        if p.expired + p.excess + p.evicted > 0 {
+            logging::clipboard_purge(p.expired, p.excess, p.evicted);
+        }
+    }
     let (tx, rx): (Sender<Change>, Receiver<Change>) = mpsc::channel();
     let spawned = std::thread::Builder::new()
         .name("clipboard".into())

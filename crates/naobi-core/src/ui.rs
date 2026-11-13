@@ -114,7 +114,6 @@ pub enum PreviewView {
         height: u32,
         rgba: Vec<u8>,
     },
-    Loading,
     /// Message text, for example "Cannot read this entry".
     Error(String),
     Empty,

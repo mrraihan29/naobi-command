@@ -226,13 +226,6 @@ component PreviewPane inherits Rectangle {
         source: root.picture;
         image-fit: contain;
     }
-    if root.kind == 3 : Text {
-        x: 12px;
-        y: 12px;
-        text: "Decrypting";
-        font-size: 13px * Tokens.scale;
-        color: Tokens.text-muted;
-    }
     if root.kind == 4 : Text {
         x: 12px;
         y: 12px;

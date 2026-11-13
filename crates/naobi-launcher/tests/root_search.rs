@@ -10,6 +10,7 @@ use naobi_core::ui::{Key, KeyChord, PreviewView, Screen, UiEvent};
 use naobi_core::view_source::{Preview, ViewSource};
 use naobi_launcher::frecency::Frecency;
 use naobi_launcher::{Clock, Launcher};
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -54,8 +55,8 @@ struct Apps {
 }
 
 impl CommandSource for Apps {
-    fn items(&self, _q: &Query) -> Vec<Item> {
-        self.items.clone()
+    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
+        Cow::Borrowed(&self.items)
     }
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
         vec![action("open", "Open"), action("copy", "Copy path")]
@@ -94,8 +95,8 @@ struct Clip {
 }
 
 impl CommandSource for Clip {
-    fn items(&self, _q: &Query) -> Vec<Item> {
-        self.entries.clone()
+    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
+        Cow::Borrowed(&self.entries)
     }
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
         vec![]

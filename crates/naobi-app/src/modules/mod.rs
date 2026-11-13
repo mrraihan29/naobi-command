@@ -141,8 +141,8 @@ mod tests {
 
     struct Empty;
     impl CommandSource for Empty {
-        fn items(&self, _q: &naobi_core::command::Query) -> Vec<Item> {
-            vec![]
+        fn items(&self, _q: &naobi_core::command::Query) -> std::borrow::Cow<'_, [Item]> {
+            std::borrow::Cow::Borrowed(&[])
         }
         fn actions(&self, _id: &ItemId) -> Vec<Action> {
             vec![]

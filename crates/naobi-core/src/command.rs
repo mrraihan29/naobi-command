@@ -3,6 +3,7 @@ use crate::effect::{Effect, LaunchTarget};
 use crate::ids::{ActionId, ItemId};
 use crate::item::{Action, Item};
 use crate::notice::Notice;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Query {
@@ -42,7 +43,10 @@ pub enum Outcome {
 }
 
 pub trait CommandSource: Send + Sync {
-    fn items(&self, q: &Query) -> Vec<Item>;
+    /// The candidates for `q`. A source with a fixed index lends it (`Cow::Borrowed`), so a
+    /// keystroke clones nothing; a source that builds items per query (a calculator) returns them
+    /// owned. The engine ranks the list and clones only the rows it shows (R-006).
+    fn items(&self, q: &Query) -> Cow<'_, [Item]>;
     fn actions(&self, id: &ItemId) -> Vec<Action>;
     fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome;
 }

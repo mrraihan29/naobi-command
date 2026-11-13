@@ -177,6 +177,7 @@ mod tests {
     use naobi_core::item::{Action, Item, ItemKind};
     use naobi_core::ui::{Key, KeyChord};
     use naobi_launcher::frecency::Frecency;
+    use std::borrow::Cow;
 
     #[derive(Default)]
     struct Fake {
@@ -235,7 +236,7 @@ mod tests {
     struct Apps;
 
     impl CommandSource for Apps {
-        fn items(&self, _q: &Query) -> Vec<Item> {
+        fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
             vec![Item {
                 id: ItemId("app:notepad".into()),
                 title: "Notepad".into(),
@@ -246,6 +247,7 @@ mod tests {
                 primary: ActionId("open".into()),
                 secondary: Some(ActionId("copy".into())),
             }]
+            .into()
         }
         fn actions(&self, _id: &ItemId) -> Vec<Action> {
             vec![]
@@ -271,7 +273,7 @@ mod tests {
     struct One(Outcome);
 
     impl CommandSource for One {
-        fn items(&self, q: &Query) -> Vec<Item> {
+        fn items(&self, q: &Query) -> Cow<'_, [Item]> {
             Apps.items(q)
         }
         fn actions(&self, _id: &ItemId) -> Vec<Action> {

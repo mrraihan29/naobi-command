@@ -16,6 +16,7 @@ use naobi_core::ui::{
     Screen, Section, UiEvent,
 };
 use naobi_core::view_source::{Preview, ViewSource};
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,22 +224,21 @@ impl Launcher {
     fn refresh(&mut self) {
         let text = self.query.trim().to_owned();
         let q = Query { text: text.clone() };
-        let mut pool = Vec::new();
-        match self.mode {
-            Mode::Root => {
-                for (i, s) in self.sources.iter().enumerate() {
-                    pool.extend(s.items(&q).into_iter().map(|it| (Source::Root(i), it)));
-                }
-            }
+        // Each source lends or hands over its list; ranking borrows from these and clones the winners.
+        let lists: Vec<(Source, Cow<[Item]>)> = match self.mode {
+            Mode::Root => self
+                .sources
+                .iter()
+                .enumerate()
+                .map(|(i, s)| (Source::Root(i), s.items(&q)))
+                .collect(),
             Mode::Pushed(i) | Mode::Hotkey(i) => {
-                pool.extend(
-                    self.views[i]
-                        .items(&q)
-                        .into_iter()
-                        .map(|it| (Source::View(i), it)),
-                );
+                vec![(Source::View(i), self.views[i].items(&q))]
             }
-        }
+        };
+        let pool = lists
+            .iter()
+            .flat_map(|(src, items)| items.iter().map(move |it| (*src, it)));
         let limit = if text.is_empty() {
             EMPTY_QUERY_ROWS
         } else {

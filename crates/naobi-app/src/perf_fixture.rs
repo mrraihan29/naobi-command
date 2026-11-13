@@ -3,6 +3,7 @@
 use naobi_core::command::{CommandSource, Cx, Outcome, Query};
 use naobi_core::ids::{ActionId, ItemId};
 use naobi_core::item::{Action, Item, ItemKind};
+use std::borrow::Cow;
 
 const WORDS: [&str; 64] = [
     "visual",
@@ -99,8 +100,8 @@ impl PerfSource {
 }
 
 impl CommandSource for PerfSource {
-    fn items(&self, _q: &Query) -> Vec<Item> {
-        self.items.clone()
+    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
+        Cow::Borrowed(&self.items)
     }
 
     fn actions(&self, _id: &ItemId) -> Vec<Action> {
@@ -122,7 +123,7 @@ impl CommandSource for PerfSource {
 pub struct TestTarget(pub String);
 
 impl CommandSource for TestTarget {
-    fn items(&self, _q: &Query) -> Vec<Item> {
+    fn items(&self, _q: &Query) -> Cow<'_, [Item]> {
         vec![Item {
             id: ItemId("test:target".into()),
             title: "naobitarget".into(),
@@ -133,6 +134,7 @@ impl CommandSource for TestTarget {
             primary: ActionId("open".into()),
             secondary: None,
         }]
+        .into()
     }
 
     fn actions(&self, _id: &ItemId) -> Vec<Action> {

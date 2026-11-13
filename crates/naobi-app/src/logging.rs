@@ -173,7 +173,12 @@ mod tests {
     fn capture(f: impl FnOnce()) -> String {
         let buf = Buf::default();
         let sink = buf.clone();
-        tracing::subscriber::with_default(subscriber(move || sink.clone()), f);
+        tracing::subscriber::with_default(subscriber(move || sink.clone()), || {
+            // Another test thread may have hit a callsite first with no subscriber and cached it as
+            // disabled; rebuild so this subscriber sees every event.
+            tracing::callsite::rebuild_interest_cache();
+            f();
+        });
         let bytes = buf.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
         String::from_utf8_lossy(&bytes).into_owned()
     }

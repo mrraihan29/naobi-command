@@ -70,7 +70,16 @@ impl Hit {
     }
 }
 
-fn order(a: &Hit, b: &Hit) -> Ordering {
+/// A scored candidate that still borrows its item; only the winners are cloned into `Hit`s.
+struct Cand<'a> {
+    src: Source,
+    item: &'a Item,
+    exact: bool,
+    total: f64,
+    opens: f64,
+}
+
+fn order(a: &Cand, b: &Cand) -> Ordering {
     b.exact
         .cmp(&a.exact)
         .then_with(|| b.total.total_cmp(&a.total))
@@ -96,21 +105,21 @@ impl Default for Ranker {
 impl Ranker {
     /// The best `limit` hits for `text` (trimmed), in display order. Empty `text` keeps everything
     /// and orders by `opens` (the most frecent first).
-    pub fn rank(
+    pub fn rank<'a>(
         &mut self,
         text: &str,
-        pool: Vec<(Source, Item)>,
+        pool: impl IntoIterator<Item = (Source, &'a Item)>,
         opens: impl Fn(&ItemId) -> f64,
         limit: usize,
     ) -> Vec<Hit> {
         let pat = (!text.is_empty())
             .then(|| Pattern::parse(text, CaseMatching::Ignore, Normalization::Smart));
         let chars = text.chars().count();
-        let mut hits = Vec::with_capacity(pool.len().min(limit * 2));
+        let mut hits = Vec::new();
         for (src, item) in pool {
             let Some(pat) = &pat else {
                 let opens = opens(&item.id);
-                hits.push(Hit {
+                hits.push(Cand {
                     src,
                     item,
                     exact: false,
@@ -125,7 +134,7 @@ impl Ranker {
                 .is_some_and(|a| a.eq_ignore_ascii_case(text));
             // A row needs a real subsequence match, whatever the query length. The score floor only
             // applies to matches that exist; an alias hit is always a row.
-            let fuzzy = match self.best(pat, &item) {
+            let fuzzy = match self.best(pat, item) {
                 Some(f) => f,
                 None if exact => 0,
                 None => continue,
@@ -136,7 +145,7 @@ impl Ranker {
             let opens = opens(&item.id);
             let f = f64::from(fuzzy);
             let total = f + boost(f, opens);
-            hits.push(Hit {
+            hits.push(Cand {
                 src,
                 item,
                 exact,
@@ -149,7 +158,15 @@ impl Ranker {
             hits.truncate(limit);
         }
         hits.sort_by(order);
-        hits
+        hits.into_iter()
+            .map(|c| Hit {
+                src: c.src,
+                item: c.item.clone(),
+                exact: c.exact,
+                total: c.total,
+                opens: c.opens,
+            })
+            .collect()
     }
 
     /// The better of the title and any keyword.
@@ -215,12 +232,14 @@ mod tests {
     #[test]
     fn rank_keeps_exactly_limit_rows() {
         let pool: Vec<_> = (0..10).map(pooled).collect();
-        assert_eq!(Ranker::default().rank("", pool, |_| 0.0, 10).len(), 10);
+        let refs = pool.iter().map(|(s, i)| (*s, i));
+        assert_eq!(Ranker::default().rank("", refs, |_| 0.0, 10).len(), 10);
     }
 
     #[test]
     fn rank_truncates_one_row_over_limit() {
         let pool: Vec<_> = (0..11).map(pooled).collect();
-        assert_eq!(Ranker::default().rank("", pool, |_| 0.0, 10).len(), 10);
+        let refs = pool.iter().map(|(s, i)| (*s, i));
+        assert_eq!(Ranker::default().rank("", refs, |_| 0.0, 10).len(), 10);
     }
 }

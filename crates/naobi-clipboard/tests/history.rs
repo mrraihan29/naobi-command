@@ -339,21 +339,19 @@ impl ClipSource for FakeSource {
 // @D-014
 #[test]
 fn d014_capture_discards_read_if_sequence_changed() {
-    let (mut h, _) = history();
+    let (h, _) = history();
+    let h = std::sync::Mutex::new(h);
     let mut src = FakeSource {
         seq: Cell::new(7),
         bump_on_read: true,
         content: text("half-written"),
     };
-    assert_eq!(capture(&src, 7, &mut h).ok(), Some(Capture::Discarded));
-    assert_eq!(count(&h), 0);
+    assert_eq!(capture(&src, 7, &h).ok(), Some(Capture::Discarded));
+    assert_eq!(count(&h.lock().unwrap()), 0);
     src.bump_on_read = false;
     let seq = src.seq.get();
-    assert!(matches!(
-        capture(&src, seq, &mut h),
-        Ok(Capture::Decided(_))
-    ));
-    assert_eq!(count(&h), 1);
+    assert!(matches!(capture(&src, seq, &h), Ok(Capture::Decided(_))));
+    assert_eq!(count(&h.lock().unwrap()), 1);
 }
 
 // @D-019
@@ -402,22 +400,17 @@ fn d014_text_index_dropped_after_60s() {
     assert!(!h.index_loaded());
     assert_eq!(h.search("WORLD").ok(), Some(vec![a]), "case-insensitive");
     assert!(h.index_loaded());
-    h.view_closed();
     clock.advance(INDEX_TTL_MS - 1);
     h.tick();
     assert!(h.index_loaded(), "not yet");
     clock.advance(1);
     h.tick();
-    assert!(!h.index_loaded(), "dropped 60 s after the view closed");
-    // Opening the view again within the window keeps it.
+    assert!(!h.index_loaded(), "dropped 60 s after the last search");
+    // A search within the window keeps it.
     assert_eq!(h.search("another").ok().map(|v| v.len()), Some(1));
-    h.view_closed();
     clock.advance(INDEX_TTL_MS / 2);
     assert!(h.search("hello").is_ok());
-    clock.advance(INDEX_TTL_MS);
+    clock.advance(INDEX_TTL_MS / 2 + 1);
     h.tick();
-    assert!(
-        h.index_loaded(),
-        "a search reopened the view, so no drop is pending"
-    );
+    assert!(h.index_loaded(), "the second search restarted the clock");
 }

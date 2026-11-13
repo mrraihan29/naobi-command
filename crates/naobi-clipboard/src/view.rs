@@ -16,6 +16,7 @@ pub type Shared = Arc<Mutex<History>>;
 
 pub const VIEW_ID: &str = "clipboard";
 const ROWS: usize = 50;
+const UNREADABLE: &str = "Cannot read this entry";
 const TITLE_CHARS: usize = 100;
 /// The preview pane shows at most this many characters of a text entry.
 const PREVIEW_CHARS: usize = 20_000;
@@ -54,7 +55,11 @@ pub fn relative(now: i64, then: i64) -> String {
 }
 
 fn first_line(preview: &str) -> String {
-    let line = preview.lines().next().unwrap_or("").trim();
+    let line = preview
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("");
     line.chars()
         .take(TITLE_CHARS)
         .map(|c| if c.is_control() { ' ' } else { c })
@@ -71,14 +76,19 @@ impl ClipboardView {
     }
 
     fn row(h: &History, m: EntryMeta, now: i64) -> Option<Item> {
-        let preview = h.preview(m.id).ok().flatten()?;
+        // An entry that no longer decrypts stays in the list, so it can be deleted.
+        let title = match h.preview(m.id) {
+            Ok(Some(p)) => first_line(&p),
+            Ok(None) => return None,
+            Err(_) => UNREADABLE.to_owned(),
+        };
         let mut subtitle = relative(now, m.last_copied_at);
         if m.pinned {
             subtitle.push_str(" · Pinned");
         }
         Some(Item {
             id: ItemId(format!("clip:{}", m.id)),
-            title: first_line(&preview),
+            title,
             subtitle,
             keywords: Vec::new(),
             alias: None,
@@ -188,7 +198,10 @@ impl ViewSource for ClipboardView {
         let n = entry_id(id)?;
         let h = lock(&self.history);
         let meta = h.get(n).ok().flatten()?;
-        let payload = h.payload(n).ok().flatten()?;
+        let payload = match h.payload(n) {
+            Ok(p) => p?,
+            Err(_) => return Some(Preview::Text(UNREADABLE.to_owned())),
+        };
         match meta.kind {
             Kind::Text => Some(Preview::Text(
                 String::from_utf8_lossy(&payload)

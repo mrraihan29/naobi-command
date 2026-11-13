@@ -2,7 +2,7 @@
 //! `clipboard_capture`; both share one `History`.
 use super::clipboard_capture::{shared, to_captured};
 use super::Modules;
-use naobi_clipboard::filters::{skip_reason, Skip, DEFAULT_IGNORED};
+use naobi_clipboard::filters::{skip_reason, Skip};
 use naobi_clipboard::limits::{MAX_BITMAP_BYTES, MAX_FILE_PATHS, MAX_TEXT_BYTES};
 use naobi_clipboard::paste::{paste, Abort, ForegroundOps, Outcome, Pasteboard, Payload, Snapshot};
 use naobi_clipboard::view::{ClipboardCommands, ClipboardView, Shared, VIEW_ID};
@@ -52,7 +52,15 @@ impl Pasteboard for Board {
                 excluded: false,
             };
         };
-        let ignored: Vec<String> = DEFAULT_IGNORED.iter().map(|s| (*s).to_owned()).collect();
+        // The same list the capture uses, so the two cannot disagree.
+        let ignored = shared()
+            .map(|h| {
+                h.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .ignored()
+                    .to_vec()
+            })
+            .unwrap_or_default();
         // A privacy format or an ignored owner means the previous clipboard must not come back. A
         // write that carries our own marker is fine to restore.
         let excluded = matches!(

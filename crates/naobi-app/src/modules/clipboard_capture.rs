@@ -145,17 +145,23 @@ pub(super) fn to_captured(s: Snapshot) -> Option<Captured> {
 fn run(rx: &Receiver<Change>, history: &Shared) {
     let mut limiter = Limiter::default();
     let clock = SystemClock;
-    while let Ok((mut seq, mut owner)) = rx.recv() {
+    loop {
+        let (mut seq, mut owner) = match rx.recv_timeout(Duration::from_secs(15)) {
+            Ok(change) => change,
+            // Quiet: the moment to drop a search index nobody uses any more (T-014).
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                history.lock().unwrap_or_else(|e| e.into_inner()).tick();
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
         while let Err(wait) = limiter.admit(clock.now_ms()) {
             std::thread::sleep(Duration::from_millis(wait));
         }
         while let Ok(newer) = rx.try_recv() {
             (seq, owner) = newer;
         }
-        let mut guard = history.lock().unwrap_or_else(|e| e.into_inner());
-        let result = capture(&WinSource { owner }, seq, &mut guard);
-        drop(guard);
-        match result {
+        match capture(&WinSource { owner }, seq, history) {
             Ok(Capture::Decided(o)) => {
                 let p = o.purged;
                 if p.expired + p.excess + p.evicted > 0 {

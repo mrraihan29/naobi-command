@@ -89,8 +89,9 @@ pub struct EntryMeta {
 }
 
 /// What a capture is stored as: the payload, and a short preview for the list and the search.
-struct Prepared {
+pub struct Prepared {
     kind: Kind,
+    owner: Option<String>,
     payload: Zeroizing<Vec<u8>>,
     preview: Zeroizing<String>,
 }
@@ -108,7 +109,8 @@ pub struct History {
     limits: Limits,
     ignored: Vec<String>,
     index: Option<TextIndex>,
-    view_closed_ms: Option<i64>,
+    /// When the index was last searched (T-014).
+    used_ms: Option<i64>,
 }
 
 fn clip(text: &str, max: usize) -> &str {
@@ -117,6 +119,17 @@ fn clip(text: &str, max: usize) -> &str {
         end -= 1;
     }
     &text[..end]
+}
+
+/// The filters, then the conversion to what is stored (the PNG encode of a bitmap is the slow part).
+/// It touches no `History`, so the capture thread runs it without holding the lock.
+pub fn prepare(c: &Captured, ignored: &[String]) -> Result<Prepared, Skip> {
+    if let Some(skip) = skip_reason(c, ignored) {
+        return Err(skip);
+    }
+    let mut p = History::content(c)?;
+    p.owner = c.owner_exe.clone();
+    Ok(p)
 }
 
 impl History {
@@ -128,7 +141,7 @@ impl History {
             limits: Limits::default(),
             ignored: DEFAULT_IGNORED.iter().map(|s| (*s).to_owned()).collect(),
             index: None,
-            view_closed_ms: None,
+            used_ms: None,
         }
     }
 
@@ -142,7 +155,7 @@ impl History {
         self
     }
 
-    fn prepare(c: &Captured) -> Result<Prepared, Skip> {
+    fn content(c: &Captured) -> Result<Prepared, Skip> {
         match &c.content {
             Content::Text(t) => {
                 if t.trim().is_empty() {
@@ -152,6 +165,7 @@ impl History {
                     return Err(Skip::TooLarge);
                 }
                 Ok(Prepared {
+                    owner: None,
                     kind: Kind::Text,
                     payload: Zeroizing::new(t.as_bytes().to_vec()),
                     preview: Zeroizing::new(clip(t, PREVIEW_BYTES).to_owned()),
@@ -163,6 +177,7 @@ impl History {
                     ImageError::TooLargeBitmap | ImageError::TooLargePng => Skip::TooLarge,
                 })?;
                 Ok(Prepared {
+                    owner: None,
                     kind: Kind::Image,
                     preview: Zeroizing::new(format!("Image {} x {}", png.width, png.height)),
                     payload: Zeroizing::new(png.bytes),
@@ -181,6 +196,7 @@ impl History {
                     .map(|p| p.rsplit(['\\', '/']).next().unwrap_or(p))
                     .collect();
                 Ok(Prepared {
+                    owner: None,
                     kind: Kind::Files,
                     // The first line is what the list shows: how many files, then some names.
                     preview: Zeroizing::new(format!(
@@ -194,31 +210,32 @@ impl History {
         }
     }
 
-    /// Stores what the clipboard held, unless a filter or a limit refuses it. Encryption happens
-    /// before the transaction; the insert, the duplicate check and the retention are one transaction.
+    /// The exe names whose copies are never kept.
+    pub fn ignored(&self) -> &[String] {
+        &self.ignored
+    }
+
+    /// Stores what the clipboard held, unless a filter or a limit refuses it.
     pub fn on_change(&mut self, c: Captured) -> Result<Outcome, Error> {
-        if let Some(skip) = skip_reason(&c, &self.ignored) {
-            return Ok(Outcome {
+        match prepare(&c, &self.ignored) {
+            Ok(p) => self.store(p),
+            Err(skip) => Ok(Outcome {
                 result: Err(skip),
                 purged: Purged::default(),
-            });
+            }),
         }
-        let prepared = match Self::prepare(&c) {
-            Ok(p) => p,
-            Err(skip) => {
-                return Ok(Outcome {
-                    result: Err(skip),
-                    purged: Purged::default(),
-                })
-            }
-        };
+    }
+
+    /// Encrypts and stores a prepared copy. Encryption happens before the transaction; the insert,
+    /// the duplicate check and the retention are one transaction.
+    pub fn store(&mut self, prepared: Prepared) -> Result<Outcome, Error> {
         let now = self.clock.now_ms() / 1000;
         let preview_enc = self.cipher.encrypt(prepared.preview.as_bytes())?;
         let data_enc = self.cipher.encrypt(&prepared.payload)?;
         let latest_same = self.latest_matches(&prepared)?;
         let limits = self.limits;
         let size = prepared.payload.len() as i64;
-        let owner = c.owner_exe.clone();
+        let owner = prepared.owner.clone();
         let (stored, purged) = self.db.transaction(|tx| {
             let stored = match latest_same {
                 Some(id) => {
@@ -419,7 +436,7 @@ impl History {
     /// Ids of text entries whose first 4 KiB contain `query`, newest first. Builds the index on the
     /// first call after a change or a drop.
     pub fn search(&mut self, query: &str) -> Result<Vec<i64>, Error> {
-        self.view_closed_ms = None;
+        self.used_ms = Some(self.clock.now_ms());
         if self.index.is_none() {
             self.index = Some(self.build_index()?);
         }
@@ -454,17 +471,12 @@ impl History {
         Ok(TextIndex { entries })
     }
 
-    /// The history view closed: the index is dropped `INDEX_TTL_MS` later, at the next `tick`.
-    pub fn view_closed(&mut self) {
-        self.view_closed_ms = Some(self.clock.now_ms());
-    }
-
-    /// Drops the index once the view has been closed long enough. Call it from a timer.
+    /// Drops the index once it has not been searched for `INDEX_TTL_MS`. Call it from a timer.
     pub fn tick(&mut self) {
-        if let Some(closed) = self.view_closed_ms {
-            if self.clock.now_ms() - closed >= INDEX_TTL_MS {
+        if let Some(used) = self.used_ms {
+            if self.clock.now_ms() - used >= INDEX_TTL_MS {
                 self.index = None;
-                self.view_closed_ms = None;
+                self.used_ms = None;
             }
         }
     }

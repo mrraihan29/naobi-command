@@ -207,20 +207,3 @@ fn r015_no_target_pastes_nothing() {
     assert_eq!(out, Outcome::Aborted(Abort::NoTarget));
     assert!(log(&w).is_empty(), "the clipboard is not touched");
 }
-
-// @D-019
-#[test]
-fn d019_restore_covers_text_image_filelist_only() {
-    // The snapshot can hold exactly these three kinds; rich text, HTML and ranges are not in it.
-    for c in [
-        Content::Text("t".into()),
-        Content::Dib(vec![0; 40]),
-        Content::Files(vec!["a".into()]),
-    ] {
-        let s = Snapshot {
-            content: Some(c),
-            excluded: false,
-        };
-        assert!(s.content.is_some());
-    }
-}

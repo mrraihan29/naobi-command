@@ -93,12 +93,17 @@ fn r015_copy_open_enter_pastes_into_previous_app() {
         })
     };
     let pasted = shown && {
-        // The newest entry is first; give the input focus a moment, as a person would.
-        std::thread::sleep(Duration::from_millis(500));
-        inject::enter();
-        until(Duration::from_secs(5), || {
-            target.as_ref().is_some_and(|t| t.text().contains(&marker))
-        })
+        // The newest entry is first. Enter goes to the Launcher only once it has the foreground.
+        let in_front = until(Duration::from_secs(3), || {
+            launcher().is_some_and(|h| naobi_win32::paste::foreground_window() == h)
+        });
+        std::thread::sleep(Duration::from_millis(200));
+        in_front && {
+            inject::enter();
+            until(Duration::from_secs(5), || {
+                target.as_ref().is_some_and(|t| t.text().contains(&marker))
+            })
+        }
     };
     let text = target.as_ref().map(EditWindow::text).unwrap_or_default();
     drop(target);
@@ -125,4 +130,74 @@ fn r015_copy_open_enter_pastes_into_previous_app() {
     assert!(focused, "the target window did not take the foreground");
     assert!(shown, "Alt+Shift+V did not open the history");
     assert!(pasted, "the entry was not pasted into the target: {text:?}");
+}
+
+// @R-015
+#[test]
+#[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
+fn r015_ignored_app_not_stored_real_process() {
+    // A real process whose exe is called ProtonPass.exe copies; the history must stay empty. A copy
+    // from an ordinary exe right after proves the history was listening.
+    let dir = std::env::temp_dir().join(format!("naobi-flow-ignored-{}", std::process::id()));
+    let data = dir.join("data");
+    let run_key = RunKey(format!(
+        r"Software\NaobiCommandTest\flow-ignored-{}",
+        std::process::id()
+    ));
+    let renamed = dir.join("ProtonPass.exe");
+    let _ = std::fs::create_dir_all(&dir);
+    let system = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+    let source = Path::new(&system).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+    let copied = std::fs::copy(source, &renamed).is_ok();
+    let previous = powershell("Get-Clipboard -Raw");
+    let mut app = match Command::new(env!("CARGO_BIN_EXE_naobi-app"))
+        .env("NAOBI_TEST_RUN_KEY", &run_key.0)
+        .env("NAOBI_TEST_CLIPBOARD", "1")
+        .env("NAOBI_PERF_ITEMS", "0")
+        .env("NAOBI_DATA_DIR", &data)
+        .env("NAOBI_SETTINGS_DIR", dir.join("settings"))
+        .stdout(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(e) => panic!("spawn naobi-app: {e}"),
+    };
+    let ready = until(Duration::from_secs(5), || {
+        dwm::find_window(naobi_ui::TITLE).is_some()
+    });
+    std::thread::sleep(Duration::from_millis(800));
+    let secret = format!("zq-secret-{}", std::process::id());
+    let ran = copied
+        && Command::new(&renamed)
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("Set-Clipboard -Value '{secret}'"),
+            ])
+            .output()
+            .is_ok_and(|o| o.status.success());
+    // Long enough for the capture to have happened, were it going to.
+    std::thread::sleep(Duration::from_secs(2));
+    let after_ignored = entries(&data.join("naobi.db"));
+    powershell(&format!(
+        "Set-Clipboard -Value 'zq-ordinary-{}'",
+        std::process::id()
+    ));
+    let control = until(Duration::from_secs(8), || {
+        entries(&data.join("naobi.db")) >= 1
+    });
+    let _ = app.kill();
+    let _ = app.wait();
+    std::thread::sleep(Duration::from_millis(200));
+    if !previous.trim().is_empty() {
+        powershell(&format!(
+            "Set-Clipboard -Value '{}'",
+            previous.trim_end().replace('\'', "''")
+        ));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(ready, "launcher window never appeared");
+    assert!(copied && ran, "the renamed exe could not copy");
+    assert_eq!(after_ignored, 0, "a copy from ProtonPass.exe was stored");
+    assert!(control, "the history did not capture an ordinary copy");
 }

@@ -33,7 +33,7 @@ impl ColorHistory {
             )?;
             tx.execute(
                 "DELETE FROM color_history WHERE id NOT IN \
-                 (SELECT id FROM color_history ORDER BY picked_at DESC, id DESC LIMIT ?1)",
+                 (SELECT id FROM color_history ORDER BY id DESC LIMIT ?1)",
                 params![KEEP],
             )?;
             Ok(())

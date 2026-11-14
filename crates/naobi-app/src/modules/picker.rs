@@ -47,11 +47,13 @@ pub fn register(m: &mut Modules) {
                 return;
             }
             let (history, flag) = (history.clone(), active.clone());
+            // Closes the Launcher when the hotkey came while it was open.
+            cx.hide();
             let spawned = std::thread::Builder::new()
                 .name("color-picker".into())
                 .spawn(move || {
+                    let _free = Free(flag);
                     run(&history);
-                    flag.store(false, Ordering::SeqCst);
                 });
             if spawned.is_err() {
                 active.store(false, Ordering::SeqCst);
@@ -63,6 +65,15 @@ pub fn register(m: &mut Modules) {
             }
         }),
     );
+}
+
+/// Lets the next pick start when this one ends, however it ends.
+struct Free(Arc<AtomicBool>);
+
+impl Drop for Free {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 /// One pick, start to end, on the picker thread. Nothing of the screen is logged (T-015).

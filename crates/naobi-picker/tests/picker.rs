@@ -83,6 +83,13 @@ fn r017_history_drops_oldest_at_21() {
     assert_eq!(list.len(), 20);
     assert_eq!(list[0].rgb, rgb(20, 0, 0), "newest first");
     assert_eq!(list[19].rgb, rgb(1, 0, 0), "the first pick is gone");
+    // A clock that went backwards does not lose the new pick.
+    h.push(rgb(7, 7, 7), 0).unwrap_or_else(|e| panic!("{e}"));
+    assert!(h
+        .list()
+        .unwrap_or_default()
+        .iter()
+        .any(|p| p.rgb == rgb(7, 7, 7)));
     // Two picks in the same millisecond keep their order.
     h.push(rgb(0, 9, 0), 5000).unwrap_or_else(|e| panic!("{e}"));
     h.push(rgb(0, 8, 0), 5000).unwrap_or_else(|e| panic!("{e}"));

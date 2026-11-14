@@ -26,9 +26,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW,
     GetSystemMetrics, KillTimer, LoadCursorW, PostQuitMessage, RegisterClassW, SetForegroundWindow,
     SetTimer, ShowWindow, TranslateMessage, IDC_CROSS, MSG, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_SHOW, WM_ACTIVATE, WM_ERASEBKGND, WM_KEYDOWN,
-    WM_LBUTTONDOWN, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONDOWN, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_POPUP,
+    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_SHOW, WM_ACTIVATE, WM_CLOSE, WM_DESTROY,
+    WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONDOWN, WM_TIMER,
+    WNDCLASSW, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
 /// The overlays' window title, for tests and assistive tools.
@@ -96,6 +96,11 @@ impl ScreenCapture for ScreenGrab {
     type Frame = Snapshot;
 
     fn capture(&mut self) -> Option<Snapshot> {
+        // The Launcher hides by cloak, which DWM applies at its next frame: wait for it, so the
+        // snapshot never shows the window the command came from.
+        // SAFETY: no arguments.
+        let _ = unsafe { windows::Win32::Graphics::Dwm::DwmFlush() };
+        std::thread::sleep(std::time::Duration::from_millis(60));
         // SAFETY: plain metric queries.
         let (x, y, w, h) = unsafe {
             (
@@ -230,7 +235,7 @@ pub fn overlay(snap: &Snapshot) -> Option<Rgb> {
         // SAFETY: the loop belongs to this thread, which created every window it dispatches for.
         unsafe {
             let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
@@ -343,7 +348,6 @@ fn cancel() {
 
 /// Repaints the area the magnifier and the readout cover around `at`, on every overlay.
 fn invalidate_around(at: POINT) {
-    let reach = (CELLS * CELL) / 2 + GAP + READOUT_W + 16;
     let wins: Vec<(isize, RECT)> = PICK.with(|p| {
         p.borrow()
             .as_ref()
@@ -351,6 +355,11 @@ fn invalidate_around(at: POINT) {
             .unwrap_or_default()
     });
     for (h, r) in wins {
+        // SAFETY: a window of this thread.
+        let dpi = unsafe { GetDpiForWindow(HWND(h as *mut c_void)) }.max(96);
+        let reach = ((f64::from((CELLS * CELL) / 2 + GAP + READOUT_W) * f64::from(dpi) / 96.0)
+            .ceil() as i32)
+            + 16;
         let area = RECT {
             left: at.x - r.left - reach,
             top: at.y - r.top - reach,
@@ -390,7 +399,7 @@ unsafe extern "system" fn proc(h: HWND, m: u32, wp: WPARAM, lp: LPARAM) -> LRESU
             click(h);
             return LRESULT(0);
         }
-        WM_RBUTTONDOWN => {
+        WM_CLOSE | WM_DESTROY | WM_RBUTTONDOWN => {
             cancel();
             return LRESULT(0);
         }
@@ -509,7 +518,7 @@ unsafe fn draw(dc: HDC, h: HWND, s: &State, win: &Win, area: RECT) {
             win.rect.right - win.rect.left,
             win.rect.bottom - win.rect.top,
         );
-        magnifier(buf, snap, s, at, size, k);
+        magnifier(buf, snap, s, at, (area.left, area.top), size, k);
         let _ = SetViewportOrgEx(buf, 0, 0, None);
         let _ = BitBlt(dc, area.left, area.top, aw, ah, Some(buf), 0, 0, SRCCOPY);
         SelectObject(buf, old);
@@ -522,14 +531,28 @@ unsafe fn draw(dc: HDC, h: HWND, s: &State, win: &Win, area: RECT) {
 ///
 /// # Safety
 /// `buf` is a valid memory DC; `snap` is live.
-unsafe fn magnifier(buf: HDC, snap: &Snapshot, s: &State, at: POINT, size: (i32, i32), k: f64) {
+unsafe fn magnifier(
+    buf: HDC,
+    snap: &Snapshot,
+    s: &State,
+    at: POINT,
+    origin: (i32, i32),
+    size: (i32, i32),
+    k: f64,
+) {
     let sc = |v: i32| (f64::from(v) * k).round() as i32;
     let cell = sc(CELL);
     let radius = cell * CELLS / 2;
     // SAFETY: see the function's contract; objects made here are deleted at the end.
     unsafe {
         // Zoomed pixels, cut to the ring.
-        let ring = CreateEllipticRgn(at.x - radius, at.y - radius, at.x + radius, at.y + radius);
+        // A clip region is in device units: the viewport origin does not move it.
+        let ring = CreateEllipticRgn(
+            at.x - radius - origin.0,
+            at.y - radius - origin.1,
+            at.x + radius - origin.0,
+            at.y + radius - origin.1,
+        );
         SelectClipRgn(buf, Some(ring));
         SetStretchBltMode(buf, COLORONCOLOR);
         let (gx, gy) = (s.cursor.x, s.cursor.y);

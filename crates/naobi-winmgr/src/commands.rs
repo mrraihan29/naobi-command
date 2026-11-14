@@ -29,6 +29,8 @@ impl Default for Config {
 
 impl Config {
     pub fn set(&self, gap: u32, chords: BTreeMap<String, String>) {
+        // A gap beyond 64 px only makes rectangles with no room in them.
+        let gap = gap.min(64);
         *self.0.write().unwrap_or_else(|e| e.into_inner()) = Inner { gap, chords };
     }
 

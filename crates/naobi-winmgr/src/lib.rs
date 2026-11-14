@@ -31,6 +31,9 @@ pub struct WindowInfo {
     /// Index into `WindowOps::monitors` of the display the window is on.
     pub monitor: usize,
     pub elevated: bool,
+    /// Maximized windows report a different invisible border than restored ones, so a command
+    /// restores them first and measures again (RK-11).
+    pub maximized: bool,
 }
 
 /// Windows, as the commands need it. The production one is in `naobi-win32`; the tests use a fake.
@@ -42,4 +45,6 @@ pub trait WindowOps {
     /// is the target display's. False when Windows refused.
     fn move_to(&mut self, hwnd: isize, outer: Rect, dpi: u32) -> bool;
     fn maximize(&mut self, hwnd: isize) -> bool;
+    /// Takes the window out of the maximized state, to where it was before.
+    fn unmaximize(&mut self, hwnd: isize) -> bool;
 }

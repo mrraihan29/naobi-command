@@ -41,13 +41,23 @@ fn monitor_of(monitors: &[Monitor], r: Rect) -> Monitor {
 
 impl Snapper {
     pub fn run(&mut self, cmd: Command, ops: &mut dyn WindowOps, gap: u32) -> Outcome {
-        let Some(w) = ops.foreground() else {
+        let Some(first) = ops.foreground() else {
             return Outcome::NoWindow;
         };
         // Checked by token before anything changes, never by trying and failing.
-        if w.elevated {
-            return Outcome::Elevated(w.title);
+        if first.elevated {
+            return Outcome::Elevated(first.title);
         }
+        // The rectangle to remember is where the window returns to, read before anything moves.
+        let recorded = first.outer;
+        // A placement works from the restored window: its invisible border differs from the
+        // maximized one, so the window is restored first and read again (RK-11).
+        let places = !matches!(cmd, Command::Restore | Command::Maximize);
+        let w = if first.maximized && places && ops.unmaximize(first.hwnd) {
+            ops.foreground().unwrap_or(first)
+        } else {
+            first
+        };
         let monitors = ops.monitors();
         let Some(here) = monitors.get(w.monitor).copied() else {
             return Outcome::NoWindow;
@@ -87,7 +97,7 @@ impl Snapper {
         }
         // Only the first command on a window records where it was.
         if !self.restore.iter().any(|(h, _)| *h == w.hwnd) {
-            self.restore.push((w.hwnd, w.outer));
+            self.restore.push((w.hwnd, recorded));
             if self.restore.len() > MAX_RESTORE {
                 self.restore.remove(0);
             }

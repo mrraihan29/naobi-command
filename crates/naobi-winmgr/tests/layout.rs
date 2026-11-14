@@ -129,6 +129,7 @@ struct Fake {
     monitors: Vec<Monitor>,
     moves: Vec<String>,
     refuse: bool,
+    restored_border: Rect,
 }
 
 impl Fake {
@@ -141,10 +142,12 @@ impl Fake {
                 border,
                 monitor: 0,
                 elevated: false,
+                maximized: false,
             },
             monitors: vec![mon(0, 0, 1920, 1040, 96)],
             moves: Vec::new(),
             refuse: false,
+            restored_border: border,
         }
     }
 }
@@ -178,6 +181,13 @@ impl WindowOps for Fake {
     }
     fn maximize(&mut self, hwnd: isize) -> bool {
         self.moves.push(format!("maximize {hwnd}"));
+        true
+    }
+    fn unmaximize(&mut self, hwnd: isize) -> bool {
+        self.moves.push(format!("unmaximize {hwnd}"));
+        // The restored window has the restored border (RK-11).
+        self.win.maximized = false;
+        self.win.border = self.restored_border;
         true
     }
 }
@@ -405,4 +415,30 @@ fn r016_restore_picks_the_display_that_holds_the_middle_of_a_straddling_window()
         let last = ops.moves.last().cloned().unwrap_or_default();
         assert!(last.ends_with(" 144"), "{start:?}: {last}");
     }
+}
+
+// @R-016
+#[test]
+fn rk11_a_maximized_window_is_restored_and_measured_again_before_it_is_placed() {
+    // Maximized: an 8 px border on every side. Restored: 7 px left, right and bottom.
+    let normal = r(300, 200, 900, 700);
+    let mut ops = Fake::new(normal, r(8, 8, 8, 8));
+    ops.restored_border = r(7, 0, 7, 7);
+    ops.win.maximized = true;
+    let mut s = Snapper::default();
+    assert_eq!(s.run(Command::LeftHalf, &mut ops, 8), Outcome::Moved);
+    assert_eq!(ops.moves[0], "unmaximize 1");
+    // The visible frame is the plan's, with the restored border around it.
+    assert_eq!(ops.win.outer, r(1, 8, 963, 1039));
+    // Restore goes back to where the window was, not to the maximized state's rectangle.
+    assert_eq!(s.run(Command::Restore, &mut ops, 8), Outcome::Moved);
+    assert_eq!(ops.win.outer, normal);
+}
+
+// @D-022
+#[test]
+fn d022_a_huge_gap_setting_is_limited() {
+    let config = Config::default();
+    config.set(u32::MAX, BTreeMap::new());
+    assert_eq!(config.gap(), 64);
 }

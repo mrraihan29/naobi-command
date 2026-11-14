@@ -156,6 +156,7 @@ impl WindowOps for Ops {
             monitor,
             // Fails closed: a process that cannot be inspected counts as elevated (T-027).
             elevated: crate::paste::is_elevated(h.0 as isize),
+            maximized,
         })
     }
 
@@ -202,6 +203,12 @@ impl WindowOps for Ops {
         if changed || window_dpi != dpi {
             return place();
         }
+        true
+    }
+
+    fn unmaximize(&mut self, window: isize) -> bool {
+        // SAFETY: restores a window handle; the return value is the previous visibility.
+        let _ = unsafe { ShowWindow(hwnd(window), SW_RESTORE) };
         true
     }
 

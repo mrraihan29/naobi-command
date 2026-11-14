@@ -1,15 +1,13 @@
 //! Always on top (NCMD-22): "Toggle Always on Top" as a Launcher item and the `topmost` hotkey. Both
 //! end in the same handler, which acts on the window in front.
 use super::Modules;
-use naobi_aot::{style, AotCommands, Config, Outcome, Topmost, TopmostOps};
+use naobi_aot::{style, toggle, AotCommands, Config, Outcome, TopmostOps};
 use naobi_core::ids::HotkeyId;
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::Settings;
 use naobi_core::theme::ThemeSource;
 use naobi_win32::theme::SystemTheme;
 use naobi_win32::topmost::Ops;
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::{Mutex, OnceLock};
 
 fn config() -> &'static Config {
@@ -42,11 +40,10 @@ pub fn restyle() {
 
 pub fn register(m: &mut Modules) {
     m.register_source(Box::new(AotCommands::new(config().clone())));
-    let topmost = Rc::new(RefCell::new(Topmost::default()));
     m.subscribe(
         HotkeyId(naobi_aot::commands::HOTKEY.to_owned()),
         Box::new(move |_, cx| {
-            let outcome = topmost.borrow_mut().toggle(&mut Ops);
+            let outcome = toggle(&mut Ops);
             // No title in the log (T-010).
             tracing::info!(
                 command = "aot.toggle",
@@ -87,7 +84,7 @@ fn notice(outcome: &Outcome) -> Option<Notice> {
         Outcome::On | Outcome::Off | Outcome::NoWindow => return None,
     };
     Some(Notice {
-        subject: format!("Cannot pin {}", named(title)),
+        subject: format!("Cannot make {} topmost", named(title)),
         message: message.to_owned(),
         kind: NoticeKind::Warning,
     })
@@ -103,7 +100,7 @@ mod tests {
         let n = notice(&Outcome::Elevated("Task Manager".into())).expect("a notice");
         assert_eq!(
             format!("{}: {}", n.subject, n.message),
-            "Cannot pin Task Manager: it runs as administrator"
+            "Cannot make Task Manager topmost: it runs as administrator"
         );
         assert!(notice(&Outcome::On).is_none() && notice(&Outcome::Off).is_none());
     }

@@ -35,7 +35,7 @@ impl CommandSource for AotCommands {
             id: ItemId(ID.into()),
             title: "Toggle Always on Top".into(),
             subtitle: self.0 .0.read().unwrap_or_else(|e| e.into_inner()).clone(),
-            keywords: vec!["topmost".into(), "pin".into(), "window".into()],
+            keywords: vec!["topmost".into(), "window".into()],
             alias: None,
             kind: ItemKind::Command,
             primary: ActionId("run".into()),

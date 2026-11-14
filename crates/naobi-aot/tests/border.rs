@@ -1,6 +1,6 @@
 //! The toggle and the border style, over a fake Windows.
 use naobi_aot::{
-    border_color, style, AotCommands, Config, Outcome, Style, Target, Topmost, TopmostOps, DARK,
+    border_color, style, toggle, AotCommands, Config, Outcome, Style, Target, TopmostOps, DARK,
     LIGHT,
 };
 use naobi_core::command::{CommandSource, Cx, Query};
@@ -52,10 +52,9 @@ fn window(elevated: bool) -> Fake {
 #[test]
 fn r018_toggle_twice_returns_non_topmost() {
     let mut ops = window(false);
-    let mut t = Topmost::default();
-    assert_eq!(t.toggle(&mut ops), Outcome::On);
+    assert_eq!(toggle(&mut ops), Outcome::On);
     assert!(ops.topmost);
-    assert_eq!(t.toggle(&mut ops), Outcome::Off);
+    assert_eq!(toggle(&mut ops), Outcome::Off);
     assert!(!ops.topmost);
     // The border starts following on the first toggle and stops on the second.
     assert_eq!(
@@ -74,7 +73,7 @@ fn r018_toggle_twice_returns_non_topmost() {
 fn r018_a_window_that_is_already_topmost_is_toggled_off() {
     let mut ops = window(false);
     ops.topmost = true;
-    assert_eq!(Topmost::default().toggle(&mut ops), Outcome::Off);
+    assert_eq!(toggle(&mut ops), Outcome::Off);
     assert!(!ops.topmost);
 }
 
@@ -82,10 +81,7 @@ fn r018_a_window_that_is_already_topmost_is_toggled_off() {
 #[test]
 fn r011_pin_elevated_window_notice_and_no_change() {
     let mut ops = window(true);
-    assert_eq!(
-        Topmost::default().toggle(&mut ops),
-        Outcome::Elevated("Notes".into())
-    );
+    assert_eq!(toggle(&mut ops), Outcome::Elevated("Notes".into()));
     assert!(ops.calls.is_empty(), "nothing was touched: {:?}", ops.calls);
 }
 
@@ -93,13 +89,10 @@ fn r011_pin_elevated_window_notice_and_no_change() {
 #[test]
 fn r018_no_window_and_a_refusal_change_nothing() {
     let mut none = Fake::default();
-    assert_eq!(Topmost::default().toggle(&mut none), Outcome::NoWindow);
+    assert_eq!(toggle(&mut none), Outcome::NoWindow);
     let mut refused = window(false);
     refused.refuse = true;
-    assert_eq!(
-        Topmost::default().toggle(&mut refused),
-        Outcome::Refused("Notes".into())
-    );
+    assert_eq!(toggle(&mut refused), Outcome::Refused("Notes".into()));
     assert!(
         !refused.calls.iter().any(|c| c.starts_with("follow")),
         "no border for a window that was not pinned"

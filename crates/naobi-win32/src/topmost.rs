@@ -1,8 +1,9 @@
 //! The Windows side of always on top (R-018, REPORT 5.4): `SetWindowPos(HWND_TOPMOST)`, and a 2 px
 //! border that follows each topmost window. The border is one popup window per topmost window whose
 //! region is a ring; it is created, moved and removed on the platform thread, where one WinEvent
-//! hook per topmost *process* (scoped by process id, destroy and location events only) keeps it in
-//! place. With nothing topmost there is no border window and no hook.
+//! hook per topmost *process* (scoped by process id; the callback acts on destroy, show, hide and
+//! location events of the window itself and ignores the rest) keeps it in place. With nothing topmost
+//! there is no border window and no hook.
 use naobi_aot::{Style, Target, TopmostOps, THICKNESS};
 use std::ffi::c_void;
 use std::sync::Mutex;
@@ -17,10 +18,11 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
-    IsIconic, IsWindowVisible, RegisterClassW, SetClassLongPtrW, SetWindowPos, ShowWindow,
-    EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE, GCLP_HBRBACKGROUND, GWL_EXSTYLE,
-    HWND_NOTOPMOST, HWND_TOPMOST, OBJID_WINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE,
-    SW_SHOWNOACTIVATE, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WNDCLASSW, WS_EX_NOACTIVATE,
+    IsIconic, IsWindowVisible, RegisterClassW, SetClassLongPtrW, SetLayeredWindowAttributes,
+    SetWindowPos, ShowWindow, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
+    EVENT_OBJECT_SHOW, GCLP_HBRBACKGROUND, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, LWA_ALPHA,
+    OBJID_WINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
     WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
@@ -101,7 +103,7 @@ fn create_border(st: &mut State) -> Option<isize> {
     // SAFETY: creates a click-through tool popup on this (the platform) thread; it owns no data.
     let h = unsafe {
         CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
             w!("NaobiTopmostBorder"),
             w!(""),
             WS_POPUP,
@@ -116,6 +118,9 @@ fn create_border(st: &mut State) -> Option<isize> {
         )
     }
     .ok()?;
+    // Layered and transparent together: clicks on the ring reach the window under it.
+    // SAFETY: sets full opacity on the window created above.
+    let _ = unsafe { SetLayeredWindowAttributes(h, COLORREF(0), 255, LWA_ALPHA) };
     paint(st, Some(h.0 as isize));
     Some(h.0 as isize)
 }
@@ -126,7 +131,9 @@ fn frame_of(target: isize) -> Option<RECT> {
     let mut r = RECT::default();
     // SAFETY: plain queries on a window handle; the frame bounds go into a local.
     unsafe {
-        if IsIconic(h).as_bool() || !IsWindowVisible(h).as_bool() {
+        // Minimized, hidden (to the tray, say) or cloaked (another virtual desktop): no border.
+        if IsIconic(h).as_bool() || !IsWindowVisible(h).as_bool() || crate::dwm::is_cloaked(target)
+        {
             return None;
         }
         DwmGetWindowAttribute(
@@ -187,7 +194,10 @@ unsafe extern "system" fn on_event(
     let target = window.0 as isize;
     if event == EVENT_OBJECT_DESTROY {
         remove(&mut st, target);
-    } else if event == EVENT_OBJECT_LOCATIONCHANGE {
+    } else if event == EVENT_OBJECT_LOCATIONCHANGE
+        || event == EVENT_OBJECT_SHOW
+        || event == EVENT_OBJECT_HIDE
+    {
         let show = st.style.show;
         if let Some(pin) = st.pins.iter_mut().find(|p| p.target == target) {
             place(pin, show);
@@ -214,8 +224,9 @@ fn add(st: &mut State, target: isize) {
     place(&mut pin, st.style.show);
     st.pins.push(pin);
     if pid != 0 && !st.hooks.iter().any(|(p, _)| *p == pid) {
-        // SAFETY: an out-of-context hook, scoped to this process id, for destroy and location events
-        // only; the callback is a plain function and the hook is removed in `remove`.
+        // SAFETY: an out-of-context hook scoped to this process id, for the object events from
+        // destroy to location change (the callback ignores all but the ones it names); the callback
+        // is a plain function and the hook is removed in `remove`.
         let hook = unsafe {
             SetWinEventHook(
                 EVENT_OBJECT_DESTROY,
@@ -263,7 +274,17 @@ fn apply_style(style: Style) {
     }
 }
 
-/// The number of topmost windows being followed and of hooks installed (for the tests).
+/// Starts following `window` with a border, on the calling thread: the platform thread in the app.
+pub fn pin_now(window: isize) {
+    add(&mut lock(), window);
+}
+
+/// Stops following `window` and removes its border (and its process's hook with the last pin).
+pub fn unpin_now(window: isize) {
+    remove(&mut lock(), window);
+}
+
+/// The number of topmost windows being followed and of hooks installed.
 pub fn counts() -> (usize, usize) {
     let st = lock();
     (st.pins.len(), st.hooks.len())
@@ -308,11 +329,10 @@ impl TopmostOps for Ops {
         // The border and the hook belong to the platform thread (a WinEvent hook needs the message
         // loop of the thread that installs it).
         crate::platform::post_to_p1(Box::new(move || {
-            let mut st = lock();
             if on {
-                add(&mut st, window);
+                pin_now(window);
             } else {
-                remove(&mut st, window);
+                unpin_now(window);
             }
         }));
     }

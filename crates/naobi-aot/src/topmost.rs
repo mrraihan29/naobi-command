@@ -1,6 +1,5 @@
 //! The toggle: which window, whether it may be touched, and what the border follows.
 use crate::Style;
-use std::collections::HashSet;
 
 /// The window in front.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,35 +35,24 @@ pub enum Outcome {
     Refused(String),
 }
 
-/// The windows this app made topmost.
-#[derive(Default)]
-pub struct Topmost {
-    pinned: HashSet<isize>,
-}
-
-impl Topmost {
-    pub fn toggle(&mut self, ops: &mut dyn TopmostOps) -> Outcome {
-        let Some(w) = ops.foreground() else {
-            return Outcome::NoWindow;
-        };
-        // Checked by token before anything changes (T-027).
-        if w.elevated {
-            return Outcome::Elevated(w.title);
-        }
-        let on = !ops.is_topmost(w.hwnd);
-        if !ops.set_topmost(w.hwnd, on) {
-            return Outcome::Refused(w.title);
-        }
-        if on {
-            self.pinned.insert(w.hwnd);
-        } else {
-            self.pinned.remove(&w.hwnd);
-        }
-        ops.follow(w.hwnd, on);
-        if on {
-            Outcome::On
-        } else {
-            Outcome::Off
-        }
+/// Toggles the window in front. The set of topmost windows is Windows' own (`WS_EX_TOPMOST`), so
+/// nothing is remembered here.
+pub fn toggle(ops: &mut dyn TopmostOps) -> Outcome {
+    let Some(w) = ops.foreground() else {
+        return Outcome::NoWindow;
+    };
+    // Checked by token before anything changes (T-027).
+    if w.elevated {
+        return Outcome::Elevated(w.title);
+    }
+    let on = !ops.is_topmost(w.hwnd);
+    if !ops.set_topmost(w.hwnd, on) {
+        return Outcome::Refused(w.title);
+    }
+    ops.follow(w.hwnd, on);
+    if on {
+        Outcome::On
+    } else {
+        Outcome::Off
     }
 }

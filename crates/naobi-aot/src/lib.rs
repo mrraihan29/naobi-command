@@ -6,7 +6,7 @@ pub mod commands;
 pub mod topmost;
 
 pub use commands::{AotCommands, Config};
-pub use topmost::{Outcome, Target, Topmost, TopmostOps};
+pub use topmost::{toggle, Outcome, Target, TopmostOps};
 
 use naobi_core::ui::Theme;
 

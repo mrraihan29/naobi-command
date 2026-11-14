@@ -142,6 +142,13 @@ impl Launcher {
                 self.selected = i;
                 self.run_selected(false)
             }
+            UiEvent::RowHovered(i) => {
+                if i < self.row_count() && self.panel.is_none() && self.selected != i {
+                    self.armed.disarm();
+                    self.selected = i;
+                }
+                vec![]
+            }
             UiEvent::Dismissed => {
                 self.armed.disarm();
                 vec![Effect::Hide]
@@ -273,7 +280,7 @@ impl Launcher {
             action_panel: self.panel.as_ref().map(panel_view),
             footer,
             placeholder: match self.mode {
-                Mode::Root => "Search apps and commands...",
+                Mode::Root => "Search apps and commands, or type > to run one...",
                 Mode::Pushed(i) | Mode::Hotkey(i) => self.views[i].placeholder(),
             }
             .to_owned(),

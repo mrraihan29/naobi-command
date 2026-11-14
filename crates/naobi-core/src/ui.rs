@@ -174,7 +174,7 @@ impl From<ViewModel> for Screen {
             notice: None,
             action_panel: None,
             footer: FooterView::default(),
-            placeholder: "Search apps and commands...".into(),
+            placeholder: "Search apps and commands, or type > to run one...".into(),
             preview: None,
             empty: None,
             loading: false,
@@ -216,6 +216,8 @@ pub enum UiEvent {
     TextChanged(String),
     Key(KeyChord),
     RowActivated(usize),
+    /// The pointer moved onto a row: it becomes the selected row, like the arrow keys.
+    RowHovered(usize),
     Dismissed,
 }
 

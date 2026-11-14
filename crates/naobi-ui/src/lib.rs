@@ -321,7 +321,7 @@ pub fn run(
         *e.borrow_mut() = Some(f);
     });
     {
-        // Dragging the footer moves the window; the next show centers it again.
+        // Dragging the footer or the search strips moves the window; later shows open where it was left.
         let weak = ui.as_weak();
         ui.on_move_by(move |dx, dy| {
             if let Some(ui) = weak.upgrade() {
@@ -334,12 +334,15 @@ pub fn run(
                     size.height as i32,
                 );
                 w.set_position(slint::PhysicalPosition::new(x, y));
+                dwm::remember_position((x, y));
             }
         });
         let f = on_event.clone();
         ui.on_text_changed(move |q| f(UiEvent::TextChanged(q.into())));
         let f = on_event.clone();
         ui.on_row_activated(move |i| f(UiEvent::RowActivated(i.max(0) as usize)));
+        let f = on_event.clone();
+        ui.on_row_hovered(move |i| f(UiEvent::RowHovered(i.max(0) as usize)));
         ui.on_key_pressed(move |text, ctrl, alt, shift| match key_from(&text, ctrl) {
             Some(key) => {
                 on_event(UiEvent::Key(KeyChord {

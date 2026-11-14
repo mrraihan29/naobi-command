@@ -1021,3 +1021,18 @@ fn r017_a_color_row_draws_its_hex_as_the_swatch() {
     assert_eq!(swatch("#914A3"), Some(None), "not six digits: no swatch");
     assert_eq!(swatch("#914A3D app"), Some(None), "not a Color item");
 }
+
+// The pointer moving onto a row selects it, like the arrow keys; a bad index changes nothing.
+#[test]
+fn hovering_a_row_selects_it_and_ignores_a_bad_index() {
+    let (mut l, _) = engine(
+        vec![item("app:notepad", "Notepad"), item("app:notes", "Notes")],
+        vec![],
+    );
+    type_text(&mut l, "not");
+    assert_eq!(l.screen().selected, 0);
+    assert!(l.handle(UiEvent::RowHovered(1)).is_empty());
+    assert_eq!(l.screen().selected, 1);
+    assert!(l.handle(UiEvent::RowHovered(9)).is_empty());
+    assert_eq!(l.screen().selected, 1);
+}

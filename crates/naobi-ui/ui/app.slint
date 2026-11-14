@@ -22,6 +22,8 @@ export struct Line {
     has-glyph: bool,
     glyph: string,
     glyph-region: string,
+    // A second, small glyph on the right of the row (the run history mark); empty for none.
+    glyph-trailing: string,
     // Row number among the rows (headers have none); what a click reports.
     row: int,
 }
@@ -88,9 +90,28 @@ component HeaderItem inherits Rectangle {
     }
 }
 
+// Dragging it moves the window (the callback gets the pointer's travel since the press).
+component DragHandle inherits TouchArea {
+    callback moved-by(length, length);
+    property <length> from-x;
+    property <length> from-y;
+    pointer-event(e) => {
+        if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+            self.from-x = self.mouse-x;
+            self.from-y = self.mouse-y;
+        }
+    }
+    moved => {
+        if (self.pressed) {
+            root.moved-by(self.mouse-x - self.from-x, self.mouse-y - self.from-y);
+        }
+    }
+}
+
 component ResultRow inherits Rectangle {
     in property <Line> line;
     callback activated();
+    callback hovered();
     height: 40px * Tokens.scale;
     clip: true;
     background: line.selected ? Tokens.surface-selected : transparent;
@@ -183,6 +204,22 @@ component ResultRow inherits Rectangle {
             border-radius: 3px;
             background: line.pinned ? Tokens.accent : transparent;
         }
+        if line.glyph-trailing != "" : Rectangle {
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            Path {
+                width: 18px;
+                height: 18px;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: line.glyph-trailing;
+                stroke: line.selected ? Tokens.subtitle-selected : Tokens.text-muted;
+                stroke-width: 1.7px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+            }
+        }
         if line.hint != "" : Chip {
             y: (parent.height - self.height) / 2;
             text: line.hint;
@@ -192,6 +229,12 @@ component ResultRow inherits Rectangle {
     // A click runs the row, like Enter on it. Last, so it is on top of the row's content.
     TouchArea {
         clicked => { root.activated(); }
+        // Real pointer motion only: a list scrolling under a still pointer must not steal the selection.
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered();
+            }
+        }
     }
 }
 
@@ -199,6 +242,7 @@ component ResultRow inherits Rectangle {
 component LineItem inherits Rectangle {
     in property <Line> line;
     callback activated();
+    callback hovered();
     height: 40px * Tokens.scale;
     if line.is-header : HeaderItem {
         text: line.title;
@@ -206,6 +250,7 @@ component LineItem inherits Rectangle {
     if !line.is-header : ResultRow {
         line: root.line;
         activated => { root.activated(); }
+        hovered => { root.hovered(); }
     }
 }
 
@@ -336,6 +381,7 @@ export component AppWindow inherits Window {
     callback text-changed(string);
     callback key-pressed(string, bool, bool, bool) -> bool;
     callback row-activated(int);
+    callback row-hovered(int);
     // The footer is the handle: dragging it moves the window by this many logical px.
     callback move-by(length, length);
     public function focus-input() { input.focus(); }
@@ -375,10 +421,15 @@ export component AppWindow inherits Window {
                 padding: 1px;
                 Rectangle {
                     height: 66px;
+                    // Behind the field: the strips around it drag the window, the field stays a text field.
+                    DragHandle {
+                        moved-by(dx, dy) => { root.move-by(dx, dy); }
+                    }
                     input := TextInput {
                         x: 16px;
+                        y: 15px;
                         width: parent.width - 32px;
-                        height: parent.height;
+                        height: parent.height - 30px;
                         vertical-alignment: center;
                         font-size: 16px * Tokens.scale;
                         color: Tokens.text-primary;
@@ -476,6 +527,7 @@ export component AppWindow inherits Window {
                         for l[i] in root.lines : LineItem {
                             line: l;
                             activated => { root.row-activated(l.row); }
+                            hovered => { root.row-hovered(l.row); }
                         }
                     }
                     if root.preview-kind != 0 : PreviewPane {
@@ -488,20 +540,8 @@ export component AppWindow inherits Window {
                 Rectangle {
                     height: 42px;
                     background: Tokens.surface-raised;
-                    TouchArea {
-                        property <length> from-x;
-                        property <length> from-y;
-                        pointer-event(e) => {
-                            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
-                                self.from-x = self.mouse-x;
-                                self.from-y = self.mouse-y;
-                            }
-                        }
-                        moved => {
-                            if (self.pressed) {
-                                root.move-by(self.mouse-x - self.from-x, self.mouse-y - self.from-y);
-                            }
-                        }
+                    DragHandle {
+                        moved-by(dx, dy) => { root.move-by(dx, dy); }
                     }
                     HorizontalLayout {
                         padding-left: 16px;

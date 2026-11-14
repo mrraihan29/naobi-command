@@ -188,7 +188,10 @@ fn r015_the_history_command_opens_the_view() {
 #[test]
 fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
     let (mut l, h, _) = setup();
-    assert_eq!(l.screen().placeholder, "Search apps and commands...");
+    assert_eq!(
+        l.screen().placeholder,
+        "Search apps and commands, or type > to run one..."
+    );
     copy(&h, "a note");
     open(&mut l);
     let s = l.screen();

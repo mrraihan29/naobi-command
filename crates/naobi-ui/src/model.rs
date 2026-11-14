@@ -58,6 +58,9 @@ pub fn lines(s: &Screen) -> Lines {
                 .as_deref()
                 .and_then(|k| k.strip_prefix("g:"))
                 .map(crate::glyphs::glyph);
+            // A run history row is a command line like the typed one, with the history glyph on the right.
+            let trailing = (r.icon_key.as_deref() == Some("g:run.history")).then_some(glyph);
+            let glyph = trailing.map(|_| crate::glyphs::glyph("run")).or(glyph);
             items.push(Line {
                 is_header: false,
                 title: r.title.as_str().into(),
@@ -76,6 +79,7 @@ pub fn lines(s: &Screen) -> Lines {
                 has_glyph: glyph.is_some(),
                 glyph: glyph.map_or("", |g| g.0).into(),
                 glyph_region: glyph.map_or("", |g| g.1).into(),
+                glyph_trailing: trailing.flatten().map_or("", |g| g.0).into(),
                 row: row as i32,
             });
             row += 1;

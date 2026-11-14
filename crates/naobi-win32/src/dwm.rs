@@ -128,6 +128,35 @@ fn clamped(work: (i32, i32, i32, i32), (x, y): (i32, i32), w: i32, h: i32) -> (i
     (x.min(right - w).max(left), y.min(bottom - h).max(top))
 }
 
+/// Where the Owner last dragged the Launcher, as an offset from the top left of the work area it was
+/// on. In memory only: a restart opens it at the default place again.
+static REMEMBERED: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
+
+/// The remembered spot for a `w` x `h` window on `work`, kept inside it.
+fn restored(work: (i32, i32, i32, i32), (ox, oy): (i32, i32), w: i32, h: i32) -> (i32, i32) {
+    clamped(work, (work.0 + ox, work.1 + oy), w, h)
+}
+
+/// Remembers a dragged position `pos` (physical px) for the next shows.
+pub fn remember_position(pos: (i32, i32)) {
+    // SAFETY: Win32 calls on plain values; every out-pointer outlives its call.
+    let work = unsafe {
+        let mut pt = POINT::default();
+        let _ = GetCursorPos(&mut pt);
+        let mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(mon, &mut mi).as_bool() {
+            return;
+        }
+        mi.rcWork
+    };
+    *REMEMBERED.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some((pos.0 - work.left, pos.1 - work.top));
+}
+
 /// Keeps a dragged Launcher at `(x, y)` physical px, `w` x `h`, inside the work area of the monitor
 /// under the cursor (the drag handle is under it), so it can never be dragged out of reach.
 pub fn clamp_to_work_area(pos: (i32, i32), w: i32, h: i32) -> (i32, i32) {
@@ -165,11 +194,11 @@ pub fn show(h: isize, height: f32) {
         let (mut dx, mut dy) = (96u32, 96u32);
         let _ = GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
         let r = mi.rcWork;
-        let (x, y, pw, ph) = placement(
-            (r.left, r.top, r.right, r.bottom),
-            dx,
-            height.round() as i32,
-        );
+        let work = (r.left, r.top, r.right, r.bottom);
+        let (mut x, mut y, pw, ph) = placement(work, dx, height.round() as i32);
+        if let Some(off) = *REMEMBERED.lock().unwrap_or_else(|e| e.into_inner()) {
+            (x, y) = restored(work, off, pw, ph);
+        }
         let _ = SetWindowPos(w, Some(HWND_TOPMOST), x, y, pw, ph, SWP_NOACTIVATE);
         set_cloak(h, false);
         // Foreground trick (ADR-0005): an empty mouse event, then SetForegroundWindow.
@@ -205,7 +234,7 @@ pub fn system_uses_dark_theme() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamped, placement};
+    use super::{clamped, placement, restored};
 
     #[test]
     fn launcher_sits_at_a_fifth_of_the_work_area_and_scales_with_dpi() {
@@ -221,6 +250,19 @@ mod tests {
         assert_eq!(placement((0, 0, 1920, 600), 96, 540), (585, 60, 750, 540));
         // Taller than the work area: the top edge is the work area's top.
         assert_eq!(placement((0, 0, 1920, 500), 96, 540).1, 0);
+    }
+
+    #[test]
+    fn a_remembered_position_is_kept_per_work_area_and_clamped() {
+        // Dragged to (100, 50) from the top left of the first monitor.
+        assert_eq!(restored((0, 0, 1920, 1040), (100, 50), 750, 475), (100, 50));
+        // The same offset on a monitor to the right.
+        assert_eq!(
+            restored((1920, 0, 3840, 1040), (100, 50), 750, 475),
+            (2020, 50)
+        );
+        // A smaller work area pulls it back inside.
+        assert_eq!(restored((0, 0, 800, 600), (100, 400), 750, 475), (50, 125));
     }
 
     #[test]

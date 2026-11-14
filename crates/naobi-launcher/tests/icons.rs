@@ -44,6 +44,7 @@ fn r012_the_cache_drops_the_least_recently_used_icon() {
     assert_eq!(c.len(), n);
     assert_eq!(c.get("a:new").map(|i| i.rgba[0]), Some(9));
     assert!(!c.is_empty());
+    assert!(IconCache::default().is_empty());
 }
 
 // @R-010

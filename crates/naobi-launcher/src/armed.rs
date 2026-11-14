@@ -3,6 +3,8 @@
 use naobi_core::ids::{ActionId, ItemId};
 
 pub const ARM_MS: i64 = 5_000;
+/// A click this soon after arming is the second half of a double click, not a confirmation.
+pub const CLICK_GUARD_MS: i64 = 400;
 
 #[derive(Debug)]
 struct Pending {
@@ -42,6 +44,13 @@ impl Armed {
             action,
             until_ms: now_ms + ARM_MS,
         });
+    }
+
+    /// True when something was armed less than `CLICK_GUARD_MS` ago.
+    pub fn just_armed(&self, now_ms: i64) -> bool {
+        self.pending
+            .as_ref()
+            .is_some_and(|p| now_ms < p.until_ms - ARM_MS + CLICK_GUARD_MS)
     }
 
     pub fn disarm(&mut self) {

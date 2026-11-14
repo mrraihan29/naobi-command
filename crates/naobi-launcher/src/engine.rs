@@ -128,7 +128,12 @@ impl Launcher {
             }
             UiEvent::Key(chord) => self.key(chord),
             UiEvent::RowActivated(i) => {
-                if i >= self.row_count() {
+                // A click through the open action panel is not for the row under it, and the second
+                // click of a double click must not confirm what the first one just armed (R-020).
+                if i >= self.row_count()
+                    || self.panel.is_some()
+                    || self.armed.just_armed(self.clock.now_ms())
+                {
                     return vec![];
                 }
                 self.selected = i;

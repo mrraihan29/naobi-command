@@ -51,6 +51,8 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("awake.display.off", "M3 5h18v11H3zM9 20h6M12 16v4M4 4l16 16", ""),
     ("picker.pick", "M15 4l5 5-3 3-5-5zM12 7l-7 7v5h5l7-7", ""),
     ("picker.history", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM12 7v5l3 2", ""),
+    ("clipboard.open", "M8 4h8v3H8zM6 6v14h12V6", ""),
+    ("clipboard.clear", "M8 4h8v3H8zM6 6v14h12V6M9 11l6 6M15 11l-6 6", ""),
     // Rows that are not commands of a module.
     ("quicklink", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", ""),
     ("calc", "M5 9h14M5 15h14", ""),

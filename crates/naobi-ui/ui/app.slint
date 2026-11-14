@@ -590,6 +590,8 @@ export component AppWindow inherits Window {
                 border-color: Tokens.line-hair;
                 border-radius: 4px;
                 clip: true;
+                // Clicks on the panel stay on the panel, not on the rows under it.
+                TouchArea { }
                 VerticalLayout {
                     padding: 8px;
                     spacing: 6px;

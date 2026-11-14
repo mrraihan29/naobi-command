@@ -300,3 +300,55 @@ fn r014_unit_conversion_and_hex_copy_their_text() {
         vec![Effect::CopyText("0xFF".into()), Effect::Hide]
     );
 }
+
+struct Tick(Arc<std::sync::atomic::AtomicI64>);
+impl Clock for Tick {
+    fn now_ms(&self) -> i64 {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+// @R-020
+#[test]
+fn r020_a_double_click_arms_but_does_not_confirm_a_click_later_does() {
+    use std::sync::atomic::{AtomicI64, Ordering};
+    let ops = Arc::new(FakeOps::default());
+    let now = Arc::new(AtomicI64::new(1_000_000_000_000));
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+    let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+    let mut l = Launcher::new(
+        vec![Box::new(SystemSource::new(ops.clone()))],
+        Vec::new(),
+        frecency,
+        Box::new(Tick(now.clone())),
+    );
+    type_text(&mut l, "restart");
+    l.handle(UiEvent::RowActivated(0));
+    assert!(l.screen().sections[0].rows[0].armed, "the first click arms");
+    // The second click of a double click, 100 ms later: nothing runs, it stays armed.
+    now.fetch_add(100, Ordering::SeqCst);
+    assert_eq!(l.handle(UiEvent::RowActivated(0)), vec![]);
+    assert!(ops.ran().is_empty());
+    assert!(l.screen().sections[0].rows[0].armed, "still armed");
+    // A deliberate second click after the guard confirms.
+    now.fetch_add(500, Ordering::SeqCst);
+    assert_eq!(l.handle(UiEvent::RowActivated(0)), vec![Effect::Hide]);
+    assert_eq!(ops.ran(), vec![SystemCommand::Restart]);
+}
+
+// @R-020
+#[test]
+fn r020_a_click_while_the_action_panel_is_open_does_not_run_the_row_under_it() {
+    let mut r = rig();
+    type_text(&mut r.launcher, "lock");
+    // Ctrl+K opens the action panel.
+    r.launcher.handle(UiEvent::Key(KeyChord {
+        key: Key::K,
+        ctrl: true,
+        shift: false,
+        alt: false,
+    }));
+    assert!(r.launcher.screen().action_panel.is_some());
+    assert_eq!(r.launcher.handle(UiEvent::RowActivated(0)), vec![]);
+    assert!(r.ops.ran().is_empty());
+}

@@ -342,7 +342,7 @@ mod catalog {
         assert!(item("awake.on"), "awake");
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
-            let module = ["sys.", "win.", "awake.", "aot.", "picker."];
+            let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];
             if module.iter().any(|p| id.starts_with(p)) {
                 assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");
             }

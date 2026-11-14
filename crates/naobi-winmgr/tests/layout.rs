@@ -333,3 +333,76 @@ fn d022_every_command_id_round_trips() {
     }
     assert_eq!(Command::from_id("nope"), None);
 }
+
+// @D-022
+#[test]
+fn d022_rect_grow_and_shrink_are_inverses_per_side() {
+    let visible = r(100, 200, 700, 800);
+    let border = r(1, 2, 3, 4);
+    let outer = visible.grow(&border);
+    assert_eq!(outer, r(99, 198, 703, 804));
+    assert_eq!(outer.shrink(&border), visible);
+    assert_eq!((visible.width(), visible.height()), (600, 600));
+}
+
+// @D-022
+#[test]
+fn d022_the_config_gap_and_the_item_details_are_what_was_set() {
+    let config = Config::default();
+    assert_eq!(config.gap(), 8);
+    config.set(12, BTreeMap::new());
+    assert_eq!(config.gap(), 12);
+    let source = SnapCommands::new(config);
+    let acts = source.actions(&ItemId("win.snap_left".into()));
+    assert_eq!(acts.len(), 1);
+    assert_eq!(acts[0].label, "Move");
+    let titles: std::collections::HashSet<_> = ALL.iter().map(|c| c.title()).collect();
+    assert_eq!(titles.len(), ALL.len(), "every command has its own title");
+    assert_eq!(Command::LeftHalf.title(), "Snap Left Half");
+    assert!(ALL.iter().all(|c| !c.title().is_empty()));
+}
+
+// @R-016
+#[test]
+fn r016_restore_uses_the_dpi_of_the_display_the_rectangle_is_on() {
+    for (start, dpi) in [(r(2100, 100, 2700, 600), 144), (r(100, 100, 700, 600), 96)] {
+        let mut ops = Fake::new(start, Rect::default());
+        ops.monitors = vec![mon(0, 0, 1920, 1080, 96), mon(1920, 0, 4800, 1620, 144)];
+        ops.win.monitor = if dpi == 144 { 1 } else { 0 };
+        let mut s = Snapper::default();
+        assert_eq!(s.run(Command::LeftHalf, &mut ops, 8), Outcome::Moved);
+        assert_eq!(s.run(Command::Restore, &mut ops, 8), Outcome::Moved);
+        let last = ops.moves.last().cloned().unwrap_or_default();
+        assert!(last.ends_with(&format!(" {dpi}")), "{last}");
+        assert_eq!(ops.win.outer, start);
+    }
+}
+
+// @R-016
+#[test]
+fn r016_exactly_64_windows_are_all_remembered() {
+    let mut ops = Fake::new(r(10, 10, 300, 300), Rect::default());
+    let mut s = Snapper::default();
+    for h in 1..=64 {
+        ops.win.hwnd = h;
+        ops.win.outer = r(10, 10, 300, 300);
+        assert_eq!(s.run(Command::LeftHalf, &mut ops, 8), Outcome::Moved);
+    }
+    ops.win.hwnd = 1;
+    assert_eq!(s.run(Command::Restore, &mut ops, 8), Outcome::Moved);
+}
+
+// @R-016
+#[test]
+fn r016_restore_picks_the_display_that_holds_the_middle_of_a_straddling_window() {
+    // The left edge is on the first display, the middle on the second (narrow) one.
+    for start in [r(1700, 100, 2300, 600), r(1700, -100, 2300, 400)] {
+        let mut ops = Fake::new(start, Rect::default());
+        ops.monitors = vec![mon(0, 0, 1920, 1080, 96), mon(1920, 0, 2400, 1080, 144)];
+        let mut s = Snapper::default();
+        assert_eq!(s.run(Command::LeftHalf, &mut ops, 8), Outcome::Moved);
+        assert_eq!(s.run(Command::Restore, &mut ops, 8), Outcome::Moved);
+        let last = ops.moves.last().cloned().unwrap_or_default();
+        assert!(last.ends_with(" 144"), "{start:?}: {last}");
+    }
+}

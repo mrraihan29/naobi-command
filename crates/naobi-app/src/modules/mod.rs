@@ -4,6 +4,7 @@ pub mod apps;
 pub mod builtin;
 pub mod clipboard;
 pub mod clipboard_capture;
+pub mod winmgr;
 
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;
@@ -132,12 +133,13 @@ impl Router {
 }
 
 /// One line per module. The module items add theirs here.
-// seam NCMD-17, 21 to 24: files, snap, topmost, awake and picker register here.
+// seam NCMD-17, 22 to 24: files, topmost, awake and picker register here.
 pub fn register_all(modules: &mut Modules) {
     builtin::register(modules);
     clipboard_capture::register(modules);
     clipboard::register(modules);
     apps::register(modules);
+    winmgr::register(modules);
 }
 
 #[cfg(test)]

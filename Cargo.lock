@@ -2638,6 +2638,7 @@ dependencies = [
  "naobi-launcher",
  "naobi-ui",
  "naobi-win32",
+ "naobi-winmgr",
  "serde_json",
  "tracing",
  "tracing-subscriber",
@@ -2704,8 +2705,17 @@ name = "naobi-win32"
 version = "0.0.0"
 dependencies = [
  "naobi-core",
+ "naobi-winmgr",
  "windows",
  "zeroize",
+]
+
+[[package]]
+name = "naobi-winmgr"
+version = "0.0.0"
+dependencies = [
+ "naobi-core",
+ "naobi-launcher",
 ]
 
 [[package]]

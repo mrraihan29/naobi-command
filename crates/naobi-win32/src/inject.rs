@@ -98,6 +98,21 @@ pub fn hold_alt_space() -> Option<HeldChord> {
         .map(|()| HeldChord(ID))
 }
 
+/// Presses and releases Ctrl+Alt+`vk` (the window commands' hotkeys).
+pub fn ctrl_alt(vk: u16) {
+    let k = VIRTUAL_KEY(vk);
+    let seq = [
+        key(VK_LCONTROL, false),
+        key(VK_MENU, false),
+        key(k, false),
+        key(k, true),
+        key(VK_MENU, true),
+        key(VK_LCONTROL, true),
+    ];
+    // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
+    unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
+}
+
 /// Presses and releases Alt+Shift+V (the clipboard history hotkey).
 pub fn alt_shift_v() {
     let v = VIRTUAL_KEY(0x56);

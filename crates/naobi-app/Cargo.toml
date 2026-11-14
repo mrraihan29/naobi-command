@@ -17,6 +17,7 @@ tracing-subscriber.workspace = true
 zeroize.workspace = true
 naobi-clipboard = { path = "../naobi-clipboard" }
 naobi-core = { path = "../naobi-core" }
+naobi-winmgr = { path = "../naobi-winmgr" }
 naobi-launcher = { path = "../naobi-launcher" }
 naobi-ui = { path = "../naobi-ui" }
 naobi-win32 = { path = "../naobi-win32" }

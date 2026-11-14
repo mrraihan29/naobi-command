@@ -177,6 +177,7 @@ impl Controller {
         let mut launched = false;
         let mut copied = false;
         let mut paste = None;
+        let mut hotkeys = Vec::new();
         // Where a paste goes: the window that had focus before the Launcher (`close` forgets it).
         let target = self.previous;
         for e in effects {
@@ -212,6 +213,7 @@ impl Controller {
                 Effect::PushView(_) => {}
                 // The paste runs after the Launcher is hidden.
                 Effect::Paste(id) => paste = Some(id),
+                Effect::RunHotkey(id) => hotkeys.push(id),
                 Effect::CopyEntry(id) => match host.copy_entry(id) {
                     Ok(()) => copied = true,
                     Err(_) => host.notice(failure("Copy", "The clipboard is busy, try again.")),
@@ -230,6 +232,10 @@ impl Controller {
         }
         if let Some(id) = paste {
             host.paste(id, target);
+        }
+        // After the Launcher is hidden and focus is back: the handlers act on the window in front.
+        for id in hotkeys {
+            self.on_hotkey(&id, host);
         }
     }
 }
@@ -647,5 +653,35 @@ mod tests {
         assert_eq!(h.log, vec!["copy woke".to_string()]);
         assert!(!c.on_hotkey(&HotkeyId("nobody".into()), &mut h));
         assert!(!c.on_app_event(&AppEvent::DisplayChanged, &mut h));
+    }
+
+    // @R-016
+    #[test]
+    fn r016_a_command_from_the_list_hides_gives_focus_back_then_runs_its_hotkey() {
+        use crate::modules::{Modules, Parts};
+        let mut m = Modules::new();
+        m.subscribe(
+            HotkeyId("snap_left".into()),
+            Box::new(|_, cx| cx.copy_text("snapped".into())),
+        );
+        let Parts { router, .. } = m.into_parts();
+        let outcome = Outcome::Effects(vec![
+            Effect::Hide,
+            Effect::RunHotkey(HotkeyId("snap_left".into())),
+        ]);
+        let mut c = controller_with(Box::new(One(outcome)), router);
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
+        c.show(&mut h);
+        h.log.clear();
+        c.on_ui_event(UiEvent::TextChanged("n".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        // The Launcher is hidden and focus is back before the handler acts on the window in front.
+        let hide = h.log.iter().position(|l| l == "hide");
+        let focus = h.log.iter().position(|l| l == "restore 77");
+        let ran = h.log.iter().position(|l| l == "copy snapped");
+        assert!(hide < focus && focus < ran, "{:?}", h.log);
     }
 }

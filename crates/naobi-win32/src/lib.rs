@@ -28,3 +28,4 @@ pub mod system_commands;
 pub mod theme;
 pub mod token;
 pub mod tray;
+pub mod window_ops;

@@ -1,5 +1,5 @@
 //! Side effects a command asks the app to perform.
-use crate::ids::{EntryId, ViewId};
+use crate::ids::{EntryId, HotkeyId, ViewId};
 use crate::notice::Notice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +38,9 @@ pub enum Effect {
     Paste(EntryId),
     /// Puts a clipboard entry on the clipboard without pasting it (Ctrl+Enter in the history).
     CopyEntry(EntryId),
+    /// Runs a module's hotkey handlers once the Launcher is hidden and focus is back, so a command
+    /// from the list does what its key does to the window that was in front.
+    RunHotkey(HotkeyId),
 }
 
 #[cfg(test)]

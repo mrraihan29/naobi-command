@@ -5,19 +5,31 @@ use std::sync::mpsc;
 use std::thread::JoinHandle;
 
 use windows::core::w;
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEINPUT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DispatchMessageW, GetMessageW, GetWindowTextLengthW, GetWindowTextW,
-    PostThreadMessageW, SetForegroundWindow, TranslateMessage, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WM_QUIT, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+    CreateWindowExW, DispatchMessageW, GetMessageW, GetWindowRect, GetWindowTextLengthW,
+    GetWindowTextW, PostThreadMessageW, SetForegroundWindow, TranslateMessage, MSG,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WM_QUIT, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 
 /// `ES_MULTILINE`: not part of the typed window styles.
 const ES_MULTILINE: u32 = 0x0004;
+
+/// Makes this (test) process per-monitor DPI aware like the app, so the rectangles it reads are the
+/// physical ones the app works with. Call it before the first window.
+pub fn dpi_aware() {
+    // SAFETY: a plain call with a constant; it fails harmlessly when the process already has one.
+    let _ = unsafe {
+        windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(
+            windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+        )
+    };
+}
 
 pub struct EditWindow {
     hwnd: isize,
@@ -85,6 +97,24 @@ impl EditWindow {
             SendInput(&[empty], std::mem::size_of::<INPUT>() as i32);
             let _ = SetForegroundWindow(self.handle());
         }
+    }
+
+    /// The window rectangle and the visible frame (without the invisible resize border), in physical
+    /// pixels.
+    pub fn rects(&self) -> (naobi_winmgr::Rect, naobi_winmgr::Rect) {
+        let (mut outer, mut frame) = (RECT::default(), RECT::default());
+        // SAFETY: each call writes one RECT into a local of this frame.
+        unsafe {
+            let _ = GetWindowRect(self.handle(), &mut outer);
+            let _ = DwmGetWindowAttribute(
+                self.handle(),
+                DWMWA_EXTENDED_FRAME_BOUNDS,
+                &mut frame as *mut _ as *mut core::ffi::c_void,
+                std::mem::size_of::<RECT>() as u32,
+            );
+        }
+        let r = |r: RECT| naobi_winmgr::Rect::new(r.left, r.top, r.right, r.bottom);
+        (r(outer), r(frame))
     }
 
     /// What the edit control holds now.

@@ -10,7 +10,7 @@ several licences appears under each of them. The workspace's own crates are unli
 | Font | Licence | Where |
 |---|---|---|
 | JetBrains Mono (Regular, Medium) | SIL Open Font License 1.1 | `crates/naobi-ui/assets/JetBrainsMono-*.ttf`; licence text in `crates/naobi-ui/assets/JetBrainsMono-OFL.txt` |
-| Inter (subset) | SIL Open Font License 1.1, Copyright The Inter Project Authors | `crates/naobi-ui/assets/Inter-subset.ttf`; the licence text is not copied into the repository because nothing is distributed. Add it next to the font before any distribution |
+| Inter (subset) | SIL Open Font License 1.1, Copyright The Inter Project Authors | `crates/naobi-ui/assets/Inter-subset.ttf`; licence text in `crates/naobi-ui/assets/Inter-OFL.txt` |
 
 Both fonts are embedded in the executable through the Slint compiler. An OFL font may be embedded and used freely;
 it may not be sold on its own.

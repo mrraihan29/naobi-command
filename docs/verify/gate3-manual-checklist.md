@@ -5,7 +5,7 @@ expected result and a box. Anything that does not match opens a bug against the 
 
 Before you start: quit every running Naobi, then `cargo build --release -p naobi-app`, and start
 `target\release\naobi-app.exe` yourself (the tier 2 and perf runs use a separate build with the `perf` feature).
-The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspace -- --ignored` (Naobi quit) and
+The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspace --no-fail-fast -- --ignored --test-threads=1` (Naobi quit) and
 `cargo run --release -p naobi-perf -- all --out target/perf.json`.
 
 ## 1. R-007: keyboard only, and Narrator
@@ -97,8 +97,9 @@ The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspac
 
 - [ ] App rows show the app's own icon; file rows show the icon for their extension; a row with no icon shows the
   placeholder and nothing else changes.
-- [ ] Decision owed (T-030): app icons are read through Start Menu shortcuts, whose own icon location could be a
-  network path. Accept it, or show icons only for packaged apps and exe paths.
+- [x] Decided (T-030): icons are shown only for packaged apps and for exe paths on a local fixed drive. A
+  shortcut, internet shortcut or library is never asked for its icon, so no icon location on a network is
+  followed (`icon_id_is_local`).
 
 ## 12. Network silence and the build
 

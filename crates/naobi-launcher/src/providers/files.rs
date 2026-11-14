@@ -52,10 +52,11 @@ fn like_escape(term: &str) -> String {
 
 /// The two query skeletons. Windows Search has no parameter binding, so the escaped words are
 /// placed into the skeleton (T-031 covers the escaping). This is not SQLite: T-007's guard test
-/// (`d014_no_string_built_sql`) is about the app's own database, and it does not fire here only
-/// because the skeletons are constants; the Owner is asked whether to allow this module in it
-/// by name. The user text goes in last, after the number, and `replace` does not rescan what it
-/// inserted, so a typed `{terms}` stays text (tested).
+/// (`d014_no_string_built_sql`) is about the app's own database. It does not fire here because the
+/// skeletons are constants, and the Owner decided it gets no allowlist for this module: it stays
+/// strict, and a change that makes it fire here is a change to review. The user text goes in last,
+/// after the number, and `replace` does not rescan what it inserted, so a typed `{terms}` stays
+/// text (tested).
 const CONTAINS_QUERY: &str = "SELECT TOP {top} System.ItemPathDisplay FROM SystemIndex WHERE CONTAINS(System.FileName, '{terms}') AND scope='file:' ORDER BY System.Search.Rank DESC";
 const LIKE_QUERY: &str =
     "SELECT TOP {top} System.ItemPathDisplay FROM SystemIndex WHERE {likes} AND scope='file:'";

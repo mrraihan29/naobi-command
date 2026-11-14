@@ -7,7 +7,7 @@ Personal Windows 11 launcher and utility suite (launcher, calculator, clipboard 
 - Format + lint: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`
 - Types: `cargo check --workspace --all-targets`
 - Tests, per-task gate (tier 1): one crate `cargo test -p <crate>`; all `cargo test --workspace`
-- Tests, tier 2 (inject keys, write clipboard, move windows; quit the dogfood instance first; before Gate 3): `cargo test --workspace -- --ignored`
+- Tests, tier 2 (inject keys, write clipboard, move windows; quit the dogfood instance first; before Gate 3): `cargo test --workspace --no-fail-fast -- --ignored --test-threads=1`
 - Perf budgets (R-006): `cargo run --release -p naobi-perf -- all --out target/perf.json`; network silence: `... -p naobi-perf -- network-silence --minutes 10`
 - Dependencies: `cargo deny check`
 - E2E: none; Playwright does not apply (D-006). No hosted CI before Ship: every gate runs locally.

@@ -19,7 +19,7 @@ Read before writing code. Never weaken this file to make a change pass.
 | Format + lint (Rust) | Zero warnings | `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` | task end (local) |
 | Types (Rust) | Compiles | `cargo check --workspace --all-targets` | every edit |
 | Tier 1 tests (D-025) | All pass; no Win32, no desktop; tier 2 tests are `#[ignore]`d so they do not run here | `cargo test --workspace` (nextest optional after Gate 1) | task end (local) |
-| Tier 2 tests (D-025) | All pass on an interactive desktop with the dogfood instance quit (they inject keys, write the clipboard and move windows) | `cargo test --workspace -- --ignored` | before Gate 3 and on demand; not part of the per-task gate |
+| Tier 2 tests (D-025) | All pass on an interactive desktop with the dogfood instance quit (they inject keys, write the clipboard and move windows) | `cargo test --workspace --no-fail-fast -- --ignored --test-threads=1` | before Gate 3 and on demand; not part of the per-task gate |
 | No unwrap/expect outside tests | Zero (D-005) | workspace lints `clippy::unwrap_used` and `clippy::expect_used` set to deny, run by the clippy row above | task end (local) |
 | Unsafe | Only in `naobi-win32`; every block has `// SAFETY:` (D-011) | `forbid(unsafe_code)` in all other crates, `clippy::undocumented_unsafe_blocks` denied, run by the clippy row above | every edit |
 | Performance (R-006) | Every budget in "Project numbers" reports PASS | `cargo run --release -p naobi-perf -- all --out target/perf.json` (reads `docs/research/baseline-powertoys.json`, no PowerToys needed) | before Gate 3, after any hot-path change |

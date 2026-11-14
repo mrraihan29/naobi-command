@@ -53,6 +53,11 @@ pub fn lines(s: &Screen) -> Lines {
                 selected = items.len() as i32;
             }
             let icon = r.icon.as_deref().and_then(icon_image);
+            let glyph = r
+                .icon_key
+                .as_deref()
+                .and_then(|k| k.strip_prefix("g:"))
+                .map(crate::glyphs::glyph);
             items.push(Line {
                 is_header: false,
                 title: r.title.as_str().into(),
@@ -68,6 +73,10 @@ pub fn lines(s: &Screen) -> Lines {
                 swatch: r.swatch.map_or(Color::from_argb_u8(0, 0, 0, 0), swatch),
                 has_icon: icon.is_some(),
                 icon: icon.unwrap_or_default(),
+                has_glyph: glyph.is_some(),
+                glyph: glyph.map_or("", |g| g.0).into(),
+                glyph_region: glyph.map_or("", |g| g.1).into(),
+                row: row as i32,
             });
             row += 1;
         }
@@ -211,6 +220,21 @@ mod tests {
         assert!(close(frame_height(1.0, 400.0), 360.0));
         assert!(close(frame_height(1.0, 527.8), 475.0)); // 0.9 x 527.8 = 475.02: base kept
         assert!(close(frame_height(1.0, 527.0), 474.3)); // 0.9 x 527 = 474.3: clamped
+    }
+
+    // @R-007
+    #[test]
+    fn r007_a_line_carries_its_row_number_and_headers_do_not_count() {
+        let sec = |h: Option<&str>, rows: &[&str]| Section {
+            header: h.map(str::to_owned),
+            rows: rows.iter().map(|t| row(t)).collect(),
+        };
+        let s = screen(vec![sec(None, &["a", "b"]), sec(Some("Files"), &["c"])], 2);
+        let l = lines(&s);
+        let rows: Vec<(bool, i32)> = l.items.iter().map(|x| (x.is_header, x.row)).collect();
+        // a, b, the "Files" header, c: a click on c reports row 2, the index the engine selects by.
+        assert_eq!(rows, [(false, 0), (false, 1), (true, 0), (false, 2)]);
+        assert_eq!(l.selected, 3);
     }
 
     #[test]

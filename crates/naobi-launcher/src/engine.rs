@@ -677,6 +677,10 @@ fn icon_key_of(item: &Item) -> Option<String> {
             let ext = name.rsplit_once('.').map_or("", |(_, e)| e);
             Some(format!("e:{}", ext.to_ascii_lowercase()))
         }
+        // Drawn by the UI, never asked of the icon child (`askable` refuses it).
+        ItemKind::Command => Some(format!("g:{}", item.id.0)),
+        ItemKind::Quicklink => Some("g:quicklink".to_owned()),
+        ItemKind::Calculator => Some("g:calc".to_owned()),
         _ => None,
     }
 }

@@ -1,13 +1,17 @@
 //! Slint adapter (software renderer, accessibility on). The only crate that names Slint (ADR-0002).
 #![deny(unsafe_code)]
 
+mod glyphs;
 mod model;
+
+pub use glyphs::has_own_glyph;
 
 use naobi_core::tokens::{self, Palette};
 use naobi_core::ui::{Key, KeyChord, Screen, Theme, UiEvent, ViewModel};
 use naobi_win32::dwm;
 use slint::platform::Key as SlintKey;
 use slint::{ComponentHandle, ModelRc, VecModel, Weak};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -135,7 +139,69 @@ fn flush(ui: &AppWindow, pending: &Mutex<Option<Screen>>) {
     }
 }
 
+type Events = Rc<dyn Fn(UiEvent)>;
+
+thread_local! {
+    /// The UI thread's way to report events from its own timer (the focus watch).
+    static EVENTS: RefCell<Option<Events>> = const { RefCell::new(None) };
+    /// Runs while the Launcher is visible, and only then (R-006: nothing ticks while it is hidden).
+    static WATCH: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
+}
+
+/// What the focus watch does after looking at the window once.
+#[derive(Debug, PartialEq, Eq)]
+enum Watch {
+    Keep,
+    /// The window is hidden: nothing left to watch.
+    Stop,
+    /// The Launcher had the foreground and another window took it.
+    Dismiss,
+}
+
+/// One look: `was_fg` remembers that the Launcher has been the foreground window since it opened, so a
+/// window Windows never gave the foreground to is not closed by a click elsewhere.
+fn watch_step(was_fg: &mut bool, is_fg: bool, cloaked: bool) -> Watch {
+    if cloaked {
+        Watch::Stop
+    } else if is_fg {
+        *was_fg = true;
+        Watch::Keep
+    } else if *was_fg {
+        Watch::Dismiss
+    } else {
+        Watch::Keep
+    }
+}
+
+/// Closes the Launcher when another window takes the foreground from it (a click outside, Alt+Tab).
+fn start_focus_watch(hwnd: isize) {
+    let mut was_fg = false;
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(120),
+        move || {
+            let is_fg = naobi_win32::paste::foreground_window() == hwnd;
+            let step = watch_step(&mut was_fg, is_fg, dwm::is_cloaked(hwnd));
+            if step != Watch::Keep {
+                WATCH.with(|w| {
+                    if let Some(t) = w.borrow().as_ref() {
+                        t.stop();
+                    }
+                });
+            }
+            if step == Watch::Dismiss {
+                if let Some(f) = EVENTS.with(|e| e.borrow().clone()) {
+                    f(UiEvent::Dismissed);
+                }
+            }
+        },
+    );
+    WATCH.with(|w| *w.borrow_mut() = Some(timer));
+}
+
 fn show_now(ui: &AppWindow, hwnd: isize) {
+    start_focus_watch(hwnd);
     // The size follows the monitor the Launcher is about to open on.
     ui.set_work_height(dwm::work_height_logical());
     let height = resize(ui);
@@ -250,7 +316,23 @@ pub fn run(
     // The window size comes from Rust only: 750 x frame_height, here at 100% and no work area.
     resize(&ui);
     let on_event = Rc::new(on_event);
+    EVENTS.with(|e| {
+        let f: Events = on_event.clone();
+        *e.borrow_mut() = Some(f);
+    });
     {
+        // Dragging the footer moves the window; the next show centers it again.
+        let weak = ui.as_weak();
+        ui.on_move_by(move |dx, dy| {
+            if let Some(ui) = weak.upgrade() {
+                let w = ui.window();
+                let (p, k) = (w.position(), w.scale_factor());
+                w.set_position(slint::PhysicalPosition::new(
+                    p.x + (dx * k).round() as i32,
+                    p.y + (dy * k).round() as i32,
+                ));
+            }
+        });
         let f = on_event.clone();
         ui.on_text_changed(move |q| f(UiEvent::TextChanged(q.into())));
         let f = on_event.clone();
@@ -619,5 +701,21 @@ mod ui_check {
             (palette.raised.r, palette.raised.g, palette.raised.b),
             "{theme}: no footer at the bottom edge (empty strip under it)"
         );
+    }
+
+    // @R-007
+    #[test]
+    fn r007_the_launcher_closes_when_it_loses_the_foreground_it_had() {
+        let mut was = false;
+        // Not yet the foreground window (Windows has not given it, or refused): never closed.
+        assert_eq!(watch_step(&mut was, false, false), Watch::Keep);
+        assert_eq!(watch_step(&mut was, false, false), Watch::Keep);
+        // It gets the foreground, keeps it, then another window takes it: closed.
+        assert_eq!(watch_step(&mut was, true, false), Watch::Keep);
+        assert_eq!(watch_step(&mut was, true, false), Watch::Keep);
+        assert_eq!(watch_step(&mut was, false, false), Watch::Dismiss);
+        // Hidden meanwhile (closed by a key): the watch just ends, no Dismissed.
+        let mut was = true;
+        assert_eq!(watch_step(&mut was, false, true), Watch::Stop);
     }
 }

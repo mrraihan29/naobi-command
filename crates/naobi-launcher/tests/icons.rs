@@ -160,7 +160,10 @@ fn r012_rows_carry_an_icon_key_from_the_app_id_or_the_extension_never_the_path()
         keys.contains(&Some("e:".to_owned())),
         "no extension: {keys:?}"
     );
-    assert!(keys.contains(&None), "a command has none: {keys:?}");
+    assert!(
+        keys.contains(&Some("g:cmd:lock".to_owned())),
+        "a command is drawn by its id: {keys:?}"
+    );
     assert!(
         keys.iter().flatten().all(|k| !k.contains(r"C:\docs")),
         "no path in any key: {keys:?}"

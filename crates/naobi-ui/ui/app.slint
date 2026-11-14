@@ -18,6 +18,12 @@ export struct Line {
     swatch: color,
     has-icon: bool,
     icon: image,
+    // A drawn icon (SVG path data on a 24 x 24 grid): the outline, and a faint filled region.
+    has-glyph: bool,
+    glyph: string,
+    glyph-region: string,
+    // Row number among the rows (headers have none); what a click reports.
+    row: int,
 }
 
 export struct ActionLine {
@@ -84,6 +90,7 @@ component HeaderItem inherits Rectangle {
 
 component ResultRow inherits Rectangle {
     in property <Line> line;
+    callback activated();
     height: 40px * Tokens.scale;
     clip: true;
     background: line.selected ? Tokens.surface-selected : transparent;
@@ -111,7 +118,36 @@ component ResultRow inherits Rectangle {
             source: line.icon;
             image-fit: contain;
         }
-        if !line.has-icon : Rectangle {
+        if !line.has-icon && line.has-glyph : Rectangle {
+            width: 22px;
+            height: 22px;
+            y: (parent.height - self.height) / 2;
+            Path {
+                x: 1px;
+                y: 1px;
+                width: 20px;
+                height: 20px;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: line.glyph-region;
+                fill: Tokens.text-primary;
+                opacity: 0.35;
+            }
+            Path {
+                x: 1px;
+                y: 1px;
+                width: 20px;
+                height: 20px;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: line.glyph;
+                stroke: Tokens.text-primary;
+                stroke-width: 1.7px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+            }
+        }
+        if !line.has-icon && !line.has-glyph : Rectangle {
             width: 22px;
             height: 22px;
             y: (parent.height - self.height) / 2;
@@ -151,17 +187,23 @@ component ResultRow inherits Rectangle {
             on-selected: line.selected;
         }
     }
+    // A click runs the row, like Enter on it. Last, so it is on top of the row's content.
+    TouchArea {
+        clicked => { root.activated(); }
+    }
 }
 
 // One list position: a header or a row. The role of each kind is constant, so each has its own element.
 component LineItem inherits Rectangle {
     in property <Line> line;
+    callback activated();
     height: 40px * Tokens.scale;
     if line.is-header : HeaderItem {
         text: line.title;
     }
     if !line.is-header : ResultRow {
         line: root.line;
+        activated => { root.activated(); }
     }
 }
 
@@ -292,6 +334,8 @@ export component AppWindow inherits Window {
     callback text-changed(string);
     callback key-pressed(string, bool, bool, bool) -> bool;
     callback row-activated(int);
+    // The footer is the handle: dragging it moves the window by this many logical px.
+    callback move-by(length, length);
     public function focus-input() { input.focus(); }
 
     // Keep the selected line inside the viewport.
@@ -429,6 +473,7 @@ export component AppWindow inherits Window {
                         accessible-label: "Results";
                         for l[i] in root.lines : LineItem {
                             line: l;
+                            activated => { root.row-activated(l.row); }
                         }
                     }
                     if root.preview-kind != 0 : PreviewPane {
@@ -441,6 +486,21 @@ export component AppWindow inherits Window {
                 Rectangle {
                     height: 42px;
                     background: Tokens.surface-raised;
+                    TouchArea {
+                        property <length> from-x;
+                        property <length> from-y;
+                        pointer-event(e) => {
+                            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                                self.from-x = self.mouse-x;
+                                self.from-y = self.mouse-y;
+                            }
+                        }
+                        moved => {
+                            if (self.pressed) {
+                                root.move-by(self.mouse-x - self.from-x, self.mouse-y - self.from-y);
+                            }
+                        }
+                    }
                     HorizontalLayout {
                         padding-left: 16px;
                         padding-right: 16px;

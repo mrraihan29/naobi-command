@@ -340,6 +340,13 @@ mod catalog {
         );
         assert!(item("aot.toggle") && hotkey("topmost"), "always on top");
         assert!(item("awake.on"), "awake");
+        // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
+        for (id, _) in &c.items {
+            let module = ["sys.", "win.", "awake.", "aot.", "picker."];
+            if module.iter().any(|p| id.starts_with(p)) {
+                assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");
+            }
+        }
         // Phase 2 (R-004): none of it is in the build, by id or by title.
         let phase2 = [
             "snippet",

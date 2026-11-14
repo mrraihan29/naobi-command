@@ -121,6 +121,33 @@ pub fn work_height_logical() -> f32 {
     }
 }
 
+/// `(x, y)` moved the least that puts a `w` x `h` window inside `work` `(left, top, right, bottom)`;
+/// a window bigger than the work area keeps its left and top edges on it.
+fn clamped(work: (i32, i32, i32, i32), (x, y): (i32, i32), w: i32, h: i32) -> (i32, i32) {
+    let (left, top, right, bottom) = work;
+    (x.min(right - w).max(left), y.min(bottom - h).max(top))
+}
+
+/// Keeps a dragged Launcher at `(x, y)` physical px, `w` x `h`, inside the work area of the monitor
+/// under the cursor (the drag handle is under it), so it can never be dragged out of reach.
+pub fn clamp_to_work_area(pos: (i32, i32), w: i32, h: i32) -> (i32, i32) {
+    // SAFETY: Win32 calls on plain values; every out-pointer outlives its call.
+    unsafe {
+        let mut pt = POINT::default();
+        let _ = GetCursorPos(&mut pt);
+        let mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(mon, &mut mi).as_bool() {
+            return pos;
+        }
+        let r = mi.rcWork;
+        clamped((r.left, r.top, r.right, r.bottom), pos, w, h)
+    }
+}
+
 /// Moves the cloaked window to the monitor under the cursor, `height` logical px tall (the UI's own
 /// frame height), uncloaks it and takes the foreground.
 pub fn show(h: isize, height: f32) {
@@ -178,7 +205,7 @@ pub fn system_uses_dark_theme() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::placement;
+    use super::{clamped, placement};
 
     #[test]
     fn launcher_sits_at_a_fifth_of_the_work_area_and_scales_with_dpi() {
@@ -194,5 +221,20 @@ mod tests {
         assert_eq!(placement((0, 0, 1920, 600), 96, 540), (585, 60, 750, 540));
         // Taller than the work area: the top edge is the work area's top.
         assert_eq!(placement((0, 0, 1920, 500), 96, 540).1, 0);
+    }
+
+    #[test]
+    fn a_dragged_window_stays_inside_the_work_area() {
+        let work = (0, 0, 1920, 1040);
+        assert_eq!(clamped(work, (585, 208), 750, 475), (585, 208));
+        assert_eq!(clamped(work, (-300, -40), 750, 475), (0, 0));
+        assert_eq!(clamped(work, (1800, 900), 750, 475), (1170, 565));
+        // A window wider than the work area keeps its left and top edges.
+        assert_eq!(clamped((0, 0, 500, 400), (90, 90), 750, 475), (0, 0));
+        // A second monitor to the right.
+        assert_eq!(
+            clamped((1920, 0, 3840, 1040), (1500, 10), 750, 475),
+            (1920, 10)
+        );
     }
 }

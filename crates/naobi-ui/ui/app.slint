@@ -98,6 +98,8 @@ component ResultRow inherits Rectangle {
     accessible-label: line.label;
     accessible-item-selectable: true;
     accessible-item-selected: line.selected;
+    // Narrator's "invoke" runs the row, like a click.
+    accessible-action-default => { root.activated(); }
 
     if line.selected : Rectangle {
         x: 0;

@@ -229,3 +229,55 @@ fn r007_click_outside_closes_and_a_click_on_a_row_runs_it() {
     assert!(outside_closed, "a click outside did not close the launcher");
     assert!(row_ran, "a click on the first row did not run it");
 }
+
+// @R-007
+#[test]
+#[ignore = "tier2: interactive desktop"]
+fn r007_dragging_the_footer_moves_the_launcher_and_keeps_it_on_the_screen() {
+    use naobi_win32::probe;
+    let dir = std::env::temp_dir().join(format!("naobi-flow-drag-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let run_key = RunKey(format!(
+        r"Software\NaobiCommandTest\flow-drag-{}",
+        std::process::id()
+    ));
+    let mut app = match Command::new(env!("CARGO_BIN_EXE_naobi-app"))
+        .env("NAOBI_TEST_RUN_KEY", &run_key.0)
+        .env("NAOBI_PERF_ITEMS", "0")
+        .env("NAOBI_DATA_DIR", dir.join("data"))
+        .env("NAOBI_SETTINGS_DIR", dir.join("settings"))
+        .stdout(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(e) => panic!("spawn naobi-app: {e}"),
+    };
+    let launcher = || dwm::find_window(naobi_ui::TITLE);
+    let visible = || launcher().is_some_and(|h| !dwm::is_cloaked(h));
+    let ready = until(Duration::from_secs(5), || launcher().is_some());
+    let shown = ready && {
+        inject::alt_space();
+        until(Duration::from_secs(2), visible)
+    };
+    std::thread::sleep(Duration::from_millis(700));
+    let before = probe::window_rect(naobi_ui::TITLE);
+    // The footer is the bottom 36 logical px; drag from its middle to the screen's top-left corner.
+    let after = shown.then_some(before).flatten().and_then(|(x, y, w, h)| {
+        let k = f64::from(w) / 750.0;
+        inject::drag((x + w / 2, y + h - (18.0 * k) as i32), (0, 0));
+        std::thread::sleep(Duration::from_millis(300));
+        probe::window_rect(naobi_ui::TITLE)
+    });
+    let _ = app.kill();
+    let _ = app.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(ready && shown, "the launcher did not show");
+    let (Some((bx, by, _, _)), Some((ax, ay, _, _))) = (before, after) else {
+        panic!("no window rect");
+    };
+    assert!(ax < bx && ay < by, "the drag did not move the launcher");
+    assert!(
+        ax >= 0 && ay >= 0,
+        "the launcher left the screen: {ax}, {ay}"
+    );
+}

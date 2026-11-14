@@ -327,10 +327,13 @@ pub fn run(
             if let Some(ui) = weak.upgrade() {
                 let w = ui.window();
                 let (p, k) = (w.position(), w.scale_factor());
-                w.set_position(slint::PhysicalPosition::new(
-                    p.x + (dx * k).round() as i32,
-                    p.y + (dy * k).round() as i32,
-                ));
+                let size = w.size();
+                let (x, y) = dwm::clamp_to_work_area(
+                    (p.x + (dx * k).round() as i32, p.y + (dy * k).round() as i32),
+                    size.width as i32,
+                    size.height as i32,
+                );
+                w.set_position(slint::PhysicalPosition::new(x, y));
             }
         });
         let f = on_event.clone();

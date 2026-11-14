@@ -183,3 +183,41 @@ pub fn click_at(x: i32, y: i32) {
         );
     }
 }
+
+/// Presses the left button at screen pixel `from`, moves the pointer to `to` in steps and lets go.
+pub fn drag(from: (i32, i32), to: (i32, i32)) {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
+    let button = |flags| INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dwFlags: flags,
+                ..Default::default()
+            },
+        },
+    };
+    let pause = || std::thread::sleep(std::time::Duration::from_millis(30));
+    // SAFETY: SetCursorPos takes plain values; SendInput reads a slice of initialised INPUT values.
+    unsafe {
+        let _ = SetCursorPos(from.0, from.1);
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        SendInput(
+            &[button(MOUSEEVENTF_LEFTDOWN)],
+            std::mem::size_of::<INPUT>() as i32,
+        );
+        for i in 1..=20 {
+            let _ = SetCursorPos(
+                from.0 + (to.0 - from.0) * i / 20,
+                from.1 + (to.1 - from.1) * i / 20,
+            );
+            pause();
+        }
+        SendInput(
+            &[button(MOUSEEVENTF_LEFTUP)],
+            std::mem::size_of::<INPUT>() as i32,
+        );
+    }
+}

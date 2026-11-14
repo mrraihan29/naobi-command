@@ -335,6 +335,10 @@ fn on_theme() {
     if let Some(look) = theme::follow(&AppEvent::ThemeChanged, &SystemTheme, s.look) {
         let palette_changed = look.theme != s.look.theme;
         s.look = look;
+        // The topmost borders follow Windows between light and dark too (R-018 v2).
+        if palette_changed {
+            modules::aot::restyle();
+        }
         if let Some(ui) = s.ui.clone() {
             if palette_changed {
                 ui.set_theme(look.theme);
@@ -368,6 +372,7 @@ fn on_settings_changed(path: &Path) {
     }
     // Quicklinks are read live, so an edited alias works at once; an open Launcher ranks again.
     modules::winmgr::set_config(&next);
+    modules::aot::set_config(&next);
     modules::builtin::set_quicklinks(next.quicklinks);
     to_modules(|c, h| c.refresh(h));
 }
@@ -484,6 +489,7 @@ pub fn run() -> anyhow::Result<()> {
     sync_autostart(settings.general.autostart);
     modules::builtin::set_quicklinks(settings.quicklinks.clone());
     modules::winmgr::set_config(&settings);
+    modules::aot::set_config(&settings);
     {
         let mut s = state();
         s.settings = Some(settings.clone());

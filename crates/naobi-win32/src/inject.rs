@@ -113,6 +113,21 @@ pub fn ctrl_alt(vk: u16) {
     unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
 }
 
+/// Presses and releases Win+Ctrl+T (the always-on-top hotkey).
+pub fn win_ctrl_t() {
+    let (win, t) = (VIRTUAL_KEY(0x5B), VIRTUAL_KEY(0x54));
+    let seq = [
+        key(VK_LCONTROL, false),
+        key(win, false),
+        key(t, false),
+        key(t, true),
+        key(win, true),
+        key(VK_LCONTROL, true),
+    ];
+    // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
+    unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
+}
+
 /// Presses and releases Alt+Shift+V (the clipboard history hotkey).
 pub fn alt_shift_v() {
     let v = VIRTUAL_KEY(0x56);

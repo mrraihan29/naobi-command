@@ -2628,10 +2628,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "naobi-aot"
+version = "0.0.0"
+dependencies = [
+ "naobi-core",
+]
+
+[[package]]
 name = "naobi-app"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "naobi-aot",
  "naobi-app",
  "naobi-clipboard",
  "naobi-core",
@@ -2704,6 +2712,7 @@ dependencies = [
 name = "naobi-win32"
 version = "0.0.0"
 dependencies = [
+ "naobi-aot",
  "naobi-core",
  "naobi-winmgr",
  "windows",

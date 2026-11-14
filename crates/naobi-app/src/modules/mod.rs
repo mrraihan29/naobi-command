@@ -1,5 +1,6 @@
 //! The module registry (REPORT 3.4): where each module plugs into the controller. A module item adds
 //! one line to `register_all` and never edits `controller.rs`.
+pub mod aot;
 pub mod apps;
 pub mod builtin;
 pub mod clipboard;
@@ -133,13 +134,14 @@ impl Router {
 }
 
 /// One line per module. The module items add theirs here.
-// seam NCMD-17, 22 to 24: files, topmost, awake and picker register here.
+// seam NCMD-17, 23, 24: files, awake and picker register here.
 pub fn register_all(modules: &mut Modules) {
     builtin::register(modules);
     clipboard_capture::register(modules);
     clipboard::register(modules);
     apps::register(modules);
     winmgr::register(modules);
+    aot::register(modules);
 }
 
 #[cfg(test)]

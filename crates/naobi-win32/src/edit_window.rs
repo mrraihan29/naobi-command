@@ -117,6 +117,49 @@ impl EditWindow {
         (r(outer), r(frame))
     }
 
+    pub fn is_topmost(&self) -> bool {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, GWL_EXSTYLE, WS_EX_TOPMOST,
+        };
+        // SAFETY: reads the extended style of a window of this process.
+        let ex = unsafe { GetWindowLongPtrW(self.handle(), GWL_EXSTYLE) } as u32;
+        ex & WS_EX_TOPMOST.0 != 0
+    }
+
+    /// Moves the window's top left corner, keeping its size.
+    pub fn move_to(&self, x: i32, y: i32) {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+        };
+        // SAFETY: moves a window of this process.
+        let _ = unsafe {
+            SetWindowPos(
+                self.handle(),
+                None,
+                x,
+                y,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+        };
+    }
+
+    /// The topmost border window the app draws, if one is showing (the app is another process).
+    pub fn border_rect() -> Option<naobi_winmgr::Rect> {
+        use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, IsWindowVisible};
+        let mut r = RECT::default();
+        // SAFETY: finds a window by class name and reads its rectangle into a local.
+        unsafe {
+            let h = FindWindowW(w!("NaobiTopmostBorder"), None).ok()?;
+            if !IsWindowVisible(h).as_bool() {
+                return None;
+            }
+            GetWindowRect(h, &mut r).ok()?;
+        }
+        Some(naobi_winmgr::Rect::new(r.left, r.top, r.right, r.bottom))
+    }
+
     /// What the edit control holds now.
     pub fn text(&self) -> String {
         // SAFETY: reads the control's text into a buffer sized from its own length.

@@ -52,6 +52,7 @@ pub fn lines(s: &Screen) -> Lines {
             if row == s.selected {
                 selected = items.len() as i32;
             }
+            let icon = r.icon.as_deref().and_then(icon_image);
             items.push(Line {
                 is_header: false,
                 title: r.title.as_str().into(),
@@ -65,6 +66,8 @@ pub fn lines(s: &Screen) -> Lines {
                 pinned: r.pinned,
                 has_swatch: r.swatch.is_some(),
                 swatch: r.swatch.map_or(Color::from_argb_u8(0, 0, 0, 0), swatch),
+                has_icon: icon.is_some(),
+                icon: icon.unwrap_or_default(),
             });
             row += 1;
         }
@@ -141,7 +144,16 @@ pub fn preview(p: Option<&PreviewView>) -> (i32, SharedString, Image) {
     }
 }
 
+/// A row's icon. The shell's pictures carry premultiplied alpha.
+fn icon_image(icon: &naobi_core::ui::Icon) -> Option<Image> {
+    pixels(icon.w, icon.h, &icon.rgba).map(Image::from_rgba8_premultiplied)
+}
+
 fn image(width: u32, height: u32, rgba: &[u8]) -> Option<Image> {
+    pixels(width, height, rgba).map(Image::from_rgba8)
+}
+
+fn pixels(width: u32, height: u32, rgba: &[u8]) -> Option<SharedPixelBuffer<Rgba8Pixel>> {
     if rgba.len() != width as usize * height as usize * 4 {
         return None;
     }
@@ -155,7 +167,7 @@ fn image(width: u32, height: u32, rgba: &[u8]) -> Option<Image> {
             a: src[3],
         };
     }
-    Some(Image::from_rgba8(buffer))
+    Some(buffer)
 }
 
 #[cfg(test)]
@@ -174,6 +186,8 @@ mod tests {
             armed: false,
             pinned: false,
             swatch: None,
+            icon_key: None,
+            icon: None,
         }
     }
 
@@ -255,6 +269,7 @@ mod tests {
             (item.swatch.red(), item.swatch.green(), item.swatch.blue()),
             (0x11, 0x22, 0x33)
         );
+        assert!(!item.has_icon, "no icon loaded: the placeholder shows");
         let last = &out.items[2];
         assert!(!last.selected && !last.has_swatch && !last.pinned);
         assert_eq!(last.hint.as_str(), "");
@@ -438,5 +453,30 @@ mod tests {
             rgba: vec![0; 4],
         };
         assert_eq!(preview(Some(&wide_short)).0, 4);
+    }
+
+    // @R-012
+    #[test]
+    fn r012_a_loaded_icon_shows_and_a_malformed_one_leaves_the_placeholder() {
+        let icon = |w: u32, h: u32, len: usize| {
+            Some(std::sync::Arc::new(naobi_core::ui::Icon {
+                w,
+                h,
+                rgba: vec![255; len],
+            }))
+        };
+        let mut good = row("Notepad");
+        good.icon = icon(2, 2, 16);
+        let mut short = row("Broken");
+        short.icon = icon(2, 2, 15);
+        let out = lines(&screen(
+            vec![Section {
+                header: None,
+                rows: vec![good, short, row("None")],
+            }],
+            0,
+        ));
+        let has: Vec<bool> = out.items.iter().map(|l| l.has_icon).collect();
+        assert_eq!(has, [true, false, false]);
     }
 }

@@ -121,6 +121,9 @@ impl Host for AppHost {
     fn search_files(&mut self, generation: u64, query: &str) {
         modules::files::request(generation, query);
     }
+    fn load_icons(&mut self, keys: Vec<String>) {
+        modules::icons::request(keys);
+    }
     fn post(&mut self, screen: Screen) {
         if screen
             .sections
@@ -455,6 +458,8 @@ fn sync_autostart(enabled: bool) {
 pub use modules::apps::LIST_APPS_ARG;
 /// The file search child's argument and entry point (`modules::files`).
 pub use modules::files::{search_files, SEARCH_FILES_ARG};
+/// The icon child's argument and entry point (`modules::icons`).
+pub use modules::icons::{icons, ICONS_ARG};
 
 /// The scan child (`--list-apps`): one line per app, `id<TAB>name`. It runs in its own process so the
 /// shell and COM libraries the scan loads (about 19 MB of working set) never enter the resident one.

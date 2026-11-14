@@ -7,6 +7,14 @@ pub enum Theme {
     Stone,
 }
 
+/// A decoded icon: 8-bit RGBA, row by row (`rgba.len() == w * h * 4`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Icon {
+    pub w: u32,
+    pub h: u32,
+    pub rgba: Vec<u8>,
+}
+
 /// One result row as shown on screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
@@ -73,6 +81,11 @@ pub struct RowView {
     pub pinned: bool,
     /// Color history rows: 0xRRGGBB.
     pub swatch: Option<u32>,
+    /// What the row's icon comes from: `a:<app id>` for an app, `e:<extension>` for a file. Never a
+    /// path, so asking for an icon cannot touch a file or a network share (T-030).
+    pub icon_key: Option<String>,
+    /// The icon, once it is loaded.
+    pub icon: Option<std::sync::Arc<Icon>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,6 +154,8 @@ impl From<Row> for RowView {
             armed: false,
             pinned: false,
             swatch: None,
+            icon_key: None,
+            icon: None,
         }
     }
 }

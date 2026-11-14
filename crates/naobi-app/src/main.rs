@@ -14,5 +14,11 @@ fn main() -> anyhow::Result<()> {
     {
         return naobi_app::search_files();
     }
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|a| a == naobi_app::ICONS_ARG)
+    {
+        return naobi_app::icons();
+    }
     naobi_app::run()
 }

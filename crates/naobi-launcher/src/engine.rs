@@ -192,6 +192,8 @@ impl Launcher {
             armed: armed == Some(h.id()),
             pinned: false,
             swatch: swatch_of(&h.item),
+            icon_key: icon_key_of(&h.item),
+            icon: None,
         };
         let mut sections = Vec::new();
         if !self.rows.is_empty() {
@@ -234,6 +236,8 @@ impl Launcher {
                         armed: false,
                         pinned: false,
                         swatch: None,
+                        icon_key: None,
+                        icon: None,
                     })
                     .collect(),
             });
@@ -652,6 +656,24 @@ fn panel_view(p: &Panel) -> ActionPanelView {
             })
             .collect(),
         selected: p.selected,
+    }
+}
+
+/// What a row's icon is looked up by: an app's id, or a file's extension. Never the file's path.
+fn icon_key_of(item: &Item) -> Option<String> {
+    match item.kind {
+        ItemKind::App => item
+            .id
+            .0
+            .strip_prefix(crate::providers::apps::ID_PREFIX)
+            .map(|id| format!("a:{id}")),
+        ItemKind::File => {
+            let path = item.id.0.strip_prefix("file:")?;
+            let name = path.rsplit(['\\', '/']).next().unwrap_or(path);
+            let ext = name.rsplit_once('.').map_or("", |(_, e)| e);
+            Some(format!("e:{}", ext.to_ascii_lowercase()))
+        }
+        _ => None,
     }
 }
 

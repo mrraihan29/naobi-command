@@ -393,6 +393,8 @@ mod ui_check {
             armed: false,
             pinned: false,
             swatch: None,
+            icon_key: None,
+            icon: None,
         }
     }
 

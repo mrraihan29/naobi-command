@@ -5,6 +5,7 @@ pub mod armed;
 pub mod engine;
 pub mod esc;
 pub mod frecency;
+pub mod icons;
 pub mod ports;
 pub mod providers;
 pub mod rank;

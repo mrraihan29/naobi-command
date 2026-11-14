@@ -7,6 +7,7 @@ pub mod builtin;
 pub mod clipboard;
 pub mod clipboard_capture;
 pub mod files;
+pub mod icons;
 pub mod picker;
 pub mod winmgr;
 

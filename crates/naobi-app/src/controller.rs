@@ -8,8 +8,11 @@ use naobi_core::event::AppEvent;
 use naobi_core::ids::{EntryId, HotkeyId, ViewId};
 use naobi_core::item::Item;
 use naobi_core::notice::{Notice, NoticeKind};
+use naobi_core::ui::Icon;
 use naobi_core::ui::{Screen, UiEvent};
+use naobi_launcher::icons::{askable, IconCache};
 use naobi_launcher::{Clock, Launcher};
+use std::collections::HashSet;
 
 /// What the controller needs from the outside.
 pub trait Host {
@@ -39,6 +42,8 @@ pub trait Host {
     /// Starts a file search for `query`; the answer comes back through
     /// `Controller::on_file_results` with the same `generation`.
     fn search_files(&mut self, generation: u64, query: &str);
+    /// Starts loading the icons for `keys`; the answer comes back through `Controller::on_icons`.
+    fn load_icons(&mut self, keys: Vec<String>);
 }
 
 pub struct SystemClock;
@@ -62,6 +67,9 @@ pub struct Controller {
     pending_close: Option<bool>,
     /// The generation a file search was last asked for, so a query is asked once.
     asked: Option<u64>,
+    icons: IconCache,
+    /// Icon keys asked for and not yet answered with a picture.
+    icons_asked: HashSet<String>,
 }
 
 /// How long "Copied" shows before the Launcher hides (DESIGN_SYSTEM).
@@ -75,23 +83,59 @@ impl Controller {
             previous: None,
             pending_close: None,
             asked: None,
+            icons: IconCache::default(),
+            icons_asked: HashSet::new(),
         }
     }
 
-    /// The engine's snapshot, with the "Copied" confirmation while a copy waits to close.
-    fn view(&self) -> Screen {
+    /// The engine's snapshot, with the "Copied" confirmation while a copy waits to close, and the
+    /// icons that are loaded. The keys of rows whose icon is not loaded and not yet asked for go to
+    /// `missing`.
+    fn view(&mut self, missing: &mut Vec<String>) -> Screen {
         let mut s = self.launcher.screen();
         if self.pending_close.is_some() {
             s.footer.confirmation = Some("Copied".to_owned());
         }
+        for row in s.sections.iter_mut().flat_map(|sec| sec.rows.iter_mut()) {
+            let Some(key) = row.icon_key.clone() else {
+                continue;
+            };
+            match self.icons.get(&key) {
+                Some(icon) => row.icon = Some(icon),
+                None if askable(&key) && self.icons_asked.insert(key.clone()) => missing.push(key),
+                None => {}
+            }
+        }
         s
+    }
+
+    /// Draws the current snapshot, and asks for the icons it lacks.
+    fn present(&mut self, host: &mut dyn Host) {
+        let mut missing = Vec::new();
+        let screen = self.view(&mut missing);
+        host.post(screen);
+        if !missing.is_empty() {
+            host.load_icons(missing);
+        }
+    }
+
+    /// Icons arrived (`None` for a key that has none): the next snapshot shows them.
+    pub fn on_icons(&mut self, found: Vec<(String, Option<Icon>)>, host: &mut dyn Host) {
+        for (key, icon) in found {
+            // A key without an icon stays in `icons_asked`: it is not asked for again.
+            if let Some(icon) = icon {
+                self.icons_asked.remove(&key);
+                self.icons.insert(key, icon);
+            }
+        }
+        self.present(host);
     }
 
     /// The confirmation has shown long enough: hides the Launcher now.
     pub fn finish_close(&mut self, host: &mut dyn Host) {
         if let Some(restore) = self.pending_close.take() {
             self.close(host, restore);
-            host.post(self.view());
+            self.present(host);
         }
     }
 
@@ -101,7 +145,7 @@ impl Controller {
         self.pending_close = None;
         self.previous = host.foreground();
         self.launcher.show_root();
-        host.post(self.view());
+        self.present(host);
         host.show();
     }
 
@@ -111,7 +155,7 @@ impl Controller {
         // Ranking again dropped the file rows: ask for them again.
         self.asked = None;
         self.ask_files(host);
-        host.post(self.view());
+        self.present(host);
     }
 
     /// The Launcher hotkey: closes an open Launcher like Esc does, otherwise opens it.
@@ -139,7 +183,7 @@ impl Controller {
         let effects = self.launcher.handle(ev);
         self.execute(effects, restore, host);
         self.ask_files(host);
-        host.post(self.view());
+        self.present(host);
     }
 
     /// Asks for file results when the root shows a new query (R-013). The rows trail the others.
@@ -160,7 +204,7 @@ impl Controller {
             return;
         };
         if self.launcher.file_results(generation, source, items) {
-            host.post(self.view());
+            self.present(host);
         }
     }
 
@@ -190,7 +234,7 @@ impl Controller {
         self.pending_close = None;
         self.previous = host.foreground();
         if self.launcher.show_view(view) {
-            host.post(self.view());
+            self.present(host);
             host.show();
         }
     }
@@ -358,6 +402,9 @@ mod tests {
         fn search_files(&mut self, generation: u64, query: &str) {
             self.log.push(format!("search {generation} {query}"));
         }
+        fn load_icons(&mut self, keys: Vec<String>) {
+            self.log.push(format!("icons {}", keys.join(",")));
+        }
     }
 
     /// One app item; Enter launches it, Ctrl+Enter copies its path.
@@ -516,16 +563,24 @@ mod tests {
     // @R-023
     #[test]
     fn r023_hotkey_toggles_and_a_show_resets_to_the_root() {
+        // The icon requests of the first snapshot are not what this test is about.
+        let quiet = |h: &Fake| -> Vec<String> {
+            h.log
+                .iter()
+                .filter(|l| !l.starts_with("icons "))
+                .cloned()
+                .collect()
+        };
         let mut c = controller();
         let mut h = Fake {
             fg: Some(9),
             ..Fake::default()
         };
         c.toggle(&mut h);
-        assert_eq!(h.log, vec!["show".to_string()]);
+        assert_eq!(quiet(&h), vec!["show".to_string()]);
         c.toggle(&mut h);
         assert_eq!(
-            h.log,
+            quiet(&h),
             vec![
                 "show".to_string(),
                 "hide".to_string(),
@@ -776,5 +831,40 @@ mod tests {
         let before = searches(&h);
         c.refresh(&mut h);
         assert_eq!(searches(&h), before + 1);
+    }
+
+    // @R-012
+    #[test]
+    fn r012_a_row_asks_for_its_icon_once_and_shows_it_when_it_arrives() {
+        let mut c = controller();
+        let mut h = Fake::default();
+        c.show(&mut h);
+        let asked = |h: &Fake| h.log.iter().filter(|l| l.starts_with("icons ")).count();
+        c.on_ui_event(UiEvent::TextChanged("note".into()), &mut h);
+        assert_eq!(asked(&h), 1);
+        assert!(h.log.iter().any(|l| l == "icons a:notepad"), "{:?}", h.log);
+        // Another keystroke shows the same row: it is not asked for again while it is pending.
+        c.on_ui_event(UiEvent::TextChanged("notep".into()), &mut h);
+        assert_eq!(asked(&h), 1);
+        let icon_of = |h: &Fake| {
+            h.last_post
+                .as_ref()
+                .and_then(|s| s.sections.first())
+                .and_then(|sec| sec.rows.first())
+                .and_then(|r| r.icon.clone())
+        };
+        assert_eq!(icon_of(&h), None);
+        // The picture arrives: the redrawn snapshot carries it.
+        let icon = Icon {
+            w: 1,
+            h: 1,
+            rgba: vec![9, 9, 9, 255],
+        };
+        c.on_icons(vec![("a:notepad".into(), Some(icon.clone()))], &mut h);
+        assert_eq!(icon_of(&h).as_deref(), Some(&icon));
+        assert_eq!(asked(&h), 1, "loaded: nothing more to ask");
+        // A key with no icon is not asked for again either.
+        c.on_icons(vec![("a:other".into(), None)], &mut h);
+        assert_eq!(asked(&h), 1);
     }
 }

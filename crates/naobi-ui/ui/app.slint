@@ -16,6 +16,8 @@ export struct Line {
     pinned: bool,
     has-swatch: bool,
     swatch: color,
+    has-icon: bool,
+    icon: image,
 }
 
 export struct ActionLine {
@@ -102,7 +104,14 @@ component ResultRow inherits Rectangle {
         padding-right: 12px;
         spacing: 12px;
         alignment: start;
-        Rectangle {
+        if line.has-icon : Image {
+            width: 22px;
+            height: 22px;
+            y: (parent.height - self.height) / 2;
+            source: line.icon;
+            image-fit: contain;
+        }
+        if !line.has-icon : Rectangle {
             width: 22px;
             height: 22px;
             y: (parent.height - self.height) / 2;

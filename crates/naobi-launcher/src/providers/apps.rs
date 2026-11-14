@@ -18,7 +18,7 @@ pub struct AppEntry {
 #[derive(Clone, Default)]
 pub struct AppCatalog(Arc<RwLock<Option<Arc<[Item]>>>>);
 
-const ID_PREFIX: &str = "app:";
+pub const ID_PREFIX: &str = "app:";
 
 impl AppCatalog {
     /// Replaces the catalog with a fresh scan. Later scans swap the whole list, so a query in

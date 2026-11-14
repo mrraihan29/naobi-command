@@ -1,12 +1,16 @@
 //! The built-in rows (NCMD-18): system commands, quicklinks and the calculator. The commands run
 //! through `AppOps`, which logs each one by id (T-009) and calls Windows.
+use super::clipboard_capture::DpapiCipher;
 use super::Modules;
 use crate::logging;
+use naobi_core::db::Db;
 use naobi_core::quicklink::Quicklink;
 use naobi_launcher::providers::calc::CalcSource;
 use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
+use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
 use naobi_launcher::providers::system::{SystemCommand, SystemOps, SystemSource};
-use naobi_win32::{platform, shell_exec, system_commands};
+use naobi_launcher::run_history::RunHistory;
+use naobi_win32::{platform, random, run, shell_exec, system_commands};
 use std::sync::{Arc, OnceLock};
 
 /// The quicklinks of the live settings: the settings load and every hot reload `set` them.
@@ -23,6 +27,45 @@ pub fn register(m: &mut Modules) {
     m.register_source(Box::new(CalcSource));
     m.register_source(Box::new(QuicklinkSource::new(quicklinks().clone())));
     m.register_source(Box::new(SystemSource::new(Arc::new(AppOps))));
+    m.register_source(Box::new(RunSource::new(
+        open_run_history(),
+        Box::new(WinLookup),
+        Box::new(now_ms),
+    )));
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
+}
+
+/// The run history on its own connection to the data file (D-038). None when the store cannot be
+/// opened: `>` still runs lines, without history.
+fn open_run_history() -> Option<RunHistory> {
+    let opened = (|| {
+        let path = naobi_core::paths::data_dir()?.join("naobi.db");
+        std::fs::create_dir_all(path.parent()?).ok()?;
+        let seed = random::random16().ok()?;
+        let db = Db::open(&path, move || seed).ok()?;
+        RunHistory::open(db, Box::new(DpapiCipher), now_ms()).ok()
+    })();
+    if opened.is_none() {
+        tracing::warn!("the run history is off: the store could not be opened");
+    }
+    opened
+}
+
+/// The first token of a `>` line against PATH and App Paths (T-035: no network paths).
+struct WinLookup;
+
+impl ProgramLookup for WinLookup {
+    fn find(&self, token: &str) -> Option<Program> {
+        run::find_program(token).map(|f| Program {
+            path: f.path,
+            gui: f.gui,
+        })
+    }
 }
 
 struct AppOps;

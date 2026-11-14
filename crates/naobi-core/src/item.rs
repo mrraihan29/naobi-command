@@ -11,6 +11,7 @@ pub enum ItemKind {
     Calculator,
     ClipboardEntry,
     Color,
+    CommandLine,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

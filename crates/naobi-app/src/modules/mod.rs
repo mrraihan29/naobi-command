@@ -319,6 +319,64 @@ mod catalog {
 
     // @R-004
     #[test]
+    fn r004_module_commands_found_by_name() {
+        use naobi_core::item::ItemKind;
+        use naobi_launcher::rank::{Ranker, Source};
+        let dir = std::env::temp_dir().join(format!("naobi-names-{}", std::process::id()));
+        std::env::set_var("NAOBI_DATA_DIR", dir.join("data"));
+        std::env::set_var("NAOBI_SETTINGS_DIR", dir.join("settings"));
+        std::env::set_var("NAOBI_TEST_CLIPBOARD", "1");
+        let mut m = Modules::new();
+        register_all(&mut m);
+        let parts = m.into_parts();
+        let sources: Vec<&dyn CommandSource> = parts
+            .sources
+            .iter()
+            .map(|s| &**s)
+            .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
+            .collect();
+        let table: [(&str, &str); 18] = [
+            ("color picker", "picker.pick"),
+            ("picker", "picker.pick"),
+            ("eyedropper", "picker.pick"),
+            ("pick color", "picker.pick"),
+            ("color history", "picker.history"),
+            ("paste history", "clipboard.open"),
+            ("clipboard", "clipboard.open"),
+            ("shutdown", "sys.shut_down"),
+            ("power off", "sys.shut_down"),
+            ("reboot", "sys.restart"),
+            ("log off", "sys.sign_out"),
+            ("dark mode", "sys.toggle_dark_mode"),
+            ("lock", "sys.lock"),
+            ("recycle bin", "sys.empty_recycle_bin"),
+            ("always on top", "aot.toggle"),
+            ("topmost", "aot.toggle"),
+            ("snap left", "win.snap_left"),
+            ("snap right", "win.snap_right"),
+        ];
+        let first = |q: &str| {
+            // Apps and files depend on the Owner's machine; leave them out.
+            let pool: Vec<_> = sources
+                .iter()
+                .flat_map(|s| s.items(&Query { text: q.into() }).to_vec())
+                .filter(|i| !matches!(i.kind, ItemKind::App | ItemKind::File))
+                .collect();
+            let hits =
+                Ranker::default().rank(q, pool.iter().map(|i| (Source::Root(0), i)), |_| 0.0, 50);
+            hits.first()
+                .map(|h| h.item.id.0.clone())
+                .unwrap_or_default()
+        };
+        for (q, id) in table {
+            assert_eq!(first(q), id, "query {q:?}");
+        }
+        assert!(first("awake").starts_with("awake."), "query awake");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // @R-004
+    #[test]
     fn r004_every_module_reachable_and_no_phase2_command() {
         let c = build();
         let item = |id: &str| c.items.iter().any(|(i, _)| i == id);

@@ -1,5 +1,5 @@
 //! Ranking (R-012, D-016): exact alias first, then the nucleo fuzzy score plus a frecency boost
-//! capped at 20% of that score; ties go to more opens, then title.
+//! capped at 20% of that score; ties go to more opens, then the shorter title, then title.
 use naobi_core::ids::ItemId;
 use naobi_core::item::Item;
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
@@ -78,6 +78,8 @@ struct Cand<'a> {
     exact: bool,
     total: f64,
     opens: f64,
+    /// A text query was typed; an empty query lists items by opens, then title.
+    typed: bool,
 }
 
 fn order(a: &Cand, b: &Cand) -> Ordering {
@@ -85,6 +87,17 @@ fn order(a: &Cand, b: &Cand) -> Ordering {
         .cmp(&a.exact)
         .then_with(|| b.total.total_cmp(&a.total))
         .then_with(|| b.opens.total_cmp(&a.opens))
+        // The shorter title is the closer match ("Clipboard History" before "Clear Clipboard History").
+        .then_with(|| {
+            let len = |c: &Cand| {
+                if c.typed {
+                    c.item.title.chars().count()
+                } else {
+                    0
+                }
+            };
+            len(a).cmp(&len(b))
+        })
         .then_with(|| a.item.title.cmp(&b.item.title))
 }
 
@@ -126,6 +139,7 @@ impl Ranker {
                     exact: false,
                     total: opens,
                     opens,
+                    typed: false,
                 });
                 continue;
             };
@@ -152,6 +166,7 @@ impl Ranker {
                 exact,
                 total,
                 opens,
+                typed: true,
             });
         }
         if hits.len() > limit {

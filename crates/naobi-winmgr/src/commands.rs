@@ -58,7 +58,8 @@ impl CommandSource for SnapCommands {
                 title: c.title().to_owned(),
                 subtitle: inner.chords.get(c.id()).cloned().unwrap_or_default(),
                 keywords: vec!["window".to_owned(), "snap".to_owned()],
-                alias: None,
+                // "snap left" runs Snap Left Half: the halves answer to their short name exactly.
+                alias: c.title().strip_suffix(" Half").map(str::to_owned),
                 kind: ItemKind::Command,
                 primary: ActionId("run".into()),
                 secondary: None,

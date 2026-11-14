@@ -1,26 +1,9 @@
 //! Test doubles for the ports. Public so the integration tests and the app's tests share them.
-use crate::ports::{Cipher, CipherError, Clock};
+use crate::ports::Clock;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use zeroize::Zeroizing;
 
-const TAG: &[u8] = b"ENC1:";
-
-/// Not encryption: it prefixes a tag, so a test can see that a blob went through the cipher and that
-/// plaintext never reached a column directly.
-pub struct TaggedCipher;
-
-impl Cipher for TaggedCipher {
-    fn encrypt(&self, plain: &[u8]) -> Result<Vec<u8>, CipherError> {
-        Ok([TAG, plain].concat())
-    }
-
-    fn decrypt(&self, blob: &[u8]) -> Result<Zeroizing<Vec<u8>>, CipherError> {
-        blob.strip_prefix(TAG)
-            .map(|p| Zeroizing::new(p.to_vec()))
-            .ok_or(CipherError)
-    }
-}
+pub use naobi_core::cipher::TaggedCipher;
 
 /// A clock a test moves by hand. Clones share the time.
 #[derive(Clone, Default)]

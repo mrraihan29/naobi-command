@@ -75,6 +75,24 @@ impl SystemCommand {
         }
     }
 
+    /// Extra search names (R-004); in code, not configurable.
+    fn keywords(self) -> &'static [&'static str] {
+        match self {
+            Self::Lock => &["lock screen", "lock pc"],
+            Self::Sleep => &["suspend"],
+            Self::Hibernate => &[],
+            Self::Restart => &["reboot"],
+            Self::ShutDown => &["shutdown", "power off", "turn off"],
+            Self::SignOut => &["log off", "log out", "sign off"],
+            Self::EmptyRecycleBin => &["trash", "recycle bin"],
+            Self::ToggleDarkMode => &["dark mode", "light mode", "theme"],
+            Self::OpenWindowsSettings => &["control panel"],
+            Self::OpenSettingsFile => &["naobi settings", "config"],
+            Self::PauseHotkeys => &["disable hotkeys"],
+            Self::Quit => &["exit", "close naobi"],
+        }
+    }
+
     /// True when the first Enter only arms the command (R-020).
     pub fn armed(self) -> bool {
         matches!(
@@ -110,7 +128,7 @@ impl SystemSource {
                 } else {
                     String::new()
                 },
-                keywords: Vec::new(),
+                keywords: c.keywords().iter().map(|k| (*k).into()).collect(),
                 alias: None,
                 kind: ItemKind::Command,
                 primary: ActionId("run".into()),

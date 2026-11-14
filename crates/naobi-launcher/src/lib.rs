@@ -9,6 +9,7 @@ pub mod icons;
 pub mod ports;
 pub mod providers;
 pub mod rank;
+pub mod run_history;
 
 pub use engine::Launcher;
 pub use ports::Clock;

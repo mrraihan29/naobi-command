@@ -7,6 +7,13 @@ pub enum LaunchTarget {
     /// A path, or `shell:AppsFolder\<AUMID>`.
     ShellItem(String),
     Url(String),
+    /// A command line the Owner typed after `>` (R-024): runs in a new PowerShell console window that stays open.
+    Console(String),
+    /// A GUI-subsystem program named by the first token of a `>` line: started directly, `args` as typed.
+    Program {
+        path: String,
+        args: String,
+    },
 }
 
 impl LaunchTarget {
@@ -75,6 +82,19 @@ mod tests {
         );
         assert_eq!(
             LaunchTarget::ShellItem("anything".into()).refused_scheme(),
+            None
+        );
+        // A command line never reaches the URL scheme check (R-024).
+        assert_eq!(
+            LaunchTarget::Console("javascript:alert(1)".into()).refused_scheme(),
+            None
+        );
+        assert_eq!(
+            LaunchTarget::Program {
+                path: r"C:\Windows\notepad.exe".into(),
+                args: "file:///x".into()
+            }
+            .refused_scheme(),
             None
         );
     }

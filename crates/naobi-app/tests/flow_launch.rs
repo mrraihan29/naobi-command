@@ -232,7 +232,7 @@ fn r007_click_outside_closes_and_a_click_on_a_row_runs_it() {
 
 // @R-007
 #[test]
-#[ignore = "tier2: interactive desktop"]
+#[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
 fn r007_dragging_the_footer_moves_the_launcher_and_keeps_it_on_the_screen() {
     use naobi_win32::probe;
     let dir = std::env::temp_dir().join(format!("naobi-flow-drag-{}", std::process::id()));

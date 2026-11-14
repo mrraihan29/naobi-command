@@ -11,3 +11,5 @@ workspace = true
 naobi-core = { path = "../naobi-core" }
 nucleo-matcher.workspace = true
 naobi-calc = { path = "../naobi-calc" }
+rusqlite.workspace = true
+zeroize.workspace = true

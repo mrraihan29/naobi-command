@@ -274,22 +274,28 @@ const CLEAR: &str = "clipboard.clear";
 
 impl CommandSource for ClipboardCommands {
     fn items(&self, _q: &Query) -> Arc<[Item]> {
-        let command = |id: &str, title: &str, subtitle: &str| Item {
+        let command = |id: &str, title: &str, subtitle: &str, keywords: &[&str]| Item {
             id: ItemId(id.into()),
             title: title.into(),
             subtitle: subtitle.into(),
-            keywords: Vec::new(),
+            keywords: keywords.iter().map(|k| (*k).into()).collect(),
             alias: None,
             kind: ItemKind::Command,
             primary: ActionId("run".into()),
             secondary: None,
         };
         vec![
-            command(OPEN, "Clipboard History", ""),
+            command(
+                OPEN,
+                "Clipboard History",
+                "",
+                &["paste history", "copy history"],
+            ),
             command(
                 CLEAR,
                 "Clear Clipboard History",
                 "Press Enter twice to confirm",
+                &["delete history"],
             ),
         ]
         .into()

@@ -72,6 +72,11 @@ pub trait CommandSource: Send + Sync {
     fn takes_files(&self) -> bool {
         false
     }
+    /// True when `q` is for this source alone (a `>` command line, R-024): the root then lists only
+    /// this source's items, in its order, unranked, and starts no file search.
+    fn claims(&self, _q: &Query) -> bool {
+        false
+    }
     fn actions(&self, id: &ItemId) -> Vec<Action>;
     fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome;
 }

@@ -297,7 +297,16 @@ impl Controller {
                         Ok(()) => launched = true,
                         Err(e) => {
                             tracing::warn!(code = ?e.raw_os_error(), "launch failed");
-                            host.notice(failure("Open", "Windows could not open it."));
+                            let (subject, message) = match &t {
+                                LaunchTarget::Console(_) => {
+                                    ("Run", "PowerShell could not be started.")
+                                }
+                                LaunchTarget::Program { .. } => {
+                                    ("Run", "Windows could not start that program.")
+                                }
+                                _ => ("Open", "Windows could not open it."),
+                            };
+                            host.notice(failure(subject, message));
                         }
                     }
                 }
@@ -932,5 +941,108 @@ mod tests {
         c.on_icons(vec![("a:notepad".into(), Answer::Icon(icon))], &mut h);
         c.on_file_results(0, Vec::new(), &mut h);
         assert_eq!(h.posts, before, "nothing is drawn into a hidden window");
+    }
+
+    /// A real Launcher holding a RunSource on an in-memory history, a fake lookup for `notepad`.
+    fn run_controller() -> Controller {
+        use naobi_core::cipher::TaggedCipher;
+        use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
+        use naobi_launcher::run_history::RunHistory;
+        struct Lookup;
+        impl ProgramLookup for Lookup {
+            fn find(&self, token: &str) -> Option<Program> {
+                (token == "notepad").then(|| Program {
+                    path: r"C:\Windows\notepad.exe".into(),
+                    gui: true,
+                })
+            }
+        }
+        let history = Db::open_in_memory()
+            .ok()
+            .and_then(|db| RunHistory::open(db, Box::new(TaggedCipher), 0).ok());
+        let source = RunSource::new(history, Box::new(Lookup), Box::new(|| 0));
+        let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        Controller::new(
+            Launcher::new(vec![Box::new(source)], vec![], frecency, Box::new(Zero)),
+            Router::default(),
+        )
+    }
+
+    fn run_line(h: &mut Fake, line: &str) -> Controller {
+        let mut c = run_controller();
+        c.show(h);
+        c.on_ui_event(UiEvent::TextChanged(format!(">{line}")), h);
+        h.log.clear();
+        c.on_ui_event(key(Key::Enter, false), h);
+        c
+    }
+
+    // @R-024
+    #[test]
+    fn r024_enter_on_run_row_launches_console_and_hides() {
+        let mut h = Fake {
+            fg: Some(7),
+            ..Fake::default()
+        };
+        run_line(&mut h, "echo hi");
+        assert_eq!(
+            h.log,
+            vec![
+                r#"launch Console("echo hi")"#.to_string(),
+                "hide".to_string()
+            ]
+        );
+    }
+
+    // @R-024
+    #[test]
+    fn r024_gui_line_launches_program() {
+        let mut h = Fake::default();
+        run_line(&mut h, "notepad a.txt");
+        assert_eq!(
+            h.log,
+            vec![
+                format!(
+                    "launch {:?}",
+                    LaunchTarget::Program {
+                        path: r"C:\Windows\notepad.exe".into(),
+                        args: "a.txt".into()
+                    }
+                ),
+                "hide".to_string()
+            ]
+        );
+    }
+
+    // @R-024
+    #[test]
+    fn r024_failed_console_shows_run_notice() {
+        let mut h = Fake {
+            fg: Some(7),
+            launch_fails: true,
+            ..Fake::default()
+        };
+        run_line(&mut h, "echo hi");
+        assert!(
+            h.log
+                .contains(&"notice Run: PowerShell could not be started.".to_string()),
+            "{:?}",
+            h.log
+        );
+        assert!(h.log.contains(&"restore 7".to_string()), "{:?}", h.log);
+    }
+
+    // @R-024
+    #[test]
+    fn r024_failed_program_shows_run_notice() {
+        let mut h = Fake {
+            launch_fails: true,
+            ..Fake::default()
+        };
+        run_line(&mut h, "notepad");
+        assert!(h
+            .log
+            .contains(&"notice Run: Windows could not start that program.".to_string()));
     }
 }

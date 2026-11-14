@@ -72,6 +72,18 @@ _Avoid_: bookmark, search engine, web search
 One of lock, sleep, hibernate, restart, shut down, sign out, empty recycle bin, toggle dark mode, open Windows settings.
 _Avoid_: power command, OS action
 
+**Command line**:
+The text the Owner types after `>` in the root search; it runs in a new PowerShell console window, or starts a GUI program directly.
+_Avoid_: command (a kind of Item), script, shell command
+
+**Run row**:
+The first Result of a `>` query; Enter runs its command line.
+_Avoid_: execute row, terminal row
+
+**Run history**:
+The command lines the Owner ran from `>`, newest first, at most 100 for 30 days; each is an Item, never an entry.
+_Avoid_: frecency, recent commands
+
 **Notice**:
 A visible message about something that did not work or was refused (hotkey conflict, admin window, file search unavailable, settings parse error). Never silent.
 _Avoid_: toast, alert, error popup

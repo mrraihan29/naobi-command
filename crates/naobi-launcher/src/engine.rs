@@ -48,6 +48,8 @@ pub struct Launcher {
     generation: u64,
     rows: Vec<Hit>,
     files: Vec<Hit>,
+    /// The root source that owns the current query (a `>` command line): its rows only, unranked.
+    claimed: Option<usize>,
     selected: usize,
     panel: Option<Panel>,
     notice: Option<Notice>,
@@ -79,6 +81,7 @@ impl Launcher {
             generation: 0,
             rows: Vec::new(),
             files: Vec::new(),
+            claimed: None,
             selected: 0,
             panel: None,
             notice: None,
@@ -154,7 +157,7 @@ impl Launcher {
     /// The query a file search should answer now: its generation and text, or None when the root
     /// is not showing or the query is empty.
     pub fn file_query(&self) -> Option<(u64, String)> {
-        (self.mode == Mode::Root && !self.query.trim().is_empty())
+        (self.mode == Mode::Root && self.claimed.is_none() && !self.query.trim().is_empty())
             .then(|| (self.generation, self.query.clone()))
     }
 
@@ -167,7 +170,11 @@ impl Launcher {
     /// their actions run there. Dropped unless `generation` is current, the query is not empty and the
     /// root is showing. The rows trail the sync rows and never reorder them.
     pub fn file_results(&mut self, generation: u64, source: usize, items: Vec<Item>) -> bool {
-        if generation != self.generation || self.query.is_empty() || self.mode != Mode::Root {
+        if generation != self.generation
+            || self.query.is_empty()
+            || self.mode != Mode::Root
+            || self.claimed.is_some()
+        {
             return false;
         }
         self.files = items
@@ -216,11 +223,13 @@ impl Launcher {
         // A root source that is still loading shows one status row at the end. It is not a hit, so
         // the selection never reaches it.
         let pending: Vec<&str> = match self.mode {
-            Mode::Root => self.sources.iter().filter_map(|s| s.pending()).collect(),
+            Mode::Root if self.claimed.is_none() => {
+                self.sources.iter().filter_map(|s| s.pending()).collect()
+            }
             _ => Vec::new(),
         };
         let status: Vec<&str> = match self.mode {
-            Mode::Root if !self.query.trim().is_empty() => {
+            Mode::Root if self.claimed.is_none() && !self.query.trim().is_empty() => {
                 self.sources.iter().filter_map(|s| s.status()).collect()
             }
             _ => Vec::new(),
@@ -279,7 +288,11 @@ impl Launcher {
     /// A view with nothing to list says so; the root has the "Indexing" status row or nothing.
     fn empty_view(&self) -> Option<EmptyView> {
         let (Mode::Pushed(i) | Mode::Hotkey(i)) = self.mode else {
-            return None;
+            // A `>` query with no run history yet (R-024).
+            return (self.claimed.is_some() && self.rows.is_empty()).then(|| EmptyView {
+                title: "No command lines run yet".to_owned(),
+                helper: "Type a command line after > and press Enter".to_owned(),
+            });
         };
         if !self.rows.is_empty() {
             return None;
@@ -314,6 +327,30 @@ impl Launcher {
     fn refresh(&mut self) {
         let text = self.query.trim().to_owned();
         let q = Query { text: text.clone() };
+        let was_claimed = self.claimed.take();
+        if self.mode == Mode::Root {
+            self.claimed = self.sources.iter().position(|s| s.claims(&q));
+        } else if let Some(i) = was_claimed {
+            // Leaving a claimed query for a view: the claiming source drops what it holds.
+            let _ = self.sources[i].items(&Query::default());
+        }
+        if let Some(i) = self.claimed {
+            self.rows = self.sources[i]
+                .items(&q)
+                .iter()
+                .take(MAX_ROWS)
+                .map(|item| Hit {
+                    src: Source::Root(i),
+                    item: item.clone(),
+                    exact: false,
+                    total: 0.0,
+                    opens: 0.0,
+                })
+                .collect();
+            self.files.clear();
+            self.selected = 0;
+            return;
+        }
         // Each source hands over a shared snapshot or a fresh list; ranking borrows from these and clones the winners.
         let lists: Vec<(Source, Arc<[Item]>)> = match self.mode {
             Mode::Root => self
@@ -487,7 +524,7 @@ impl Launcher {
         // ranked (it trails the list): nothing to rank by later, so it must not fill the table.
         let ephemeral = matches!(
             hit.item.kind,
-            ItemKind::Calculator | ItemKind::Quicklink | ItemKind::File
+            ItemKind::Calculator | ItemKind::Quicklink | ItemKind::File | ItemKind::CommandLine
         );
         if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
@@ -686,6 +723,15 @@ fn icon_key_of(item: &Item) -> Option<String> {
         ItemKind::Command => Some(format!("g:{}", item.id.0)),
         ItemKind::Quicklink => Some("g:quicklink".to_owned()),
         ItemKind::Calculator => Some("g:calc".to_owned()),
+        // Never the line: the key must not carry command text.
+        ItemKind::CommandLine => Some(
+            if item.id.0.starts_with(crate::providers::run::HISTORY_PREFIX) {
+                "g:run.history"
+            } else {
+                "g:run"
+            }
+            .to_owned(),
+        ),
         _ => None,
     }
 }
@@ -708,5 +754,6 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::Calculator => "Calculator",
         ItemKind::ClipboardEntry => "Clipboard entry",
         ItemKind::Color => "Color",
+        ItemKind::CommandLine => "Command line",
     }
 }

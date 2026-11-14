@@ -13,3 +13,4 @@ toml.workspace = true
 thiserror.workspace = true
 rusqlite.workspace = true
 xxhash-rust.workspace = true
+zeroize.workspace = true

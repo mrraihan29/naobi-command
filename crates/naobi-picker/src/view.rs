@@ -118,19 +118,24 @@ pub struct PickerCommands;
 
 impl CommandSource for PickerCommands {
     fn items(&self, _q: &Query) -> Arc<[Item]> {
-        let command = |id: &str, title: &str, subtitle: &str| Item {
+        let command = |id: &str, title: &str, subtitle: &str, keywords: &[&str]| Item {
             id: ItemId(id.into()),
             title: title.into(),
             subtitle: subtitle.into(),
-            keywords: Vec::new(),
+            keywords: keywords.iter().map(|k| (*k).into()).collect(),
             alias: None,
             kind: ItemKind::Command,
             primary: ActionId("run".into()),
             secondary: None,
         };
         vec![
-            command(PICK, "Pick Color", "Click any pixel to copy its HEX"),
-            command(HISTORY, "Color History", ""),
+            command(
+                PICK,
+                "Pick Color",
+                "Click any pixel to copy its HEX",
+                &["color picker", "eyedropper", "hex"],
+            ),
+            command(HISTORY, "Color History", "", &["recent colors"]),
         ]
         .into()
     }

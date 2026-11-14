@@ -184,6 +184,7 @@ Everything in the MVP is reachable with the keyboard (R-007). Key meaning is dec
 | Up, Down, PageUp, PageDown | Move selection |
 | Ctrl+. | Pin or unpin the clipboard entry (from Raycast) |
 | Ctrl+X | Delete the clipboard entry when the query is empty (with text in the field it stays a cut; use Ctrl+K for Delete) |
+| `>` at the start of the root search | Run mode: the run row and the run history; Enter runs, Ctrl+K offers Delete from Run History (R-024) |
 | Alt+Space | Open the Launcher (R-008) |
 | Alt+Shift+V | Open clipboard history (R-015) |
 

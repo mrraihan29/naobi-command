@@ -2687,6 +2687,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "xxhash-rust",
+ "zeroize",
 ]
 
 [[package]]
@@ -2696,6 +2697,8 @@ dependencies = [
  "naobi-calc",
  "naobi-core",
  "nucleo-matcher",
+ "rusqlite",
+ "zeroize",
 ]
 
 [[package]]

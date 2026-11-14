@@ -2,6 +2,7 @@
 //! Later items add modules; this crate never names a UI framework.
 #![forbid(unsafe_code)]
 pub mod chord;
+pub mod cipher;
 pub mod command;
 pub mod db;
 pub mod effect;

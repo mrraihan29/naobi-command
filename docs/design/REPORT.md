@@ -105,6 +105,19 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 - Starting the exe twice leaves one process and shows the launcher
 - The launcher HWND is identical across 100 show/hide cycles
 
+**R-024** (v1): Typing '>' and a command line in the Launcher root search shows a run row; Enter runs the line in a new PowerShell 7 (pwsh) console window that stays open, or in Windows PowerShell 5.1 when pwsh is not found, or starts the program directly without a console when the first token resolves through PATH or App Paths to a GUI-subsystem exe; '>' alone lists the run history newest first and '>text' lists the run history command lines that contain text below the run row; the run history keeps at most 100 command lines for at most 30 days, each stored as a DPAPI current-user blob and never logged; there is no run-as-administrator action and no second Enter.
+
+- Enter on '>' followed by a command line opens a new PowerShell console window that runs exactly that line and stays open after it ends, and the Launcher hides
+- pwsh.exe runs the line when it resolves, otherwise powershell.exe; when neither resolves a Run Notice says PowerShell could not be started
+- A line whose first token resolves through PATH or App Paths to a GUI-subsystem exe starts that exe with the rest of the line as its arguments and no console; any other line, and any lookup that fails, runs in the console
+- Quotes, $, %, |, & and > in the line reach PowerShell unchanged
+- '>' alone lists the run history newest first; '>text' lists the run row and then the run history command lines that contain text; no other Item is listed and no file search starts
+- Enter on a run history command line runs it again and moves it to the top without adding a duplicate; Delete in the action panel removes it from the run history
+- The run history keeps at most 100 command lines and none older than 30 days
+- No command line appears in plaintext in naobi.db, naobi.db-wal or the logs
+- Run rows are never counted in frecency, and their item ids and icon keys contain no command text
+- The first Enter runs the command line (no arming) and no run-as-administrator action is offered
+
 #### Clipboard history
 
 **R-009** (v1): All data stays local: settings as TOML in %APPDATA%\NaobiCommand, clipboard history in SQLite with entry contents encrypted by Windows DPAPI (current user), retained for at most 30 days or 1,000 entries; clipboard updates flagged with ExcludeClipboardContentFromMonitorProcessing or CanIncludeInClipboardHistory=0 are never stored; a 'Clear clipboard history' command deletes all entries. UU 27/2022 does not apply because the owner processes only their own data on their own device.
@@ -170,10 +183,10 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 - All text/background token pairs meet WCAG 2.2 AA contrast ratios
 - Every MVP capability can be completed without a mouse
 
-**R-010** (v1): The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL, and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model.
+**R-010** (v2): The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model.
 
 - The main process token is not elevated
-- No socket is opened during a 10-minute idle-and-use session without an explicit URL action
+- No socket is opened by the app or its own child processes during a 10-minute idle-and-use session without an explicit URL action; the session runs no '>' command line
 - STRIDE threats in the design report each have a mitigation, test or accepted risk
 
 
@@ -408,6 +421,12 @@ erDiagram
     integer rgba
     integer picked_at
   }
+  RUN_HISTORY {
+    integer id PK
+    blob line_enc "DPAPI, personal data"
+    blob program_enc "DPAPI, resolved program path or empty"
+    integer last_run_at
+  }
   META {
     text key PK
     text value "schema_version, hash_salt"
@@ -423,10 +442,11 @@ The file is `%LOCALAPPDATA%\NaobiCommand\naobi.db` (ADR-0006, D-014). Settings a
 | Clipboard entry (text, image, file list) | `CLIP_ENTRY`, `CLIP_PAYLOAD` | Content and preview encrypted with DPAPI; kind, timestamps, pinned, byte size, source exe name in plaintext | Content: the Owner's personal data, possibly secret (anything the Owner copies). Metadata: low | Unpinned: 30 days and 1,000 entries at most; pinned: until deleted or cleared, at most 100 (R-009, R-015, D-015) |
 | Frecency | `FRECENCY` | 64-bit xxh3 hash of item identity keyed with a per-install salt, open count, last opened | Low to moderate: a salted xxh3 hash (salt in `META`), not a path or title. Pseudonymous, not anonymous: reversible by dictionary for someone who holds the file and the salt | Purged on startup when an item has not been opened for 180 days |
 | Color history | `COLOR_HISTORY` | RGBA, time | Not personal | Last 20 (R-017) |
+| Run history | `RUN_HISTORY` (schema V2) | Command line and resolved program path encrypted with DPAPI; last run time in plaintext | The Owner's personal data, possibly secret (a token or password typed in a line) | 100 lines and 30 days, whichever bites first; delete one (R-024, D-038) |
 | Metadata | `META` | schema version | None | Permanent |
 | Settings | `settings.toml` | Hotkeys, quicklinks, gap, ignore list, retention (can lower only), UI scale | Low; contains URLs the Owner chose | Owner-managed |
 | Logs | `logs\*.log` | Event ids, sizes, counts, error codes. Never content, query text or file names (D-020) | Low | 5 files of 1 MB |
-| In memory only | Process heap | Item index (10,000 items), icon cache, decrypted clipboard text index (dropped 60 s after the view closes), restore rectangles, topmost set, Awake mode, screen snapshot during a pick | Clipboard text is sensitive while in memory | Process lifetime or shorter |
+| In memory only | Process heap | Item index (10,000 items), icon cache, decrypted clipboard text index (dropped 60 s after the view closes), decrypted run history while a '>' query is shown (dropped on any other query), restore rectangles, topmost set, Awake mode, screen snapshot during a pick | Clipboard text is sensitive while in memory | Process lifetime or shorter |
 
 ### 4.3 Legal basis
 
@@ -685,7 +705,7 @@ OWASP ASVS 5.0 Level 1 for the relevant chapters (R-010, D-033, ledger topic 7).
 
 | ASVS 5.0 chapter | Applies? | Where addressed |
 |---|---|---|
-| V1 Encoding and Sanitization | Yes | URL building, SQL parameters, no command lines built from queries (T-006, T-007, T-031) |
+| V1 Encoding and Sanitization | Yes | URL building, SQL parameters; a '>' command line is the Owner's typed text passed whole to PowerShell as an encoded command, never assembled from other query text (T-006, T-007, T-031, T-033) |
 | V2 Validation and Business Logic | Yes | Clipboard limits, rate limit, paste target check, file results never shown as apps (T-003, T-008, T-018, T-019, T-020) |
 | V3 Web Frontend Security | N/A | No browser UI |
 | V4 API and Web Service | N/A | No API, no service |
@@ -693,10 +713,10 @@ OWASP ASVS 5.0 Level 1 for the relevant chapters (R-010, D-033, ledger topic 7).
 | V6 Authentication, V7 Session Management, V8 Authorization | N/A, except the elevation boundary | No accounts or sessions (R-001); the elevation boundary is T-027 |
 | V9 Self-contained Tokens, V10 OAuth and OIDC | N/A | No tokens |
 | V11 Cryptography | Yes | DPAPI use, no custom crypto (T-005, T-012) |
-| V12 Secure Communication | Yes (negative) | No sockets, including SMB from icon loading (T-016, T-030); the URLs handed to the browser are HTTP or HTTPS only |
+| V12 Secure Communication | Yes (negative) | No sockets, including SMB from icon loading (T-016, T-030); a process the Owner starts with '>' is the Owner's (R-010 v2); the GUI lookup never touches UNC or remote paths (T-035); the URLs handed to the browser are HTTP or HTTPS only |
 | V13 Configuration | Yes | Settings schema, defaults, DLL search path (T-004, T-022, T-025) |
-| V14 Data Protection | Yes | Clipboard at rest and in memory, logs, screen snapshot (T-011 to T-017, T-030) |
-| V15 Secure Coding and Architecture | Yes | Unsafe confinement, dependency control, privilege (T-023, T-024, T-026, T-028, T-029) |
+| V14 Data Protection | Yes | Clipboard at rest and in memory, run history at rest and in memory, logs, screen snapshot (T-011 to T-017, T-030, T-034) |
+| V15 Secure Coding and Architecture | Yes | Unsafe confinement, dependency control, privilege, including '>' rows (T-023, T-024, T-026, T-028, T-029) |
 | V16 Security Logging and Error Handling | Yes | Local log without content, Notices (T-001, T-009, T-010, T-013) |
 | V17 WebRTC | N/A | No real-time media |
 
@@ -721,7 +741,7 @@ Elements are the DFD nodes and the flows F1 to F16 in chapter 5. Every threat en
 | T-013 | Information disclosure | S logs, F15 | Logs reveal what the Owner typed or copied | Logging policy D-020: ids, sizes, counts and error codes only; test scans captured log output for marker strings | V16 Security Logging and Error Handling | `d020_logs_contain_no_content` |
 | T-014 | Information disclosure | P3 memory | Decrypted clipboard text stays in RAM or the page file | Text index is built on demand and dropped 60 s after the view closes; payload buffers are zeroed on drop | V14 Data Protection | Accepted risk D-026 (residual: page file, same-user memory read) |
 | T-015 | Information disclosure | P4 color picker, F12 | The screen snapshot captures sensitive content | Snapshot lives in memory only, is dropped when the overlay closes, and is never written to disk or the clipboard (D-023) | V14 Data Protection | `d023_snapshot_dropped_after_pick` |
-| T-016 | Information disclosure | F11, all flows | Typed text leaves the machine | No network code in the product; URL opened only on an explicit action; cargo-deny bans HTTP client crates | V12 Secure Communication | `naobi-perf network-silence` (verdict id `r010_no_socket_during_session`, tier 3); `cargo deny check` bans |
+| T-016 | Information disclosure | F11, all flows | Typed text leaves the machine | No network code in the product; URL opened only on an explicit action; cargo-deny bans HTTP client crates; a '>' command line starts the Owner's own process and the network-silence session runs none (D-038) | V12 Secure Communication | `naobi-perf network-silence` (verdict id `r010_no_socket_during_session`, tier 3); `cargo deny check` bans |
 | T-017 | Information disclosure | F5 non-flagging source | A password revealed in an app that sets no exclusion flag, or copied by the Proton Pass browser extension (clipboard owner = the browser), is stored | Windows exclusion flags when Proton Pass sets them, ignore list, Clear clipboard history, 30-day retention | V14 Data Protection | Accepted risk D-027 (signed off by the Owner) |
 | T-018 | Denial of service | F5 clipboard payload | A huge or endless clipboard payload exhausts memory or disk | Limits of D-015: 1 MiB text, raw bitmap over 64 MiB rejected before conversion, 10 MB PNG, 500 MB store; reads are bounded | V2 Validation and Business Logic | `r015_image_over_10mb_rejected`, `d015_oversize_text_rejected_and_file_lists_are_capped` |
 | T-019 | Denial of service | F5 clipboard rate | An app copies hundreds of times per second | Coalesce by clipboard sequence number; rate limit 10 per second; work on the clipboard worker | V2 Validation and Business Logic | `d015_capture_rate_limited` |
@@ -729,7 +749,7 @@ Elements are the DFD nodes and the flows F1 to F16 in chapter 5. Every threat en
 | T-021 | Denial of service | P1 platform thread | Slow work on the message thread delays hotkeys and clipboard events | The thread only forwards events; its one hook is the scoped topmost hook, whose callback only repositions the border; budget measured under load | V15 Secure Coding and Architecture | `naobi-perf hotkey-to-visible` with a busy clipboard worker (R-006) |
 | T-022 | Denial of service | S settings file, F8 | An oversized or malformed settings file stalls reload | 256 KiB cap; parse on a worker; last valid settings kept | V13 Configuration | `d009_invalid_settings_keeps_last_valid` |
 | T-023 | Denial of service | P4 awake | Awake stays on and drains the battery or blocks sleep unnoticed | Mode shown in the tray icon and tooltip; Timed has an expiry; Awake mode is not persisted, so a restart returns to Off | V15 Secure Coding and Architecture | `r019_tray_icon_reflects_mode` |
-| T-024 | Elevation of privilege | P1 process token | The app runs elevated by mistake or starts an elevated child | Manifest asInvoker; no run-as-administrator action (D-024) | V15 Secure Coding and Architecture | `r010_main_token_not_elevated` |
+| T-024 | Elevation of privilege | P1 process token | The app runs elevated by mistake or starts an elevated child | Manifest asInvoker; no run-as-administrator action (D-024); '>' rows use the shell 'open' verb only and offer no administrator action | V15 Secure Coding and Architecture | `r010_main_token_not_elevated` |
 | T-025 | Elevation of privilege | process start | A planted DLL in the exe folder is loaded by the portable exe | Link with /DEPENDENTLOADFLAG:0x800 so static imports resolve from System32 only, call SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) without the application directory, delay-load where needed; static CRT; the exe folder is treated as untrusted | V13 Configuration | `d025_loaded_modules_from_trusted_dirs` (tier 2: plants a DLL next to the exe and asserts it is not loaded; only System32 and WinSxS count as trusted) |
 | T-026 | Elevation of privilege | naobi-win32 FFI | A memory-safety bug in unsafe code | Unsafe confined to one crate (ADR-0003); SAFETY comments; clippy denies undocumented unsafe; untrusted data (TOML, image bytes) is parsed in safe crates | V15 Secure Coding and Architecture | Not unit-testable as a class; enforced by the clippy row of CONSTRAINTS.md and review |
 | T-027 | Elevation of privilege | F12 elevated windows | Naobi tries to control an elevated window and behaves unexpectedly or silently fails | Check the target token before any change; show the admin-window Notice and change nothing; no UIAccess in the MVP (R-011) | V8 Authorization | `r011_elevated_window_notice_and_no_change` |
@@ -738,8 +758,11 @@ Elements are the DFD nodes and the flows F1 to F16 in chapter 5. Every threat en
 | T-030 | Information disclosure | F9 file results, F6 file-list entries | Displaying a row whose file is a .url, .lnk, .library-ms or .searchConnector-ms with a UNC icon path makes the icon loader open an SMB connection and leak the Owner's NTLM hash with no URL action | File rows and clipboard file lists use per-extension icons only (SHGFI_USEFILEATTRIBUTES, no file access); icon locations inside shortcut-like files are never resolved; UNC icon paths are never opened | V12 Secure Communication; V14 Data Protection; V5 File Handling | `r010_file_row_icon_does_not_touch_unc` (tier 2: a planted .url with a UNC IconFile; assert no socket) |
 | T-031 | Tampering | F9 Windows Search query | User text such as o'brien, 50% or a_b breaks the Search SQL or its LIKE semantics, and a crafted quote drops the scope='file:' restriction | Double single quotes, wrap CONTAINS terms in double quotes, escape %, _ and [ in the LIKE fallback, and append the scope clause after escaping | V1 Encoding and Sanitization | `r013_query_with_quote_and_wildcards_escaped` |
 | T-032 | Information disclosure | F13 paste restore, F5 | Restoring the previous clipboard after a paste writes an excluded secret (a password-manager copy) back without its exclusion formats, so Windows Clipboard History, Cloud Clipboard and other monitors capture it and the manager no longer recognises it | If the snapshot carried an exclusion format (ExcludeClipboardContentFromMonitorProcessing, CanIncludeInClipboardHistory=0, CanUploadToCloudClipboard=0) or its owner is on the ignore list, it is not restored and the clipboard keeps the pasted entry (D-019 v4); otherwise it is restored with the private marker | V14 Data Protection | `r015_restore_skipped_when_snapshot_was_excluded` |
+| T-033 | Tampering / Elevation of privilege | F2 '>' line | The typed line runs with a different meaning than typed (quoting) or elevated | -EncodedCommand of the whole line, 'open' verb, no runas, no arming by design (D-038) | V1 Encoding and Sanitization | `r024_console_gets_line_unchanged`, `r024_encoded_command_is_utf16le_base64` |
+| T-034 | Information disclosure | S naobi.db and memory | Run history reveals secrets typed in command lines (tokens, passwords) | DPAPI blob per column, 100 lines and 30 days, delete one, decrypted only while '>' is shown, zeroized, never logged (D-020) | V14 Data Protection | `r024_history_stores_only_cipher_blobs`, `r024_run_flow_opens_console_and_leaves_no_plaintext` |
+| T-035 | Information disclosure | F2 lookup | Reading a PE header on a UNC or mapped network path opens SMB and leaks the NTLM hash | Skip UNC and DRIVE_REMOTE candidates; look up on Enter only | V12 Secure Communication | `r024_lookup_skips_unc_path_dirs` |
 
-Threat counts: Spoofing 4, Tampering 6, Repudiation 2, Information disclosure 9, Denial of service 6, Elevation of privilege 5; total 32. Accepted risks: T-005 and T-014 (D-026), T-017 (D-027), T-029 (D-028), T-001 residual (D-029).
+Threat counts: Spoofing 4, Tampering 7, Repudiation 2, Information disclosure 11, Denial of service 6, Elevation of privilege 6 (T-033 counts under both Tampering and Elevation of privilege); total 35. Accepted risks: T-005 and T-014 (D-026), T-017 (D-027), T-029 (D-028), T-001 residual (D-029).
 
 Categories not applied to an element, with the reason: Repudiation on the settings file, the UI shell and the color picker (no action of record, one user); Spoofing on the data store (a file, not a principal); Elevation of privilege on the log (no code path); Information disclosure on the topmost border (no data).
 
@@ -931,6 +954,7 @@ Raycast extension compatibility, any plugin system, AI features (R-005); snippet
 | D-032 | Screen reader as a weighted D-002 criterion | Owner, 2026-10-22 | Screen-reader support is a weighted criterion for D-002, not a hard requirement, and is switched on when it costs less than 5 MB of working set. |
 | D-033 | ASVS Level 1 confirmed | Owner, 2026-10-22 | Keep OWASP ASVS Level 1; apply encryption at rest, exclusion flags and content-free logs regardless. |
 | D-034 | UI framework: Slint, software renderer, accessibility on | Owner, 2026-10-22 | Slint with the software renderer and the accessibility feature enabled; GPUI, femtovg and skia rejected on measured evidence (docs/research/ui-prototype.md, .ai-workspace coder-slint-iter2.md). |
+| D-038 | Run a command line typed after '>' | Owner, 2026-11-14 | Owner approved: the Launcher runs the line in pwsh with -NoExit -EncodedCommand in a new console (Windows PowerShell 5.1 fallback), starts GUI programs directly, keeps a DPAPI run history of 100 lines and 30 days; a process started with '>' is the Owner's own, so R-010 v2 words the no-socket rule for the app and its children; module commands get search keywords in code. |
 
 ### 11.5 Owner decisions and remaining confirmations
 
@@ -994,7 +1018,7 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | R-007 | The UI applies the Naobi design tokens from naobi.dev DESIGN.md with a light 'paper' theme and a dark 'stone' theme that follow the Windows app theme, embeds Inter and JetBrains Mono, uses English copy, meets WCAG 2.2 AA contrast, and every capability is operable by keyboard alone. | D-030, D-032, D-034 | §7; DESIGN_SYSTEM.md | `r007_token_pairs_meet_wcag_aa`, `r007_theme_switch_without_restart` (tier 1 with fake theme source); manual keyboard-only pass (Narrator when accessibility support is switched on, D-032) | |
 | R-008 | As the owner, I press Alt+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently. | D-012, D-018, D-029 | seq-hotkey-to-launch; ADR-0004 | `r008_alt_space_opens_launcher`, `r008_conflict_notice_names_hotkey` (tier 2, also checks the sticky banner and tray tooltip) | |
 | R-009 | All data stays local: settings as TOML in %APPDATA%\NaobiCommand, clipboard history in SQLite with entry contents encrypted by Windows DPAPI (current user), retained for at most 30 days or 1,000 entries; clipboard updates flagged with ExcludeClipboardContentFromMonitorProcessing or CanIncludeInClipboardHistory=0 are never stored; a 'Clear clipboard history' command deletes all entries. UU 27/2022 does not apply because the owner processes only their own data on their own device. | D-014, D-015 | §4; erd; ADR-0006 | `r009_content_not_plaintext_in_db_file` (tier 2: real DPAPI cipher, scans naobi.db and naobi.db-wal), `r009_retention_purges_old_and_excess`, `r009_exclusion_flag_not_stored`, `r009_clear_history_leaves_zero` | |
-| R-010 | The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL, and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model. | D-011, D-024, D-033 | §6; dfd | `r010_main_token_not_elevated` (tier 2), `naobi-perf network-silence` (verdict id `r010_no_socket_during_session`, tier 3), `r010_file_row_icon_does_not_touch_unc` (tier 2), `r010_stride_rows_have_mitigation_test_or_risk` (tier 1, parses REPORT.md) | |
+| R-010 | The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model. | D-011, D-024, D-033, D-038 | §6; dfd | `r010_main_token_not_elevated` (tier 2), `naobi-perf network-silence` (verdict id `r010_no_socket_during_session`, tier 3), `r010_file_row_icon_does_not_touch_unc` (tier 2), `r010_stride_rows_have_mitigation_test_or_risk` (tier 1, parses REPORT.md) | |
 | R-011 | The app never runs elevated in the MVP; when a module targets an elevated window it cannot control (UIPI), it shows a notice naming the window instead of failing silently. A UIAccess build is reconsidered in phase 2. | D-022 | seq-window-snap; §6.2 T-027 | `r011_elevated_window_notice_and_no_change` (tier 1 with fake WindowOps; manual with an elevated Notepad) | |
 | R-012 | (critical) As the owner, I type into one root search that mixes apps, files, commands, quicklinks and calculator results, ranked exact alias first, then fuzzy title match with a frecency boost of at most 20% of the fuzzy score, with file results in a trailing section because Windows Search results arrive last; Enter runs the primary action, Ctrl+Enter the secondary action, Ctrl+K opens the action panel, and Esc clears the query, then pops the view, then hides the launcher; a view opened directly by its own hotkey (for example clipboard history via Alt+Shift+V) hides on Esc instead of popping to the root view. | D-016, D-021 | seq-hotkey-to-launch; state-launcher-view | `r012_exact_alias_ranks_first`, `r012_frecency_boost_never_exceeds_20_percent_of_fuzzy_score`, `r012_file_results_trail_other_results`, `r012_esc_in_hotkey_opened_view_hides`, `r012_more_opened_item_ranks_above_equal_fuzzy_match`, `r012_enter_on_app_launches_and_hides`, `r012_ctrl_k_lists_actions_of_selected_result`, `r012_esc_clears_query_then_pops_view_then_hides`, `r012_late_file_rows_do_not_block_sync_rows`, `r012_hotkey_to_app_launch` (tier 2) | |
 | R-013 | File results in the MVP come from querying the Windows Search system index; the app keeps no file index of its own. An own NTFS index is phase 2. | D-016 | §5.4 Files | `r013_indexed_file_appears_by_name` (tier 2), `r013_query_with_quote_and_wildcards_escaped` (tier 1), `r013_search_disabled_shows_unavailable_row` (tier 1), `r013_file_results_never_in_apps_section` (tier 1) | |
@@ -1008,6 +1032,7 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | R-021 | Quicklinks are defined in the settings TOML as URL templates with a {query} placeholder and an alias; the defaults are Google, GitHub, YouTube and naobi.dev; typing '<alias> <text>' opens the URL with the text URL-encoded in the default browser. | D-024, D-009 | §4.4 | `r021_gh_react_native_opens_url_with_percent20`, `r021_query_is_percent_encoded`, `r021_non_http_scheme_rejected` (tier 1) | |
 | R-022 | The app shows only a tray icon (no taskbar button) with the menu Open, Pause hotkeys, Awake status, Settings and Quit. | D-018 | state-launcher-window; §3.5, §5.4 | `r022_launcher_not_in_taskbar_or_alt_tab`, `r022_pause_hotkeys_unregisters_all` (tier 2) | |
 | R-023 | Only one instance runs; a second launch shows the first instance's launcher and exits. The launcher window is created hidden at startup and hidden by DWM cloaking, never destroyed, so showing it does not create a window. | D-013 | state-launcher-window; ADR-0005 | `r023_second_instance_shows_first_and_exits`, `r023_hwnd_stable_across_100_cycles`, `d013_hide_returns_focus_to_previous_window` (tier 2) | |
+| R-024 | Typing '>' and a command line in the Launcher root search shows a run row; Enter runs the line in a new PowerShell 7 (pwsh) console window that stays open, or in Windows PowerShell 5.1 when pwsh is not found, or starts the program directly without a console when the first token resolves through PATH or App Paths to a GUI-subsystem exe; '>' alone lists the run history newest first and '>text' lists the run history command lines that contain text below the run row; the run history keeps at most 100 command lines for at most 30 days, each stored as a DPAPI current-user blob and never logged; there is no run-as-administrator action and no second Enter. | D-038, D-014, D-020, D-024 | §4.2, §6.2 (T-033 to T-035) | `r024_console_gets_line_unchanged`, `r024_encoded_command_is_utf16le_base64`, `r024_lookup_skips_unc_path_dirs`, `r024_history_stores_only_cipher_blobs`, `r024_run_flow_opens_console_and_leaves_no_plaintext` | |
 
 ### Decisions
 
@@ -1047,3 +1072,4 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | D-032 | active (Owner answered) | 10 | Screen reader as a weighted D-002 criterion |
 | D-033 | active (Owner answered) | 7 | ASVS Level 1 confirmed |
 | D-034 | active (Owner answered) | 8 | UI framework: Slint, software renderer, accessibility on |
+| D-038 | active (Owner answered) | 7 | Run a command line typed after '>' |

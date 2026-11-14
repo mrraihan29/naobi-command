@@ -50,7 +50,7 @@ fn d014_wal_pragmas_and_schema() {
     assert_eq!(pragma(c, "synchronous"), "1"); // NORMAL
     assert_eq!(pragma(c, "cache_size"), "-2048"); // 2 MiB
     assert_eq!(pragma(c, "auto_vacuum"), "2"); // INCREMENTAL
-    assert_eq!(pragma(c, "user_version"), "1");
+    assert_eq!(pragma(c, "user_version"), "2");
     let names: Vec<String> = c
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .unwrap()
@@ -65,16 +65,48 @@ fn d014_wal_pragmas_and_schema() {
             "clip_payload",
             "color_history",
             "frecency",
-            "meta"
+            "meta",
+            "run_history"
         ]
     );
+}
+
+// @R-009
+#[test]
+fn d014_schema_v2_adds_run_history_and_backs_up_v1() {
+    let d = Dir::new();
+    {
+        let db = Db::open_with_migrations(&d.db(), || [1; 16], &schema::MIGRATIONS[..1]).unwrap();
+        assert_eq!(pragma(db.conn(), "user_version"), "1");
+        db.record_open(42, 1000).unwrap();
+    }
+    let db = Db::open(&d.db(), || [9; 16]).unwrap();
+    assert_eq!(pragma(db.conn(), "user_version"), "2");
+    let bak = d.0.join("naobi.db.bak-v1");
+    assert!(bak.exists());
+    assert_eq!(
+        pragma(&Connection::open(&bak).unwrap(), "user_version"),
+        "1"
+    );
+    assert_eq!(db.raw_rows().unwrap(), vec![(42, 1, 1000)]);
+    db.conn()
+        .execute(
+            "INSERT INTO run_history (line_enc, last_run_at) VALUES (x'00', 1)",
+            [],
+        )
+        .unwrap();
+    drop(db);
+    // A V1-only reader still opens the V2 file.
+    let old = Db::open_with_migrations(&d.db(), || [9; 16], &schema::MIGRATIONS[..1]).unwrap();
+    old.record_open(42, 2000).unwrap();
+    assert_eq!(old.raw_rows().unwrap(), vec![(42, 2, 2000)]);
 }
 
 #[test]
 fn d014_migration_copies_backup_and_is_expand_contract() {
     let d = Dir::new();
     {
-        let db = Db::open(&d.db(), || [1; 16]).unwrap();
+        let db = Db::open_with_migrations(&d.db(), || [1; 16], &schema::MIGRATIONS[..1]).unwrap();
         db.record_open(42, 1000).unwrap();
     }
     // Test-only second migration: adds a nullable column, nothing else.

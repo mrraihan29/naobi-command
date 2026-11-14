@@ -84,7 +84,7 @@ fn open_history() -> Option<History> {
     ))
 }
 
-struct DpapiCipher;
+pub(crate) struct DpapiCipher;
 
 impl Cipher for DpapiCipher {
     fn encrypt(&self, plain: &[u8]) -> Result<Vec<u8>, naobi_clipboard::ports::CipherError> {

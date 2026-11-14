@@ -1,7 +1,17 @@
 //! Schema per REPORT 4.1. Content and preview columns are BLOB (DPAPI ciphertext, R-009).
 //! Migrations are append-only and expand-only (D-014): add tables or nullable/defaulted columns, never drop or rename.
 
-pub const MIGRATIONS: &[&str] = &[V1];
+pub const MIGRATIONS: &[&str] = &[V1, V2];
+
+/// R-024: the `>` run history. Lines are DPAPI blobs (T-034); `last_run_at` is Unix milliseconds.
+const V2: &str = "
+CREATE TABLE run_history (
+    id          INTEGER PRIMARY KEY,
+    line_enc    BLOB NOT NULL,
+    program_enc BLOB,
+    last_run_at INTEGER NOT NULL
+);
+";
 
 const V1: &str = "
 CREATE TABLE meta (

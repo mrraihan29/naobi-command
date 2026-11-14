@@ -59,7 +59,7 @@ entries:
       - "Each of the seven MVP modules is reachable from the launcher or its own hotkey"
       - "No phase-2 module ships in the MVP build"
     links:
-      tickets: ["NCMD-25@1"]
+      tickets: ["NCMD-25@1", "NCMD-35@1"]
 
   - id: R-005
     type: requirement
@@ -139,18 +139,18 @@ entries:
 
   - id: R-010
     type: requirement
-    version: 1
+    version: 2
     status: active
     topic: 7
     answer: "setuju dengan semuanya!"
     recommendation: "Tanpa login/akun; tidak ada koneksi keluar kecuali aksi eksplisit (buka URL di browser); jalan sebagai user biasa; modul yang butuh admin (fase 2, mis. Hosts editor) lewat helper terpisah yang minta elevasi hanya saat dipakai; OWASP ASVS 5.0 Level 1 untuk bab yang relevan + threat model STRIDE."
-    statement: "The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL, and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model."
+    statement: "The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model."
     acceptance:
       - "The main process token is not elevated"
-      - "No socket is opened during a 10-minute idle-and-use session without an explicit URL action"
+      - "No socket is opened by the app or its own child processes during a 10-minute idle-and-use session without an explicit URL action; the session runs no '>' command line"
       - "STRIDE threats in the design report each have a mitigation, test or accepted risk"
     links:
-      tickets: ["NCMD-5@1", "NCMD-17@1", "NCMD-25@1"]
+      tickets: ["NCMD-5@2", "NCMD-17@2", "NCMD-25@2", "NCMD-36@2"]
 
   - id: D-001
     type: decision
@@ -425,6 +425,29 @@ entries:
     links:
       tickets: ["NCMD-5@1", "NCMD-12@1"]
 
+  - id: R-024
+    type: requirement
+    version: 1
+    status: active
+    topic: 3
+    answer: "Setuju (the Owner approved the rule change for command lines typed after '>', 2026-11-14; see D-038)"
+    recommendation: "Run a command line typed after '>' in PowerShell 7, keep a DPAPI-encrypted run history of 100 lines and 30 days, and show it when '>' is typed alone."
+    statement: "Typing '>' and a command line in the Launcher root search shows a run row; Enter runs the line in a new PowerShell 7 (pwsh) console window that stays open, or in Windows PowerShell 5.1 when pwsh is not found, or starts the program directly without a console when the first token resolves through PATH or App Paths to a GUI-subsystem exe; '>' alone lists the run history newest first and '>text' lists the run history command lines that contain text below the run row; the run history keeps at most 100 command lines for at most 30 days, each stored as a DPAPI current-user blob and never logged; there is no run-as-administrator action and no second Enter."
+    acceptance:
+      - "Enter on '>' followed by a command line opens a new PowerShell console window that runs exactly that line and stays open after it ends, and the Launcher hides"
+      - "pwsh.exe runs the line when it resolves, otherwise powershell.exe; when neither resolves a Run Notice says PowerShell could not be started"
+      - "A line whose first token resolves through PATH or App Paths to a GUI-subsystem exe starts that exe with the rest of the line as its arguments and no console; any other line, and any lookup that fails, runs in the console"
+      - "Quotes, $, %, |, & and > in the line reach PowerShell unchanged"
+      - "'>' alone lists the run history newest first; '>text' lists the run row and then the run history command lines that contain text; no other Item is listed and no file search starts"
+      - "Enter on a run history command line runs it again and moves it to the top without adding a duplicate; Delete in the action panel removes it from the run history"
+      - "The run history keeps at most 100 command lines and none older than 30 days"
+      - "No command line appears in plaintext in naobi.db, naobi.db-wal or the logs"
+      - "Run rows are never counted in frecency, and their item ids and icon keys contain no command text"
+      - "The first Enter runs the command line (no arming) and no run-as-administrator action is offered"
+    links:
+      decisions: ["D-038@1"]
+      tickets: ["NCMD-31@1", "NCMD-32@1", "NCMD-33@1", "NCMD-34@1", "NCMD-36@1"]
+
   # ---- Design phase (NCMD-2), autonomous defaults awaiting owner confirmation at Gate 1 ----
   - id: D-010
     type: decision
@@ -681,3 +704,14 @@ entries:
     statement: "RK-15 is resolved by R-006 v5: keystroke-to-results p95_est <= 25 ms (p95_upper minus the measured probe cost; measured 19.3 ms) on screen under normal load plus parity with PowerToys Command Palette; this bar replaces the p95_upper <= 16 ms bar and miss policy of D-035 (5, 6) and D-036; the Slint software renderer (D-034) is kept and no renderer switch is made. The true on-screen p95 lies between p95_est (19.3 ms) and p95_upper (26.3 ms) depending on how much of the probe's one-refresh wait is real display latency; the verdict records both. If NCMD-6 shows Naobi slower than PowerToys, the decision returns to the Owner."
     links:
       decisions: ["D-034@2", "D-035@1", "D-036@1"]
+
+  - id: D-038
+    type: decision
+    version: 1
+    status: active
+    topic: 7
+    answer: "Request (2026-11-14): \"coba kamu lihat menu powertoys ini deh, ada fungsi > yang dimana kalo misal aku ketik >ping google.com -t berarti akan membuka terminal dan menjalankan ping google.com -t. terus kalo misal aku ketik > doang maka akan ada history command apa aja yang pernah aku jalankan! ini fitur yang sangat berguna! selain itu bisa gak fitur fitur seperti color picker juga bisa dipanggil lewat search ga harus mencet shortcut\". Answers: rule change (command lines from queries, R-010 exception for the Owner's own processes) = \"Setuju\"; history storage = \"Terenkripsi DPAPI, 100 entri, 30 hari\"; terminal = \"windows powershell 7.1\" (the machine has PowerShell 7.7 as pwsh; fallback Windows PowerShell 5.1). Architect change accepted: -EncodedCommand instead of -Command (quote-exact)."
+    recommendation: "Run the typed line through pwsh -NoExit -EncodedCommand in a new console, start GUI programs directly, keep a DPAPI run history of 100 lines and 30 days, and add search keywords for the module commands."
+    statement: "The Launcher runs a command line the Owner types after '>': PowerShell 7 (pwsh.exe, found through PATH or App Paths) with -NoExit -EncodedCommand (base64 of the UTF-16LE line, so the Owner's characters reach PowerShell unchanged) in a new console window started with the shell 'open' verb in %USERPROFILE%, outside the app's kill-on-close job; Windows PowerShell 5.1 when pwsh is not found; a first token that resolves to a readable PE image with the WINDOWS_GUI subsystem is started directly with the rest of the line as arguments, and a failed lookup falls back to the console; lookups run on Enter only and never touch a UNC or remote-drive path; the run history is the V2 table run_history (line_enc and program_enc DPAPI current-user blobs, last_run_at), at most 100 lines and 30 days, decrypted only while a '>' query is shown, deletable one by one, never logged; run rows are not armed (R-020 does not cover them), not counted in frecency, and carry no command text in item ids or icon keys; a process the Owner starts with '>' is the Owner's process, so R-010's no-socket rule covers the app and its own children and the network-silence session does not use '>'; module commands get search keywords in code, with no alias setting."
+    links:
+      decisions: ["D-014@2", "D-020@1", "D-024@1"]

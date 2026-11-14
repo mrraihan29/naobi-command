@@ -10,3 +10,6 @@
 Thumbs.db
 /spikes/
 /mutants.out*/
+
+# graphify output (rebuildable)
+graphify-out/

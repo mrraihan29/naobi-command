@@ -59,6 +59,11 @@ pub trait CommandSource: Send + Sync {
     fn pending(&self) -> Option<&'static str> {
         None
     }
+    /// A state worth a status row while a query is typed ("File search unavailable"), unlike
+    /// `pending` it is not loading: no bar, and no row on an empty query.
+    fn status(&self) -> Option<&'static str> {
+        None
+    }
     /// Ids of items whose primary action needs a second Enter (R-020).
     fn armed(&self) -> Vec<ItemId> {
         Vec::new()

@@ -72,6 +72,8 @@ pub trait Backend {
     fn query(&mut self, text: &str) -> Result<Vec<String>, Failure>;
     /// Lets go of what a quiet period no longer needs.
     fn stop(&mut self);
+    /// True while there is something `stop` would let go of.
+    fn running(&self) -> bool;
 }
 
 /// What the worker found for one request.
@@ -108,7 +110,13 @@ pub fn answer(backend: &mut dyn Backend, text: &str) -> Answer {
 /// The worker: the newest request wins, a quiet period stops the backend.
 fn work(rx: Receiver<(u64, String)>, backend: &mut dyn Backend) {
     loop {
-        let mut next = match rx.recv_timeout(IDLE) {
+        // With nothing running there is nothing to stop: sleep until a request, with no timer.
+        let got = if backend.running() {
+            rx.recv_timeout(IDLE)
+        } else {
+            rx.recv().map_err(|_| RecvTimeoutError::Disconnected)
+        };
+        let mut next = match got {
             Ok(r) => r,
             Err(RecvTimeoutError::Timeout) => {
                 backend.stop();
@@ -262,6 +270,10 @@ impl Backend for ChildBackend {
                             r.asked_at = None;
                             return Err(Failure::Unavailable);
                         }
+                        "?" => {
+                            r.asked_at = None;
+                            return Err(Failure::Failed);
+                        }
                         path => paths.push(path.to_owned()),
                     }
                 }
@@ -278,6 +290,10 @@ impl Backend for ChildBackend {
     fn stop(&mut self) {
         self.kill();
     }
+
+    fn running(&self) -> bool {
+        self.running.is_some()
+    }
 }
 
 impl Drop for ChildBackend {
@@ -287,7 +303,8 @@ impl Drop for ChildBackend {
 }
 
 /// The child: reads `id<TAB>text` lines from stdin and answers each with `id<TAB>path` lines and a
-/// last `id<TAB>` line (`id<TAB>!` first when Windows Search is not there). Ends when stdin closes,
+/// last `id<TAB>` line (`id<TAB>!` first when Windows Search is not there, `id<TAB>?` when the
+/// query failed). Ends when stdin closes,
 /// which is when the app stops asking or exits. Nothing of the text is logged (T-010).
 pub fn search_files() -> anyhow::Result<()> {
     let stdin = std::io::stdin();
@@ -300,11 +317,14 @@ pub fn search_files() -> anyhow::Result<()> {
         match run_query(text) {
             Ok(paths) => {
                 for p in paths {
-                    writeln!(out, "{id}\t{p}")?;
+                    // A name with a line break or another control character would forge a line.
+                    if !p.is_empty() && p != "!" && p != "?" && !p.chars().any(char::is_control) {
+                        writeln!(out, "{id}\t{p}")?;
+                    }
                 }
             }
             Err(SearchError::Unavailable) => writeln!(out, "{id}\t!")?,
-            Err(SearchError::Failed) => {}
+            Err(SearchError::Failed) => writeln!(out, "{id}\t?")?,
         }
         writeln!(out, "{id}\t")?;
         out.flush()?;
@@ -317,10 +337,14 @@ fn run_query(text: &str) -> Result<Vec<String>, SearchError> {
     let Some(sql) = contains_sql(text, LIMIT) else {
         return Ok(Vec::new());
     };
-    let found = search::query(&sql)?;
-    if !found.is_empty() {
-        return Ok(found);
-    }
+    // Search rejects some punctuation inside a CONTAINS phrase ("1=1*"): that is not a failure of
+    // the search, the substring query below takes it.
+    let found = match search::query(&sql) {
+        Ok(found) if !found.is_empty() => return Ok(found),
+        Ok(found) => found,
+        Err(SearchError::Unavailable) => return Err(SearchError::Unavailable),
+        Err(SearchError::Failed) => Vec::new(),
+    };
     match like_sql(text, LIMIT) {
         Some(sql) => search::query(&sql),
         None => Ok(found),
@@ -346,6 +370,9 @@ mod tests {
             self.result.clone()
         }
         fn stop(&mut self) {}
+        fn running(&self) -> bool {
+            false
+        }
     }
 
     fn fake(service: bool, result: Result<Vec<String>, Failure>) -> Fake {

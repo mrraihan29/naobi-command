@@ -101,6 +101,11 @@ fn r013_query_with_quote_and_wildcards_escaped() {
     let l = like_sql("[x]'y", 30).unwrap_or_default();
     assert!(l.contains("LIKE '%[[]x]''y%'"), "{l}");
     assert!(l.ends_with(" AND scope='file:'"), "{l}");
+    // Typed placeholders stay text: `replace` does not rescan what it inserted.
+    let c = contains_sql("{terms} {top}", 30).unwrap_or_default();
+    assert!(c.contains("'\"{terms}*\" AND \"{top}*\"'"), "{c}");
+    let l = like_sql("{likes}", 30).unwrap_or_default();
+    assert!(l.contains("LIKE '%{likes}%'"), "{l}");
     // Nothing usable, nothing asked; long text is cut; control characters split words.
     for blank in ["", "   ", "\"\"", "*", "\u{7}"] {
         assert_eq!(contains_sql(blank, 30), None, "{blank:?}");
@@ -133,8 +138,15 @@ fn r013_search_disabled_shows_unavailable_row() {
         .collect();
     assert_eq!(status.len(), 1);
     assert!(status[0].disabled, "a status row is not selectable");
+    assert!(!s.loading, "unavailable is not loading: no bar");
     assert!(titles(&s, None).contains(&"Notes".to_owned()));
+    // With no query typed the row is not shown, and still no bar.
+    type_text(&mut l, "");
+    let s = l.screen();
+    assert!(titles(&s, None).iter().all(|t| t != UNAVAILABLE));
+    assert!(!s.loading);
     flag.store(false, Ordering::Relaxed);
+    type_text(&mut l, "notes");
     assert!(titles(&l.screen(), None).iter().all(|t| t != UNAVAILABLE));
 }
 

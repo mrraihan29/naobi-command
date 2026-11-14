@@ -95,3 +95,45 @@ fn r013_typing_an_indexed_file_name_shows_the_files_section() {
     assert!(opened, "the Launcher did not open");
     assert!(shown, "no Files section for {name}");
 }
+
+// @R-013
+#[test]
+#[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
+fn r013_the_launchers_own_queries_run_against_the_real_index() {
+    use naobi_launcher::providers::files::{contains_sql, like_sql};
+    let known = query(
+        "SELECT TOP 50 System.ItemPathDisplay FROM SystemIndex \
+         WHERE System.FileName LIKE '%.txt' AND scope='file:'",
+    )
+    .unwrap_or_else(|e| panic!("the sample query failed: {e:?}"));
+    let Some(path) = known.iter().find(|p| {
+        p.rsplit('\\').next().is_some_and(|n| {
+            n.len() > 8 && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '.')
+        })
+    }) else {
+        panic!("no indexed .txt file with a plain name: {known:?}");
+    };
+    let name = path.rsplit('\\').next().unwrap_or(path);
+    // The ranked query by the start of the name, and the fallback by a piece from its middle.
+    let start = &name[..name.len().min(6)];
+    let ranked = contains_sql(start, 30).unwrap_or_default();
+    let found = query(&ranked).unwrap_or_else(|e| panic!("ranked query failed: {e:?}"));
+    assert!(
+        found.iter().any(|p| p.eq_ignore_ascii_case(path)),
+        "{path} not among {found:?} for {start}"
+    );
+    let middle = &name[2..name.len() - 2];
+    let any = like_sql(middle, 30).unwrap_or_default();
+    let found = query(&any).unwrap_or_else(|e| panic!("LIKE query failed: {e:?}"));
+    assert!(
+        found.iter().any(|p| p.eq_ignore_ascii_case(path)),
+        "{path} not among {found:?} for {middle}"
+    );
+    // Wildcards and quotes typed by the user are plain characters: the substring query always runs.
+    // (The ranked one may be refused for punctuation; the child then uses the substring query.)
+    for text in ["50%", "a_b", "[x]", "o'brien", "\"quoted\"", "x' OR 1=1 --"] {
+        if let Some(sql) = like_sql(text, 30) {
+            assert!(query(&sql).is_ok(), "{text}: {sql}");
+        }
+    }
+}

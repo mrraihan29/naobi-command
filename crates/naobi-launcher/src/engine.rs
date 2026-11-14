@@ -212,10 +212,17 @@ impl Launcher {
             Mode::Root => self.sources.iter().filter_map(|s| s.pending()).collect(),
             _ => Vec::new(),
         };
-        if !pending.is_empty() {
+        let status: Vec<&str> = match self.mode {
+            Mode::Root if !self.query.trim().is_empty() => {
+                self.sources.iter().filter_map(|s| s.status()).collect()
+            }
+            _ => Vec::new(),
+        };
+        let rows_of: Vec<&str> = pending.iter().chain(status.iter()).copied().collect();
+        if !rows_of.is_empty() {
             sections.push(Section {
                 header: None,
-                rows: pending
+                rows: rows_of
                     .iter()
                     .map(|what| RowView {
                         kind: "Status".to_owned(),

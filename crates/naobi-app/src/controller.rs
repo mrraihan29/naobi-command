@@ -108,6 +108,9 @@ impl Controller {
     /// A source's index changed: ranks the current query again and posts it.
     pub fn refresh(&mut self, host: &mut dyn Host) {
         self.launcher.refresh_sources();
+        // Ranking again dropped the file rows: ask for them again.
+        self.asked = None;
+        self.ask_files(host);
         host.post(self.view());
     }
 
@@ -755,13 +758,7 @@ mod tests {
             .and_then(|g| g.parse().ok())
             .unwrap_or(0);
         let posts = h.posts;
-        c.on_file_results(
-            generation,
-            rows(&[r"C:
-otes.txt"
-                .to_owned()]),
-            &mut h,
-        );
+        c.on_file_results(generation, rows(&[r"C:\notes.txt".to_owned()]), &mut h);
         assert_eq!(h.posts, posts + 1);
         let shown = h.last_post.as_ref().map(|s| {
             s.sections
@@ -773,7 +770,11 @@ otes.txt"
         c.on_ui_event(UiEvent::TextChanged("notes".into()), &mut h);
         assert_eq!(searches(&h), 2);
         let posts = h.posts;
-        c.on_file_results(generation, rows(&[r"C:\old.txt".to_owned()]), &mut h);
+        c.on_file_results(generation, rows(&[r"C:\old.txt".to_owned()]), &mut h);
         assert_eq!(h.posts, posts);
+        // A source refresh ranks again and drops the file rows: they are asked for again.
+        let before = searches(&h);
+        c.refresh(&mut h);
+        assert_eq!(searches(&h), before + 1);
     }
 }

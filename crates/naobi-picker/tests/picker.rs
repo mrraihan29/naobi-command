@@ -166,6 +166,7 @@ fn r017_the_commands_run_the_picker_and_open_the_history() {
     let items = PickerCommands.items(&Query::default());
     let titles: Vec<_> = items.iter().map(|i| i.title.as_str()).collect();
     assert_eq!(titles, ["Pick Color", "Color History"]);
+    assert_eq!(PickerCommands.actions(&items[0].id).len(), 1);
     let run =
         |i: usize| PickerCommands.run(&items[i].id, ActionId("run".into()), &mut Cx::default());
     assert!(matches!(

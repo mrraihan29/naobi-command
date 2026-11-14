@@ -23,6 +23,7 @@ pub mod power;
 pub mod probe;
 pub mod process;
 pub mod random;
+pub mod search;
 pub mod shell_exec;
 #[cfg(feature = "perf")]
 pub mod subclass;

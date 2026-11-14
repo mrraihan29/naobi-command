@@ -118,7 +118,17 @@ impl Host for AppHost {
     fn paste(&mut self, id: naobi_core::ids::EntryId, target: Option<isize>) {
         modules::clipboard::paste_entry(id, target, |n| raise_notice(&mut state(), n));
     }
+    fn search_files(&mut self, generation: u64, query: &str) {
+        modules::files::request(generation, query);
+    }
     fn post(&mut self, screen: Screen) {
+        if screen
+            .sections
+            .iter()
+            .any(|s| s.header.as_deref() == Some("Files"))
+        {
+            report("files_shown");
+        }
         let mut s = state();
         s.screen = Some(screen);
         post_view(&self.ui, &s);
@@ -443,6 +453,8 @@ fn sync_autostart(enabled: bool) {
 
 /// The argument of the scan child: the process lists the installed apps on stdout and exits.
 pub use modules::apps::LIST_APPS_ARG;
+/// The file search child's argument and entry point (`modules::files`).
+pub use modules::files::{search_files, SEARCH_FILES_ARG};
 
 /// The scan child (`--list-apps`): one line per app, `id<TAB>name`. It runs in its own process so the
 /// shell and COM libraries the scan loads (about 19 MB of working set) never enter the resident one.

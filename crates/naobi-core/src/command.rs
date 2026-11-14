@@ -63,6 +63,10 @@ pub trait CommandSource: Send + Sync {
     fn armed(&self) -> Vec<ItemId> {
         Vec::new()
     }
+    /// True for the source whose actions run the file rows the search hands in (R-013).
+    fn takes_files(&self) -> bool {
+        false
+    }
     fn actions(&self, id: &ItemId) -> Vec<Action>;
     fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome;
 }

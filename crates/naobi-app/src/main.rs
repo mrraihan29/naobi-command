@@ -8,5 +8,11 @@ fn main() -> anyhow::Result<()> {
     {
         return naobi_app::list_apps();
     }
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|a| a == naobi_app::SEARCH_FILES_ARG)
+    {
+        return naobi_app::search_files();
+    }
     naobi_app::run()
 }

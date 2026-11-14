@@ -6,6 +6,7 @@ pub mod awake;
 pub mod builtin;
 pub mod clipboard;
 pub mod clipboard_capture;
+pub mod files;
 pub mod picker;
 pub mod winmgr;
 
@@ -146,6 +147,7 @@ pub fn register_all(modules: &mut Modules) {
     aot::register(modules);
     awake::register(modules);
     picker::register(modules);
+    files::register(modules);
 }
 
 #[cfg(test)]

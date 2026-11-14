@@ -6,6 +6,7 @@ use naobi_core::command::Cx;
 use naobi_core::effect::{Effect, LaunchTarget};
 use naobi_core::event::AppEvent;
 use naobi_core::ids::{EntryId, HotkeyId, ViewId};
+use naobi_core::item::Item;
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{Screen, UiEvent};
 use naobi_launcher::{Clock, Launcher};
@@ -35,6 +36,9 @@ pub trait Host {
     /// Pastes a history entry into `target`, the window that had focus before the Launcher. The
     /// Launcher is already hidden; the host does the sequence off the UI thread.
     fn paste(&mut self, id: EntryId, target: Option<isize>);
+    /// Starts a file search for `query`; the answer comes back through
+    /// `Controller::on_file_results` with the same `generation`.
+    fn search_files(&mut self, generation: u64, query: &str);
 }
 
 pub struct SystemClock;
@@ -56,6 +60,8 @@ pub struct Controller {
     /// A copy asked to hide: the Launcher shows "Copied" first and closes (with this focus choice)
     /// when `finish_close` runs.
     pending_close: Option<bool>,
+    /// The generation a file search was last asked for, so a query is asked once.
+    asked: Option<u64>,
 }
 
 /// How long "Copied" shows before the Launcher hides (DESIGN_SYSTEM).
@@ -68,6 +74,7 @@ impl Controller {
             router,
             previous: None,
             pending_close: None,
+            asked: None,
         }
     }
 
@@ -128,7 +135,30 @@ impl Controller {
         let restore = !matches!(ev, UiEvent::Dismissed);
         let effects = self.launcher.handle(ev);
         self.execute(effects, restore, host);
+        self.ask_files(host);
         host.post(self.view());
+    }
+
+    /// Asks for file results when the root shows a new query (R-013). The rows trail the others.
+    fn ask_files(&mut self, host: &mut dyn Host) {
+        let Some((generation, text)) = self.launcher.file_query() else {
+            return;
+        };
+        if self.asked != Some(generation) {
+            self.asked = Some(generation);
+            host.search_files(generation, &text);
+        }
+    }
+
+    /// A file search answered. Rows for a query that is gone are dropped. An empty answer still
+    /// redraws, so an "unavailable" status shows.
+    pub fn on_file_results(&mut self, generation: u64, items: Vec<Item>, host: &mut dyn Host) {
+        let Some(source) = self.launcher.file_source() else {
+            return;
+        };
+        if self.launcher.file_results(generation, source, items) {
+            host.post(self.view());
+        }
     }
 
     /// A module's hotkey: runs its handlers and executes what they asked for. False when no module
@@ -321,6 +351,9 @@ mod tests {
         }
         fn paste(&mut self, id: EntryId, target: Option<isize>) {
             self.log.push(format!("paste {} {target:?}", id.0));
+        }
+        fn search_files(&mut self, generation: u64, query: &str) {
+            self.log.push(format!("search {generation} {query}"));
         }
     }
 
@@ -683,5 +716,64 @@ mod tests {
         let focus = h.log.iter().position(|l| l == "restore 77");
         let ran = h.log.iter().position(|l| l == "copy snapped");
         assert!(hide < focus && focus < ran, "{:?}", h.log);
+    }
+
+    // @R-013
+    #[test]
+    fn r013_a_new_root_query_asks_for_files_once_and_late_rows_are_dropped() {
+        use naobi_launcher::providers::files::{rows, FileCommands};
+        use std::sync::atomic::AtomicBool;
+        let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        let files = FileCommands::new(Arc::new(AtomicBool::new(false)));
+        let mut c = Controller::new(
+            Launcher::new(
+                vec![Box::new(Apps), Box::new(files)],
+                vec![],
+                frecency,
+                Box::new(Zero),
+            ),
+            Router::default(),
+        );
+        let mut h = Fake::default();
+        c.show(&mut h);
+        let searches = |h: &Fake| h.log.iter().filter(|l| l.starts_with("search ")).count();
+        // An empty query asks nothing.
+        c.on_ui_event(UiEvent::TextChanged(String::new()), &mut h);
+        assert_eq!(searches(&h), 0);
+        c.on_ui_event(UiEvent::TextChanged("note".into()), &mut h);
+        assert_eq!(searches(&h), 1);
+        let asked = h.log.last().cloned().unwrap_or_default();
+        assert!(asked.ends_with(" note"), "{asked}");
+        // A key that does not change the query does not ask again.
+        c.on_ui_event(key(Key::Down, false), &mut h);
+        assert_eq!(searches(&h), 1);
+        // The answer for the current query redraws with a Files section ...
+        let generation: u64 = asked
+            .split_whitespace()
+            .nth(1)
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(0);
+        let posts = h.posts;
+        c.on_file_results(
+            generation,
+            rows(&[r"C:
+otes.txt"
+                .to_owned()]),
+            &mut h,
+        );
+        assert_eq!(h.posts, posts + 1);
+        let shown = h.last_post.as_ref().map(|s| {
+            s.sections
+                .iter()
+                .any(|sec| sec.header.as_deref() == Some("Files"))
+        });
+        assert_eq!(shown, Some(true));
+        // ... and one for an older query is dropped without a redraw.
+        c.on_ui_event(UiEvent::TextChanged("notes".into()), &mut h);
+        assert_eq!(searches(&h), 2);
+        let posts = h.posts;
+        c.on_file_results(generation, rows(&[r"C:\old.txt".to_owned()]), &mut h);
+        assert_eq!(h.posts, posts);
     }
 }

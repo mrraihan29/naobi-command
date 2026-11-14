@@ -146,6 +146,18 @@ impl Launcher {
         self.refresh();
     }
 
+    /// The query a file search should answer now: its generation and text, or None when the root
+    /// is not showing or the query is empty.
+    pub fn file_query(&self) -> Option<(u64, String)> {
+        (self.mode == Mode::Root && !self.query.trim().is_empty())
+            .then(|| (self.generation, self.query.clone()))
+    }
+
+    /// The root source that takes file rows, if one is registered.
+    pub fn file_source(&self) -> Option<usize> {
+        self.sources.iter().position(|s| s.takes_files())
+    }
+
     /// Hands in a file search answer. `source` is the root source index that owns these rows, so
     /// their actions run there. Dropped unless `generation` is current, the query is not empty and the
     /// root is showing. The rows trail the sync rows and never reorder them.

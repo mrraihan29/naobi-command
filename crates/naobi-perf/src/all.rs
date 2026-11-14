@@ -85,7 +85,58 @@ fn judge(entries: &[Value]) -> Result<Vec<String>> {
     }
 }
 
+/// The shortest idle window and network session a verdict may rest on (R-006: 60 s idle, R-010: 10 minutes).
+const MIN_IDLE_SECONDS: u64 = 60;
+const MIN_MINUTES: u64 = 10;
+
+/// `all` gives a verdict only for the full measurements; a shortened run is for trying the harness.
+fn check_lengths(idle_seconds: u64, minutes: u64) -> Result<()> {
+    if idle_seconds < MIN_IDLE_SECONDS || minutes < MIN_MINUTES {
+        bail!(
+            "a verdict needs --seconds >= {MIN_IDLE_SECONDS} and --minutes >= {MIN_MINUTES}; run the subcommands for shorter tries"
+        );
+    }
+    Ok(())
+}
+
+/// The newest modification time of any file under `dir` that is source (`.rs`, `.slint`, `.toml`).
+fn newest_source(dir: &Path) -> Option<std::time::SystemTime> {
+    let mut newest = None;
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let p = e.path();
+        let t = if p.is_dir() {
+            if e.file_name() == "target" {
+                continue;
+            }
+            newest_source(&p)
+        } else if p
+            .extension()
+            .is_some_and(|x| x == "rs" || x == "slint" || x == "toml")
+        {
+            e.metadata().ok().and_then(|m| m.modified().ok())
+        } else {
+            None
+        };
+        newest = newest.max(t);
+    }
+    newest
+}
+
+/// The exe under test must be newer than every source file: a stale build would be a verdict on old code.
+fn check_fresh(exe: &Path, sources: &Path) -> Result<()> {
+    let built = std::fs::metadata(exe)?.modified()?;
+    match newest_source(sources) {
+        Some(src) if src > built => bail!(
+            "ENV: {} is older than the sources; build it first: cargo build --release -p naobi-app --features perf",
+            exe.display()
+        ),
+        _ => Ok(()),
+    }
+}
+
 pub fn run(exe: &Path, out: &Path, idle_seconds: u64, minutes: u64) -> Result<()> {
+    check_lengths(idle_seconds, minutes)?;
+    check_fresh(exe, Path::new("crates"))?;
     // Fail at once, before any minute is spent, when the conditions cannot hold.
     hotkey::check_env()?;
     let baseline: Value = serde_json::from_str(&std::fs::read_to_string(BASELINE)?)?;
@@ -140,6 +191,29 @@ mod tests {
             judge(&unpinned).is_err(),
             "conditions that were not the pinned ones"
         );
+    }
+
+    // @R-006
+    #[test]
+    fn r006_a_shortened_run_or_a_stale_exe_gets_no_verdict() {
+        assert!(check_lengths(60, 10).is_ok());
+        assert!(check_lengths(30, 10).is_err() && check_lengths(60, 1).is_err());
+        let dir = std::env::temp_dir().join(format!("naobi-fresh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(std::fs::create_dir_all(dir.join("crates")).is_ok());
+        let exe = dir.join("app.exe");
+        let src = dir.join("crates").join("a.rs");
+        assert!(std::fs::write(&exe, b"x").is_ok());
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(std::fs::write(&src, b"y").is_ok());
+        assert!(
+            check_fresh(&exe, &dir.join("crates")).is_err(),
+            "source newer than the exe"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(std::fs::write(&exe, b"z").is_ok());
+        assert!(check_fresh(&exe, &dir.join("crates")).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // @R-006

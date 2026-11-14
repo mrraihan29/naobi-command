@@ -45,6 +45,11 @@ pub struct App {
 
 impl App {
     pub fn spawn(exe: &Path, items: usize) -> Result<App> {
+        Self::spawn_with(exe, items, &[])
+    }
+
+    /// `spawn` with more environment, for runs that need the modules the perf build leaves off.
+    pub fn spawn_with(exe: &Path, items: usize, env: &[(&str, &str)]) -> Result<App> {
         static RUN: AtomicUsize = AtomicUsize::new(0);
         let sandbox = std::env::temp_dir().join(format!(
             "naobi-perf-{}-{}",
@@ -55,6 +60,7 @@ impl App {
             .env("NAOBI_PERF_ITEMS", items.to_string())
             .env("NAOBI_DATA_DIR", sandbox.join("data"))
             .env("NAOBI_SETTINGS_DIR", sandbox.join("settings"))
+            .envs(env.iter().copied())
             .stdout(Stdio::piped())
             .spawn()?;
         let out = child

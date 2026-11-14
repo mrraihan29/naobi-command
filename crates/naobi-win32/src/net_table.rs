@@ -186,4 +186,23 @@ mod tests {
         }));
         assert!(after.len() >= before.len() + 2);
     }
+
+    /// A row of `len` bytes with the port and the owner written where the layout says.
+    fn row(l: &Layout, port: u16, pid: u32) -> Vec<u8> {
+        let mut r = vec![0xAAu8; l.row];
+        r[l.port..l.port + 4].copy_from_slice(&u32::from(port.to_be()).to_le_bytes());
+        r[l.pid..l.pid + 4].copy_from_slice(&pid.to_le_bytes());
+        r
+    }
+
+    // @R-010
+    #[test]
+    fn r010_every_table_layout_reads_its_own_port_and_owner() {
+        // The IPv6 and TCP rows have other offsets than the UDP4 row the live test happens to meet.
+        for l in [&TCP4, &TCP6, &UDP4, &UDP6] {
+            let t = table(&[row(l, 8080, 41), row(l, 53, 42)]);
+            let got: Vec<(u32, u16)> = parse(&t, l).iter().map(|(p, s)| (*p, s.port)).collect();
+            assert_eq!(got, [(41, 8080), (42, 53)], "{}", l.proto);
+        }
+    }
 }

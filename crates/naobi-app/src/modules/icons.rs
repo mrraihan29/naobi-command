@@ -353,13 +353,14 @@ mod tests {
     /// The worker on its own thread with a stand-in child and short waits; answers come back on a channel.
     fn worker(
         command: fn() -> std::io::Result<Command>,
+        stuck: Duration,
     ) -> (Sender<Msg>, Receiver<Vec<(String, Answer)>>) {
         let (tx, rx) = mpsc::channel::<Msg>();
         let (out_tx, out_rx) = mpsc::channel();
         let own = tx.clone();
         let cfg = Cfg {
             idle: Duration::from_millis(400),
-            stuck: Duration::from_millis(1200),
+            stuck,
             command,
         };
         std::thread::spawn(move || {
@@ -387,7 +388,7 @@ mod tests {
     // @R-012
     #[test]
     fn r012_a_child_that_dies_gets_its_keys_answered_try_again() {
-        let (tx, out) = worker(|| powershell("exit 0"));
+        let (tx, out) = worker(|| powershell("exit 0"), Duration::from_secs(8));
         ask(&tx, "e:txt");
         let got = out.recv_timeout(WAIT).unwrap_or_default();
         assert_eq!(got, [("e:txt".to_owned(), Answer::Retry)]);
@@ -396,7 +397,10 @@ mod tests {
     // @R-012
     #[test]
     fn r012_a_child_that_hangs_is_killed_and_its_keys_answered_try_again() {
-        let (tx, out) = worker(|| powershell("Start-Sleep -Seconds 120"));
+        let (tx, out) = worker(
+            || powershell("Start-Sleep -Seconds 120"),
+            Duration::from_millis(1500),
+        );
         ask(&tx, "e:pdf");
         let got = out.recv_timeout(WAIT).unwrap_or_default();
         assert_eq!(got, [("e:pdf".to_owned(), Answer::Retry)]);
@@ -406,7 +410,16 @@ mod tests {
     #[test]
     fn r012_an_idle_child_goes_and_the_next_request_starts_a_new_one() {
         const ECHO: &str = "$i=[Console]::In; while(($l=$i.ReadLine()) -ne $null){ [Console]::Out.WriteLine($l+[char]9+'-'); [Console]::Out.Flush() }";
-        let (tx, out) = worker(|| powershell(ECHO));
+        // Counts the children started: the idle drop shows as a second start, not as a lucky answer.
+        static STARTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let (tx, out) = worker(
+            || {
+                STARTS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                powershell(ECHO)
+            },
+            // A PowerShell cold start under a loaded test run can take a second or more.
+            Duration::from_secs(10),
+        );
         ask(&tx, "e:txt");
         assert_eq!(
             out.recv_timeout(WAIT).unwrap_or_default(),
@@ -418,6 +431,11 @@ mod tests {
         assert_eq!(
             out.recv_timeout(WAIT).unwrap_or_default(),
             [("e:md".to_owned(), Answer::Missing)]
+        );
+        assert_eq!(
+            STARTS.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "the idle child was dropped and a new one started"
         );
         // A key that may not be asked for is never sent and never answered.
         ask(&tx, r"a:\\evil\share\x.exe");

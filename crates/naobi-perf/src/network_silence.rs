@@ -5,7 +5,7 @@
 //! guard. The session performs no explicit URL action, so any socket at all is a failure.
 use crate::hotkey::{check_env, naobi_ui_title, App};
 use crate::verdict::{record, verdict};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use naobi_win32::net_table::{sockets, Socket};
 use naobi_win32::{clipboard_marker, dwm, edit_window::EditWindow, inject};
 use serde_json::json;
@@ -92,8 +92,17 @@ fn session(stop: &AtomicBool) {
 }
 
 pub fn run(exe: &Path, minutes: u64, out: &Path) -> Result<()> {
+    if minutes == 0 {
+        bail!("--minutes must be at least 1: a verdict needs a session");
+    }
     check_env()?;
-    let mut app = App::spawn(exe, 1_000)?;
+    // The perf build leaves the app catalog and clipboard history off; the session runs with them on, so
+    // the verdict covers the code that scans Start Menu folders and listens to the clipboard.
+    let mut app = App::spawn_with(
+        exe,
+        1_000,
+        &[("NAOBI_TEST_APPS", "1"), ("NAOBI_TEST_CLIPBOARD", "1")],
+    )?;
     app.wait("tray_ready")?;
     app.wait("window_ready")?;
     let stop = AtomicBool::new(false);
@@ -103,9 +112,15 @@ pub fn run(exe: &Path, minutes: u64, out: &Path) -> Result<()> {
         s.spawn(|| session(&stop));
         let mut result = Ok(());
         while Instant::now() < end {
-            if polls % 5 == 0 {
-                pids = app_pids();
-                peak_pids = peak_pids.max(pids.len());
+            // Every poll, so a child that lives a few seconds (`--icons`, `--search-files`, `--list-apps`)
+            // is seen while it runs. A dead app or an empty list is not silence, it is no observation.
+            pids = app_pids();
+            peak_pids = peak_pids.max(pids.len());
+            if matches!(app.child.try_wait(), Ok(Some(_))) || pids.is_empty() {
+                result = Err(anyhow::anyhow!(
+                    "the app is not running: nothing was observed"
+                ));
+                break;
             }
             match sockets() {
                 Ok(table) => seen.extend(owned(&table, &pids)),
@@ -138,7 +153,12 @@ pub fn run(exe: &Path, minutes: u64, out: &Path) -> Result<()> {
         .map(|(pid, s)| format!("pid {pid} {} :{}", s.proto, s.port))
         .collect::<Vec<_>>());
     println!("{v}");
-    record(out, v)
+    let silent = v["pass"] == true;
+    record(out, v)?;
+    if !silent {
+        bail!("FAIL: a socket was open during the session");
+    }
+    Ok(())
 }
 
 #[cfg(test)]

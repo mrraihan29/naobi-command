@@ -27,14 +27,24 @@ pub fn run(exe: &Path, seconds: u64, out: &Path, pinned: bool, awake: bool) -> R
             seeded.clone().unwrap_or_else(|| sandbox.join("data")),
         )
         .env("NAOBI_SETTINGS_DIR", sandbox.join("settings"))
+        // The perf build leaves the app catalog and clipboard history off; idle is measured with them on.
+        .env("NAOBI_TEST_APPS", "1")
+        .env("NAOBI_TEST_CLIPBOARD", "1")
         .spawn()?;
     // `--pinned 1`: one helper window is made topmost (so one border and one hook exist) while idle
     // is measured. The helper belongs to this process; it is closed after the run.
     let _helper = if pinned { pin_one(&child) } else { None };
+    if pinned && _helper.is_none() {
+        let _ = child.kill();
+        bail!(
+            "ENV: the pinned helper window did not open; the idle run would measure nothing pinned"
+        );
+    }
     // `--awake 1`: `awake 30m` is typed into the Launcher, so a power request and the two Awake
     // timers exist while idle is measured.
-    if awake {
-        start_awake();
+    if awake && !start_awake() {
+        let _ = child.kill();
+        bail!("ENV: Awake did not start; the idle run would measure Awake off");
     }
     let result = measure(&mut child, seconds);
     let _ = child.kill();
@@ -94,13 +104,14 @@ fn pin_one(_child: &Child) -> Option<naobi_win32::edit_window::EditWindow> {
     naobi_win32::inject::win_ctrl_t();
     std::thread::sleep(Duration::from_millis(500));
     if naobi_win32::edit_window::EditWindow::border_rect().is_none() {
-        eprintln!("warning: no topmost border appeared; the measurement has nothing pinned");
+        eprintln!("no topmost border appeared");
+        return None;
     }
     Some(w)
 }
 
 /// Types `awake 30m` into the Launcher and runs it.
-fn start_awake() {
+fn start_awake() -> bool {
     std::thread::sleep(SETTLE);
     naobi_win32::inject::alt_space();
     std::thread::sleep(Duration::from_millis(600));
@@ -108,9 +119,7 @@ fn start_awake() {
     std::thread::sleep(Duration::from_millis(600));
     naobi_win32::inject::enter();
     std::thread::sleep(Duration::from_millis(500));
-    if naobi_win32::power::execution_state() & 1 == 0 {
-        eprintln!("warning: no power request appeared; the measurement has Awake off");
-    }
+    naobi_win32::power::execution_state() & 1 != 0
 }
 
 /// An exited child still has a queryable (torn-down) process object, so exit is checked

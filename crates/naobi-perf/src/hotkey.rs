@@ -117,6 +117,12 @@ pub fn check_env() -> Result<()> {
     if cfg!(debug_assertions) {
         bail!("ENV: a verdict needs a release build (cargo run --release)");
     }
+    // The previous run's app was just killed; its transient children (`--icons`, `--search-files`) may
+    // need a moment to go. A dogfood instance stays, so it still ends the run after the wait.
+    let end = Instant::now() + Duration::from_secs(8);
+    while running("naobi-app.exe") && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(250));
+    }
     for img in ["naobi-app.exe", "PowerToys.PowerLauncher.exe"] {
         if running(img) {
             bail!("ENV: {img} is running; quit it first");

@@ -45,7 +45,7 @@ pub fn request(keys: Vec<String>) {
         let own = tx.clone();
         let spawned = std::thread::Builder::new()
             .name("icons".into())
-            .spawn(move || work(&rx, &own));
+            .spawn(move || work(&rx, &own, &Cfg::production(), &mut deliver));
         if spawned.is_err() {
             tracing::warn!("icons are off: their thread could not start");
         }
@@ -55,6 +55,27 @@ pub fn request(keys: Vec<String>) {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .send(Msg::Keys(keys));
+}
+
+/// How the worker runs its child and how long it waits: the real values, or a test's.
+struct Cfg {
+    idle: Duration,
+    stuck: Duration,
+    command: fn() -> std::io::Result<Command>,
+}
+
+impl Cfg {
+    fn production() -> Self {
+        Self {
+            idle: IDLE,
+            stuck: STUCK,
+            command: || {
+                let mut command = Command::new(std::env::current_exe()?);
+                command.arg(ICONS_ARG);
+                Ok(command)
+            },
+        }
+    }
 }
 
 fn deliver(found: Vec<(String, Answer)>) {
@@ -67,7 +88,12 @@ fn answer_of(icon: Option<Icon>) -> Answer {
     icon.map_or(Answer::Missing, Answer::Icon)
 }
 
-fn work(rx: &Receiver<Msg>, own: &Sender<Msg>) {
+fn work(
+    rx: &Receiver<Msg>,
+    own: &Sender<Msg>,
+    cfg: &Cfg,
+    deliver: &mut dyn FnMut(Vec<(String, Answer)>),
+) {
     let mut child: Option<Running> = None;
     let mut runs = 0u64;
     // Keys written and not yet answered, and when the child last said anything.
@@ -77,7 +103,7 @@ fn work(rx: &Receiver<Msg>, own: &Sender<Msg>) {
         // A busy child is watched every 250 ms, a quiet one until idle, none at all just waits.
         let got = match (&child, pending.is_empty()) {
             (Some(_), false) => rx.recv_timeout(Duration::from_millis(250)),
-            (Some(_), true) => rx.recv_timeout(IDLE),
+            (Some(_), true) => rx.recv_timeout(cfg.idle),
             (None, _) => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
         };
         let mut found: Vec<(String, Answer)> = Vec::new();
@@ -87,7 +113,7 @@ fn work(rx: &Receiver<Msg>, own: &Sender<Msg>) {
                 if pending.is_empty() {
                     // Idle: let the child go.
                     child = None;
-                } else if heard.elapsed() > STUCK {
+                } else if heard.elapsed() > cfg.stuck {
                     child = None;
                     found.extend(pending.drain().map(|k| (k, Answer::Retry)));
                 }
@@ -95,7 +121,9 @@ fn work(rx: &Receiver<Msg>, own: &Sender<Msg>) {
             Ok(Msg::Keys(keys)) => {
                 if child.is_none() {
                     runs += 1;
-                    child = Running::start(runs, own.clone()).ok();
+                    child = (cfg.command)()
+                        .and_then(|c| Running::start(runs, own.clone(), c))
+                        .ok();
                     heard = Instant::now();
                     if child.is_none() {
                         tracing::warn!("the icon child did not start");
@@ -153,10 +181,8 @@ struct Running {
 }
 
 impl Running {
-    fn start(run: u64, to_worker: Sender<Msg>) -> std::io::Result<Self> {
-        let mut command = Command::new(std::env::current_exe()?);
+    fn start(run: u64, to_worker: Sender<Msg>, mut command: Command) -> std::io::Result<Self> {
         command
-            .arg(ICONS_ARG)
             .creation_flags(CREATE_NO_WINDOW)
             // Nothing relative may resolve to a file in a folder the Owner happened to start from.
             .current_dir(std::env::temp_dir())
@@ -321,5 +347,79 @@ mod tests {
         ] {
             assert_eq!(parse_answer(bad), None, "{bad:?}");
         }
+    }
+
+    /// The worker on its own thread with a stand-in child and short waits; answers come back on a channel.
+    fn worker(
+        command: fn() -> std::io::Result<Command>,
+    ) -> (Sender<Msg>, Receiver<Vec<(String, Answer)>>) {
+        let (tx, rx) = mpsc::channel::<Msg>();
+        let (out_tx, out_rx) = mpsc::channel();
+        let own = tx.clone();
+        let cfg = Cfg {
+            idle: Duration::from_millis(400),
+            stuck: Duration::from_millis(1200),
+            command,
+        };
+        std::thread::spawn(move || {
+            work(&rx, &own, &cfg, &mut |found| {
+                if !found.is_empty() {
+                    let _ = out_tx.send(found);
+                }
+            });
+        });
+        (tx, out_rx)
+    }
+
+    fn powershell(script: &'static str) -> std::io::Result<Command> {
+        let mut c = Command::new("powershell");
+        c.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+        Ok(c)
+    }
+
+    fn ask(tx: &Sender<Msg>, key: &str) {
+        let _ = tx.send(Msg::Keys(vec![key.to_owned()]));
+    }
+
+    const WAIT: Duration = Duration::from_secs(20);
+
+    // @R-012
+    #[test]
+    fn r012_a_child_that_dies_gets_its_keys_answered_try_again() {
+        let (tx, out) = worker(|| powershell("exit 0"));
+        ask(&tx, "e:txt");
+        let got = out.recv_timeout(WAIT).unwrap_or_default();
+        assert_eq!(got, [("e:txt".to_owned(), Answer::Retry)]);
+    }
+
+    // @R-012
+    #[test]
+    fn r012_a_child_that_hangs_is_killed_and_its_keys_answered_try_again() {
+        let (tx, out) = worker(|| powershell("Start-Sleep -Seconds 120"));
+        ask(&tx, "e:pdf");
+        let got = out.recv_timeout(WAIT).unwrap_or_default();
+        assert_eq!(got, [("e:pdf".to_owned(), Answer::Retry)]);
+    }
+
+    // @R-012
+    #[test]
+    fn r012_an_idle_child_goes_and_the_next_request_starts_a_new_one() {
+        const ECHO: &str = "$i=[Console]::In; while(($l=$i.ReadLine()) -ne $null){ [Console]::Out.WriteLine($l+[char]9+'-'); [Console]::Out.Flush() }";
+        let (tx, out) = worker(|| powershell(ECHO));
+        ask(&tx, "e:txt");
+        assert_eq!(
+            out.recv_timeout(WAIT).unwrap_or_default(),
+            [("e:txt".to_owned(), Answer::Missing)]
+        );
+        // Quiet for longer than the idle wait: the child is dropped. A new request still works.
+        std::thread::sleep(Duration::from_millis(1000));
+        ask(&tx, "e:md");
+        assert_eq!(
+            out.recv_timeout(WAIT).unwrap_or_default(),
+            [("e:md".to_owned(), Answer::Missing)]
+        );
+        // A key that may not be asked for is never sent and never answered.
+        ask(&tx, r"a:\\evil\share\x.exe");
+        assert!(out.recv_timeout(Duration::from_millis(800)).is_err());
     }
 }

@@ -23,13 +23,18 @@ static TRAY: Mutex<(TrayState, Option<String>)> = Mutex::new((
 
 /// Posts the tray: the Awake state, plus the overlay and message of an active Notice.
 fn publish(guard: &(TrayState, Option<String>)) {
-    let (base, notice) = guard;
+    platform::set_tray_state(compose(&guard.0, guard.1.as_deref()));
+}
+
+/// The Awake tray with an active Notice laid over it: the overlay and the message win the tooltip, the
+/// Awake icon state stays.
+fn compose(base: &TrayState, notice: Option<&str>) -> TrayState {
     let mut tray = base.clone();
     if let Some(message) = notice {
         tray.overlay = Overlay::Notice;
         tray.tooltip = format!("Naobi Command: {message}");
     }
-    platform::set_tray_state(tray);
+    tray
 }
 
 /// The banner's message while a Notice is active, `None` when it is gone.
@@ -107,4 +112,26 @@ pub fn register(m: &mut Modules) {
         EventKind::Resume,
         Box::new(|_, _| with(|a, port, now| a.on_resume(port, now))),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // @R-019
+    #[test]
+    fn r019_a_notice_is_laid_over_the_awake_tray_and_lifts_off_again() {
+        let timed = TrayState {
+            awake: tray::Awake::Timed,
+            overlay: Overlay::None,
+            tooltip: "Awake for 1 hour".into(),
+        };
+        let shown = compose(&timed, Some("Alt+Space is taken"));
+        assert_eq!(shown.awake, tray::Awake::Timed, "the Awake icon stays");
+        assert_eq!(shown.overlay, Overlay::Notice);
+        assert_eq!(shown.tooltip, "Naobi Command: Alt+Space is taken");
+        let lifted = compose(&timed, None);
+        assert_eq!(lifted.overlay, Overlay::None);
+        assert_eq!(lifted.tooltip, "Awake for 1 hour");
+    }
 }

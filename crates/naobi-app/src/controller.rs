@@ -144,7 +144,15 @@ impl Controller {
                 }
             }
         }
-        self.present(host);
+        // A hidden Launcher is not redrawn for a late answer; the cache keeps the icon for the next show.
+        if host.is_visible() {
+            self.present(host);
+        }
+    }
+
+    /// A Notice raised by a worker thread (the color picker's clipboard write failed).
+    pub fn on_notice(&mut self, n: Notice, host: &mut dyn Host) {
+        host.notice(n);
     }
 
     /// The confirmation has shown long enough: hides the Launcher now.
@@ -219,7 +227,7 @@ impl Controller {
         let Some(source) = self.launcher.file_source() else {
             return;
         };
-        if self.launcher.file_results(generation, source, items) {
+        if self.launcher.file_results(generation, source, items) && host.is_visible() {
             self.present(host);
         }
     }
@@ -905,5 +913,24 @@ mod tests {
         assert_eq!(asked(&h), 2);
         c.on_ui_event(UiEvent::TextChanged("notepa".into()), &mut h);
         assert_eq!(asked(&h), 2);
+    }
+
+    // @R-012
+    #[test]
+    fn r012_a_late_answer_does_not_redraw_a_hidden_launcher() {
+        let mut c = controller();
+        let mut h = Fake::default();
+        c.show(&mut h);
+        c.on_ui_event(UiEvent::TextChanged("note".into()), &mut h);
+        h.hide();
+        let before = h.posts;
+        let icon = Icon {
+            w: 1,
+            h: 1,
+            rgba: vec![9, 9, 9, 255],
+        };
+        c.on_icons(vec![("a:notepad".into(), Answer::Icon(icon))], &mut h);
+        c.on_file_results(0, Vec::new(), &mut h);
+        assert_eq!(h.posts, before, "nothing is drawn into a hidden window");
     }
 }

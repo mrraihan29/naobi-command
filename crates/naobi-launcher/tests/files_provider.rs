@@ -5,7 +5,7 @@ use naobi_core::db::Db;
 use naobi_core::effect::{Effect, LaunchTarget};
 use naobi_core::ids::{ActionId, ItemId};
 use naobi_core::item::{Action, Item, ItemKind};
-use naobi_core::ui::{Screen, UiEvent};
+use naobi_core::ui::{Key, KeyChord, Screen, UiEvent};
 use naobi_launcher::frecency::Frecency;
 use naobi_launcher::providers::files::{contains_sql, like_sql, rows, FileCommands, UNAVAILABLE};
 use naobi_launcher::{Clock, Launcher};
@@ -217,4 +217,37 @@ fn r013_actions_open_the_file_or_its_folder() {
     assert_eq!(run("nope", &id), Outcome::Done);
     assert_eq!(run("open", &ItemId("app:x".into())), Outcome::Done);
     assert!(c.items(&Query::default()).is_empty());
+}
+
+// @R-013
+#[test]
+fn r013_opening_a_file_row_is_not_counted_as_usage() {
+    let path = std::env::temp_dir().join(format!("naobi-files-freq-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let open = || Db::open(&path, || [7u8; 16]).unwrap_or_else(|e| panic!("db: {e}"));
+    let frecency = Frecency::open(open(), 1_000_000_000).unwrap_or_else(|e| panic!("{e}"));
+    let flag = Arc::new(AtomicBool::new(false));
+    let mut l = Launcher::new(
+        vec![Box::new(Apps(vec![])), Box::new(FileCommands::new(flag))],
+        Vec::new(),
+        frecency,
+        Box::new(Now),
+    );
+    type_text(&mut l, "report");
+    let (gen, source) = (l.generation(), l.file_source().unwrap_or(0));
+    assert!(l.file_results(gen, source, rows(&[r"C:\docs\report.pdf".to_owned()])));
+    let effects = l.handle(UiEvent::Key(KeyChord {
+        key: Key::Enter,
+        ctrl: false,
+        alt: false,
+        shift: false,
+    }));
+    assert!(
+        effects.iter().any(|e| matches!(e, Effect::Launch(_))),
+        "the file opened: {effects:?}"
+    );
+    drop(l);
+    let stored = open().raw_rows().unwrap_or_default();
+    let _ = std::fs::remove_file(&path);
+    assert!(stored.is_empty(), "no usage row for a file: {stored:?}");
 }

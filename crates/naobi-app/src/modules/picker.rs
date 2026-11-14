@@ -85,6 +85,7 @@ fn run(history: &Shared) {
     tracing::info!(picked = true, "color pick");
     if clipboard_marker::write_text(&color.hex()).is_err() {
         tracing::warn!("the picked color could not be put on the clipboard");
+        warn("The color could not be copied to the clipboard.");
     }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -95,5 +96,16 @@ fn run(history: &Shared) {
         .push(color, now);
     if pushed.is_err() {
         tracing::warn!("the picked color could not be added to the history");
+        warn("The color was not added to the history.");
     }
+}
+
+/// A Notice from the picker thread, shown by the controller (the thread has no `Cx`).
+fn warn(message: &str) {
+    let n = Notice {
+        subject: "Color picker".into(),
+        message: message.into(),
+        kind: NoticeKind::Warning,
+    };
+    crate::to_modules(move |c, h| c.on_notice(n, h));
 }

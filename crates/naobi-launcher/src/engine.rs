@@ -478,8 +478,12 @@ impl Launcher {
             Outcome::Effects(more) => effects.extend(more),
             Outcome::Failed(n) => effects.push(Effect::Notice(n)),
         }
-        // A calculator or quicklink row exists only for the text just typed: nothing to rank by later.
-        let ephemeral = matches!(hit.item.kind, ItemKind::Calculator | ItemKind::Quicklink);
+        // A calculator or quicklink row exists only for the text just typed, and a file row is never
+        // ranked (it trails the list): nothing to rank by later, so it must not fill the table.
+        let ephemeral = matches!(
+            hit.item.kind,
+            ItemKind::Calculator | ItemKind::Quicklink | ItemKind::File
+        );
         if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
             if self.frecency.record(hit.id(), now).is_err() {

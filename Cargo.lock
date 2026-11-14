@@ -2641,6 +2641,7 @@ dependencies = [
  "anyhow",
  "naobi-aot",
  "naobi-app",
+ "naobi-awake",
  "naobi-clipboard",
  "naobi-core",
  "naobi-launcher",
@@ -2651,6 +2652,13 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "zeroize",
+]
+
+[[package]]
+name = "naobi-awake"
+version = "0.0.0"
+dependencies = [
+ "naobi-core",
 ]
 
 [[package]]

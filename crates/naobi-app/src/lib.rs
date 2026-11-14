@@ -307,13 +307,15 @@ fn raise_notice(s: &mut State, n: Notice) {
 
 /// While a Notice is active the tray shows the overlay and the banner's message as its tooltip.
 fn sync_tray(notices: &NoticeCenter) {
+    // The Awake part (icon state and tooltip) stays; a Notice only adds its overlay and message.
+    let base = modules::awake::tray_base();
     let tray = match notices.banner() {
         Some(n) => TrayState {
             overlay: Overlay::Notice,
             tooltip: format!("Naobi Command: {}", n.message),
-            ..TrayState::default()
+            ..base
         },
-        None => TrayState::default(),
+        None => base,
     };
     platform::set_tray_state(tray);
 }

@@ -14,7 +14,7 @@ const SETTLE: Duration = Duration::from_secs(3);
 /// Starts `exe`, waits `SETTLE` (3 s) for start-up to finish, then samples for `seconds` and
 /// prints working set, private bytes and CPU percent of one core as JSON. Records the R-006
 /// verdicts. Fails if the process exits before the end. The process is never trimmed.
-pub fn run(exe: &Path, seconds: u64, out: &Path, pinned: bool) -> Result<()> {
+pub fn run(exe: &Path, seconds: u64, out: &Path, pinned: bool, awake: bool) -> Result<()> {
     // The release exe syncs the Owner's HKCU Run value with its settings; the guard puts it back.
     let _run_value = RunValue::save()?;
     let sandbox = std::env::temp_dir().join(format!("naobi-idle-{}", std::process::id()));
@@ -31,6 +31,11 @@ pub fn run(exe: &Path, seconds: u64, out: &Path, pinned: bool) -> Result<()> {
     // `--pinned 1`: one helper window is made topmost (so one border and one hook exist) while idle
     // is measured. The helper belongs to this process; it is closed after the run.
     let _helper = if pinned { pin_one(&child) } else { None };
+    // `--awake 1`: `awake 30m` is typed into the Launcher, so a power request and the two Awake
+    // timers exist while idle is measured.
+    if awake {
+        start_awake();
+    }
     let result = measure(&mut child, seconds);
     let _ = child.kill();
     let _ = child.wait();
@@ -94,6 +99,20 @@ fn pin_one(_child: &Child) -> Option<naobi_win32::edit_window::EditWindow> {
     Some(w)
 }
 
+/// Types `awake 30m` into the Launcher and runs it.
+fn start_awake() {
+    std::thread::sleep(SETTLE);
+    naobi_win32::inject::alt_space();
+    std::thread::sleep(Duration::from_millis(600));
+    naobi_win32::inject::text("awake 30m");
+    std::thread::sleep(Duration::from_millis(600));
+    naobi_win32::inject::enter();
+    std::thread::sleep(Duration::from_millis(500));
+    if naobi_win32::power::execution_state() & 1 == 0 {
+        eprintln!("warning: no power request appeared; the measurement has Awake off");
+    }
+}
+
 /// An exited child still has a queryable (torn-down) process object, so exit is checked
 /// with `try_wait`, not by a failing sample.
 fn gone(child: &mut Child) -> Result<()> {
@@ -122,7 +141,13 @@ mod tests {
     #[test]
     fn exited_process_is_an_error_not_a_pass() {
         let out = std::env::temp_dir().join(format!("naobi-idle-{}.json", std::process::id()));
-        let r = run(Path::new(r"C:\Windows\System32\whoami.exe"), 1, &out, false);
+        let r = run(
+            Path::new(r"C:\Windows\System32\whoami.exe"),
+            1,
+            &out,
+            false,
+            false,
+        );
         assert!(r.is_err());
         assert!(!out.exists());
     }

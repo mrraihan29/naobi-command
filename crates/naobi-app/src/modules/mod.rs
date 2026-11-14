@@ -2,6 +2,7 @@
 //! one line to `register_all` and never edits `controller.rs`.
 pub mod aot;
 pub mod apps;
+pub mod awake;
 pub mod builtin;
 pub mod clipboard;
 pub mod clipboard_capture;
@@ -134,7 +135,7 @@ impl Router {
 }
 
 /// One line per module. The module items add theirs here.
-// seam NCMD-17, 23, 24: files, awake and picker register here.
+// seam NCMD-17, 24: files and picker register here.
 pub fn register_all(modules: &mut Modules) {
     builtin::register(modules);
     clipboard_capture::register(modules);
@@ -142,6 +143,7 @@ pub fn register_all(modules: &mut Modules) {
     apps::register(modules);
     winmgr::register(modules);
     aot::register(modules);
+    awake::register(modules);
 }
 
 #[cfg(test)]

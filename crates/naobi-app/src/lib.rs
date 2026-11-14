@@ -24,7 +24,6 @@ use naobi_launcher::frecency::Frecency;
 use naobi_launcher::{Clock, Launcher};
 use naobi_ui::UiHandle;
 use naobi_win32::theme::SystemTheme;
-use naobi_win32::tray::{Overlay, TrayState};
 use naobi_win32::{
     autostart, clipboard_marker, dwm, foreground, instance, notice, platform, shell_exec,
 };
@@ -307,17 +306,7 @@ fn raise_notice(s: &mut State, n: Notice) {
 
 /// While a Notice is active the tray shows the overlay and the banner's message as its tooltip.
 fn sync_tray(notices: &NoticeCenter) {
-    // The Awake part (icon state and tooltip) stays; a Notice only adds its overlay and message.
-    let base = modules::awake::tray_base();
-    let tray = match notices.banner() {
-        Some(n) => TrayState {
-            overlay: Overlay::Notice,
-            tooltip: format!("Naobi Command: {}", n.message),
-            ..base
-        },
-        None => base,
-    };
-    platform::set_tray_state(tray);
+    modules::awake::set_notice(notices.banner().map(|n| n.message.clone()));
 }
 
 /// R-008: another process owns the chord of `name`, so that hotkey is off. Names the chord when known.

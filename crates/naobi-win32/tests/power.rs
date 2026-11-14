@@ -17,6 +17,9 @@ fn r019_power_request_shows_in_the_system_execution_state_and_clears() {
     assert_ne!(held & SYSTEM, 0, "the system-required request is visible");
     assert!(set_request_now(true, true));
     assert_ne!(execution_state() & DISPLAY, 0, "display required joins it");
+    // Windows counts repeated requests: applying again must not need a second clear.
+    assert!(set_request_now(true, true));
+    assert!(set_request_now(true, true));
     assert!(set_request_now(true, false));
     if before & DISPLAY == 0 {
         assert_eq!(execution_state() & DISPLAY, 0, "display released again");

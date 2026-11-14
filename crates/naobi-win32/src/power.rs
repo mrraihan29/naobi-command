@@ -23,17 +23,20 @@ const CONTEXT_VERSION: u32 = 0;
 /// The longest a Windows timer can run.
 const MAX_TIMER_MS: u64 = 0x7FFF_FFFF;
 
-/// The request handle (0 for none): touched only on the platform thread, or by one test thread.
-static REQUEST: Mutex<isize> = Mutex::new(0);
+/// The request handle (0 for none) and which two request types are set on it. Windows counts every
+/// `PowerSetRequest`, so a type is set or cleared only when it changes. Touched only on the
+/// platform thread, or by one test thread.
+static REQUEST: Mutex<(isize, bool, bool)> = Mutex::new((0, false, false));
 
 /// Makes, changes or releases the power request, on the calling thread. `on` holds the system awake;
 /// `display` holds the display on too. False when Windows refused.
 pub fn set_request_now(on: bool, display: bool) -> bool {
-    let mut handle = REQUEST.lock().unwrap_or_else(|e| e.into_inner());
+    let mut req = REQUEST.lock().unwrap_or_else(|e| e.into_inner());
     if !on {
-        release(&mut handle);
+        release(&mut req);
         return true;
     }
+    let (handle, system_set, display_set) = &mut *req;
     if *handle == 0 {
         let context = REASON_CONTEXT {
             Version: CONTEXT_VERSION,
@@ -51,29 +54,34 @@ pub fn set_request_now(on: bool, display: bool) -> bool {
     let h = HANDLE(*handle as *mut c_void);
     // SAFETY: `h` is the request handle created above; the calls only change its request types.
     unsafe {
-        let system = PowerSetRequest(h, PowerRequestSystemRequired).is_ok();
-        let screen = if display {
-            PowerSetRequest(h, PowerRequestDisplayRequired).is_ok()
-        } else {
-            let _ = PowerClearRequest(h, PowerRequestDisplayRequired);
-            true
-        };
-        system && screen
+        if !*system_set && PowerSetRequest(h, PowerRequestSystemRequired).is_ok() {
+            *system_set = true;
+        }
+        if display && !*display_set && PowerSetRequest(h, PowerRequestDisplayRequired).is_ok() {
+            *display_set = true;
+        } else if !display
+            && *display_set
+            && PowerClearRequest(h, PowerRequestDisplayRequired).is_ok()
+        {
+            *display_set = false;
+        }
     }
+    *system_set && *display_set == display
 }
 
-fn release(handle: &mut isize) {
-    if *handle == 0 {
+fn release(req: &mut (isize, bool, bool)) {
+    let handle = req.0;
+    if handle == 0 {
         return;
     }
-    let h = HANDLE(*handle as *mut c_void);
+    let h = HANDLE(handle as *mut c_void);
     // SAFETY: the request handle created in `set_request_now`, cleared and closed exactly once.
     unsafe {
         let _ = PowerClearRequest(h, PowerRequestSystemRequired);
         let _ = PowerClearRequest(h, PowerRequestDisplayRequired);
         let _ = CloseHandle(h);
     }
-    *handle = 0;
+    *req = (0, false, false);
 }
 
 /// The `SystemExecutionState` flags now (`ES_SYSTEM_REQUIRED` is 1, `ES_DISPLAY_REQUIRED` is 2),

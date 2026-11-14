@@ -10,15 +10,33 @@ use naobi_win32::tray::{self, Overlay, TrayState};
 use std::sync::{Arc, Mutex};
 
 static AWAKE: Mutex<Option<Awake>> = Mutex::new(None);
-/// The tray's Awake part as last set, for the Notice overlay to keep.
-static TRAY: Mutex<Option<TrayState>> = Mutex::new(None);
+/// The Awake part of the tray and the active Notice's message. One lock covers composing and
+/// posting, so two threads cannot post out of order.
+static TRAY: Mutex<(TrayState, Option<String>)> = Mutex::new((
+    TrayState {
+        awake: tray::Awake::Off,
+        overlay: Overlay::None,
+        tooltip: String::new(),
+    },
+    None,
+));
 
-/// The tray without a Notice: the Awake state and its tooltip.
-pub fn tray_base() -> TrayState {
-    TRAY.lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
-        .unwrap_or_default()
+/// Posts the tray: the Awake state, plus the overlay and message of an active Notice.
+fn publish(guard: &(TrayState, Option<String>)) {
+    let (base, notice) = guard;
+    let mut tray = base.clone();
+    if let Some(message) = notice {
+        tray.overlay = Overlay::Notice;
+        tray.tooltip = format!("Naobi Command: {message}");
+    }
+    platform::set_tray_state(tray);
+}
+
+/// The banner's message while a Notice is active, `None` when it is gone.
+pub fn set_notice(message: Option<String>) {
+    let mut g = TRAY.lock().unwrap_or_else(|e| e.into_inner());
+    g.1 = message;
+    publish(&g);
 }
 
 fn now_ms() -> i64 {
@@ -39,7 +57,7 @@ impl AwakePort for Port {
     }
 
     fn tray(&mut self, view: View) {
-        let state = TrayState {
+        let base = TrayState {
             awake: match view.kind {
                 Kind::Off => tray::Awake::Off,
                 Kind::Indefinite => tray::Awake::Indefinite,
@@ -48,8 +66,9 @@ impl AwakePort for Port {
             overlay: Overlay::None,
             tooltip: view.tooltip,
         };
-        *TRAY.lock().unwrap_or_else(|e| e.into_inner()) = Some(state.clone());
-        platform::set_tray_state(state);
+        let mut g = TRAY.lock().unwrap_or_else(|e| e.into_inner());
+        g.0 = base;
+        publish(&g);
     }
 }
 

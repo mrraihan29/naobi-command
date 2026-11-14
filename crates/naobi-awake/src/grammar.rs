@@ -37,14 +37,15 @@ pub fn parse(text: &str) -> Option<Cmd> {
 
 /// `30m`, `1h`, `90m`, `2h`: a whole number and one unit, at least a minute and at most a day.
 fn minutes(word: &str) -> Option<i64> {
-    let (digits, unit) = word.split_at(word.len().checked_sub(1)?);
+    let unit = word.chars().next_back()?;
+    let digits = &word[..word.len() - unit.len_utf8()];
     if !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     let n: i64 = digits.parse().ok()?;
     let m = match unit {
-        "m" => n,
-        "h" => n.checked_mul(60)?,
+        'm' => n,
+        'h' => n.checked_mul(60)?,
         _ => return None,
     };
     (1..=MAX_MINUTES).contains(&m).then_some(m)

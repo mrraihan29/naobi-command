@@ -1,9 +1,9 @@
 //! Tier 2 (interactive desktop, dogfood instance quit): Win+Ctrl+T makes the window in front topmost
 //! with a 2 px border around its visible frame, the border follows the window when it moves, and a
 //! second press takes both away. The helper window belongs to the test process.
+use naobi_aot::Rect;
 use naobi_win32::edit_window::EditWindow;
 use naobi_win32::{autostart, dwm, inject};
-use naobi_winmgr::Rect;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 

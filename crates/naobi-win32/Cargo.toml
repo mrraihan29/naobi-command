@@ -6,7 +6,6 @@ publish.workspace = true
 
 [dependencies]
 naobi-core = { path = "../naobi-core" }
-naobi-winmgr = { path = "../naobi-winmgr" }
 naobi-aot = { path = "../naobi-aot" }
 naobi-picker = { path = "../naobi-picker" }
 zeroize.workspace = true

@@ -29,7 +29,6 @@ One row per planned crate or top-level file, with the sub-item that creates it. 
 | `naobi-calc` | Expression parser, percent semantics, unit conversion | no | NCMD-10 |
 | `naobi-launcher` | Root search engine, ranking, frecency, view stack, Esc ladder, action panel, armed commands, providers (apps, files, system, quicklinks, calculator, run: `providers/run.rs`), run history (`run_history.rs`, DPAPI, 100 lines and 30 days; R-024) | no | NCMD-14, 16, 17, 18, 33 |
 | `naobi-clipboard` | History rules, filters, retention, store, text index, paste and restore, view, commands | no | NCMD-19, 20 |
-| `naobi-winmgr` | Snap geometry, restore rectangles, commands | no | NCMD-21 |
 | `naobi-aot` | Topmost set, border state and geometry, commands | no | NCMD-22 |
 | `naobi-awake` | Awake mode state machine, grammar, commands | no | NCMD-23 |
 | `naobi-picker` | Color math, color history, view, commands | no | NCMD-24 |

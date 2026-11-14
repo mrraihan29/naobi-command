@@ -780,19 +780,19 @@ mod tests {
         assert!(!c.on_app_event(&AppEvent::DisplayChanged, &mut h));
     }
 
-    // @R-016
+    // @R-004
     #[test]
     fn r016_a_command_from_the_list_hides_gives_focus_back_then_runs_its_hotkey() {
         use crate::modules::{Modules, Parts};
         let mut m = Modules::new();
         m.subscribe(
-            HotkeyId("snap_left".into()),
+            HotkeyId("clipboard".into()),
             Box::new(|_, cx| cx.copy_text("snapped".into())),
         );
         let Parts { router, .. } = m.into_parts();
         let outcome = Outcome::Effects(vec![
             Effect::Hide,
-            Effect::RunHotkey(HotkeyId("snap_left".into())),
+            Effect::RunHotkey(HotkeyId("clipboard".into())),
         ]);
         let mut c = controller_with(Box::new(One(outcome)), router);
         let mut h = Fake {

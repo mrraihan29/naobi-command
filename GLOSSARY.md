@@ -11,7 +11,7 @@ The single Windows 11 user who installs and uses the app; also the only decider.
 _Avoid_: user, customer, admin, account
 
 **Module**:
-One of the seven built-in capabilities: launcher, calculator, clipboard history, window management, color picker, always-on-top, awake. Phase 2 modules do not ship in the MVP.
+One of the six built-in capabilities: launcher, calculator, clipboard history, color picker, always-on-top, awake. Phase 2 modules do not ship in the MVP.
 _Avoid_: plugin, extension, feature, tool
 
 **Launcher**:
@@ -116,21 +116,9 @@ _Avoid_: previous app, last window
 
 ### Window modules
 
-**Snap**:
-A window command that places the foreground window on a computed rectangle of its monitor work area (half, third, quarter, center, maximize, almost-maximize).
-_Avoid_: tile, dock, arrange, zone (zone means the phase-2 drag overlay)
-
 **Work area**:
 The part of a monitor not covered by the taskbar.
 _Avoid_: screen, desktop, bounds
-
-**Gap**:
-The configurable margin between a snapped window and the work-area edge, and between two snapped neighbours.
-_Avoid_: padding, spacing, margin
-
-**Restore rectangle**:
-The position and size a window had before its first Snap; the Restore command returns it there.
-_Avoid_: previous size, undo
 
 **Topmost**:
 The state of a window kept above all non-topmost windows by always-on-top. Used instead of "pinned" for windows.

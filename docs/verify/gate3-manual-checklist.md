@@ -13,7 +13,7 @@ The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspac
 - [ ] **Launcher.** Alt+Space opens it; type to search; Up/Down moves; Enter runs; Tab opens the action list;
   Esc closes. Nothing needs the mouse.
 - [ ] **Every module by keyboard.** From the Launcher, without the mouse: run an app, run a calculation (`2+2`),
-  open clipboard history (Alt+Shift+V) and paste an entry, snap a window (Ctrl+Alt+Left), toggle Always on Top
+  open clipboard history (Alt+Shift+V) and paste an entry, toggle Always on Top
   (Win+Ctrl+T), pick a color (Win+Shift+C, Esc cancels), `awake 1h`, `lock`, a file search.
 - [ ] **Visible focus.** In every list and in the action list the focused row is unmistakable in light and dark.
 - [ ] **Narrator.** Turn Narrator on (Win+Ctrl+Enter). The search box announces its name; arrowing announces
@@ -37,9 +37,9 @@ The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspac
 
 ## 3. R-011: an elevated window
 
-- [ ] Open Notepad **as administrator**. With it focused press Ctrl+Alt+Left (snap) and Win+Ctrl+T (Always on
-  Top): each shows the admin-window Notice naming the window, and the window does not move or pin.
-- [ ] A normal (not elevated) Notepad snaps and pins as usual afterwards.
+- [ ] Open Notepad **as administrator**. With it focused press Win+Ctrl+T (Always on
+  Top): it shows the admin-window Notice naming the window, and the window does not pin.
+- [ ] A normal (not elevated) Notepad pins as usual afterwards.
 
 ## 4. R-008: hotkey conflict and Do Not Disturb
 
@@ -65,11 +65,6 @@ The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspac
 ## 7. Window management (NCMD-21)
 
 - [ ] Elevated and non-elevated Notepad behave as in section 3.
-- [ ] A DPI-unaware window (for example an old tool) snaps to the right place.
-- [ ] Two monitors with different scaling: snap, then Move Window to Next Display; the window lands correctly and
-  Restore returns it to where it was.
-- [ ] Taskbar on the top and on the left: snaps stay inside the work area.
-- [ ] The snap list in the Launcher reads well (UI-CHECK).
 
 ## 8. Always on Top (NCMD-22)
 

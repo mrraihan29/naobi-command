@@ -2,6 +2,8 @@
 
 <!-- English only. Every chapter stays; an irrelevant chapter says "N/A — <reason>". Source of truth: docs/ledger.yaml. Generated pieces (requirement lists, diagram embeds, STRIDE counts, Appendix A) are produced from the ledger and docs/diagrams by a script; edit the sources, not the copies. -->
 
+> **Window snapping was removed on 2026-11-14 (D-039).** The naobi-winmgr crate, R-016, D-022 and the window-management text below are historical; the MVP is six modules.
+
 Status: draft for Gate 1 · Plane: NCMD-2 · Date: 2026-10-22 · Ledger: 60 entries (R-001..R-023, D-001..D-037)
 
 ## 0. Executive summary

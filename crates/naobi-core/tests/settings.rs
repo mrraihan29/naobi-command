@@ -23,18 +23,6 @@ fn d024_default_quicklink_aliases() {
     assert_eq!(h["clipboard"], chord(ALT | SHIFT, b'V'.into()));
     assert_eq!(h["color_picker"], chord(WIN | SHIFT, b'C'.into()));
     assert_eq!(h["topmost"], chord(WIN | CTRL, b'T'.into()));
-    for (k, vk) in [
-        ("snap_left", 0x25),
-        ("snap_right", 0x27),
-        ("snap_up", 0x26),
-        ("snap_down", 0x28),
-        ("maximize", 0x0D),
-        ("center", b'C'.into()),
-        ("restore", 0x08),
-    ] {
-        assert_eq!(h[k], chord(CTRL | ALT, vk), "{k}");
-    }
-    assert_eq!(s.window.gap, 8);
     assert_eq!(s.ui.text_scale, 1.0);
     assert_eq!(s.clipboard.retention_days, 30);
     assert_eq!(s.clipboard.max_entries, 1000);
@@ -96,13 +84,13 @@ fn border_color_hex_is_validated() {
 // @D-009
 #[test]
 fn d009_invalid_settings_keeps_last_valid() {
-    let prev = Settings::parse("[window]\ngap = 12\n").unwrap().settings;
-    let p = Settings::apply(&prev, "[window]\ngap = 1\nbroken = = 2\n");
+    let prev = Settings::parse("[aot]\nborder = false\n").unwrap().settings;
+    let p = Settings::apply(&prev, "[aot]\nborder = true\nbroken = = 2\n");
     assert_eq!(p.settings, prev);
     assert_eq!(p.reports.len(), 1);
     assert_eq!(p.reports[0].line, Some(3));
     // Unknown keys are strict too.
-    let p = Settings::apply(&prev, "[window]\nunknown = 1\n");
+    let p = Settings::apply(&prev, "[aot]\nunknown = 1\n");
     assert_eq!(p.settings, prev);
     assert_eq!(p.reports[0].line, Some(2));
 }
@@ -167,4 +155,18 @@ fn d012_chord_parse() {
 #[test]
 fn d021_app_event_has_timer_variant() {
     assert_eq!(AppEvent::Timer(TimerId(7)), AppEvent::Timer(TimerId(7)));
+}
+
+#[test]
+fn a_file_from_before_window_snapping_was_removed_still_loads() {
+    let old = "[hotkeys]
+snap_left = \"Ctrl+Alt+Left\"
+center = \"Ctrl+Alt+C\"
+
+[window]
+gap = 8
+";
+    let p = Settings::parse(old).unwrap();
+    assert!(p.reports.is_empty());
+    assert_eq!(p.settings, Settings::default());
 }

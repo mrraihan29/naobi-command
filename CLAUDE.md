@@ -14,7 +14,7 @@ Personal Windows 11 launcher and utility suite (launcher, calculator, clipboard 
 - Ledger check: `uv run C:/Coding/naobi-sdlc/scripts/ledger_check.py docs/ledger.yaml --gate design`
 
 ## Architecture in one breath
-Cargo workspace, one crate per module: `naobi-core` (kernel and UI data types), `-calc`, `-launcher`, `-clipboard`, `-winmgr`, `-aot`, `-picker`, `-awake`, `-ui` (framework adapter), `-win32` (the only `unsafe`), `-app` (wiring), `-perf`. Module crates define ports; `naobi-win32` implements them. Nothing outside `naobi-ui` may name Slint.
+Cargo workspace, one crate per module: `naobi-core` (kernel and UI data types), `-calc`, `-launcher`, `-clipboard`, `-aot`, `-picker`, `-awake`, `-ui` (framework adapter), `-win32` (the only `unsafe`), `-app` (wiring), `-perf`. Module crates define ports; `naobi-win32` implements them. Nothing outside `naobi-ui` may name Slint.
 
 ## Boundaries
 - Always: run the commands above on changed files before finishing; put `// @R-xxx` above each test whose name starts `r<nnn>_`; mark tier 2 tests `#[ignore = "tier2: interactive desktop"]`; use the words in `GLOSSARY.md` (pin = clipboard, topmost = window, item = launcher, entry = clipboard).

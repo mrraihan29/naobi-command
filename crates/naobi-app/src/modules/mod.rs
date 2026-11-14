@@ -9,7 +9,6 @@ pub mod clipboard_capture;
 pub mod files;
 pub mod icons;
 pub mod picker;
-pub mod winmgr;
 
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;
@@ -154,7 +153,6 @@ pub fn register_all(modules: &mut Modules) {
     clipboard_capture::register(modules);
     clipboard::register(modules);
     apps::register(modules);
-    winmgr::register(modules);
     aot::register(modules);
     awake::register(modules);
     picker::register(modules);
@@ -204,7 +202,7 @@ mod tests {
         for name in ["a", "b"] {
             let seen = seen.clone();
             m.subscribe(
-                hk("snap_left"),
+                hk("clipboard"),
                 Box::new(move |_, cx| {
                     seen.borrow_mut().push(format!("hotkey {name}"));
                     cx.notice(note(name));
@@ -229,14 +227,14 @@ mod tests {
         assert_eq!((sources.len(), views.len()), (1, 0));
 
         let mut cx = Cx::default();
-        assert!(router.hotkey(&hk("snap_left"), &mut cx));
+        assert!(router.hotkey(&hk("clipboard"), &mut cx));
         assert_eq!(cx.take().len(), 2, "both handlers raised a Notice");
         assert!(!router.hotkey(&hk("nobody"), &mut cx));
         assert!(router.event(&AppEvent::ClipboardChanged(7), &mut cx));
         // Nobody subscribed to these kinds, and the Launcher's own events are not for modules.
         assert!(!router.event(&AppEvent::Timer(TimerId(1)), &mut cx));
         assert!(!router.event(&AppEvent::ThemeChanged, &mut cx));
-        assert!(!router.event(&AppEvent::Hotkey(hk("snap_left")), &mut cx));
+        assert!(!router.event(&AppEvent::Hotkey(hk("clipboard")), &mut cx));
         assert_eq!(
             *seen.borrow(),
             vec![
@@ -295,7 +293,7 @@ mod catalog {
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource));
         for source in sources {
             for text in [
-                "", "2+2", "awake", "snap", "color", "lock", "clip", "snippet", "ocr",
+                "", "2+2", "awake", "color", "lock", "clip", "snippet", "ocr",
             ] {
                 for i in source.items(&Query { text: text.into() }).iter() {
                     items.insert((i.id.0.clone(), i.title.clone()));
@@ -335,7 +333,7 @@ mod catalog {
             .map(|s| &**s)
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
             .collect();
-        let table: [(&str, &str); 18] = [
+        let table: [(&str, &str); 16] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -352,8 +350,6 @@ mod catalog {
             ("recycle bin", "sys.empty_recycle_bin"),
             ("always on top", "aot.toggle"),
             ("topmost", "aot.toggle"),
-            ("snap left", "win.snap_left"),
-            ("snap right", "win.snap_right"),
         ];
         let first = |q: &str| {
             // Apps and files depend on the Owner's machine; leave them out.
@@ -381,16 +377,12 @@ mod catalog {
         let c = build();
         let item = |id: &str| c.items.iter().any(|(i, _)| i == id);
         let hotkey = |id: &str| c.hotkeys.contains(id);
-        // The seven modules, each by one thing the Owner can reach: a Launcher row or its own hotkey.
+        // The six modules, each by one thing the Owner can reach: a Launcher row or its own hotkey.
         assert!(item("sys.lock"), "launcher: system commands");
         assert!(item("calc:4"), "calculator");
         assert!(
             hotkey("clipboard") && c.views.contains(naobi_clipboard::view::VIEW_ID),
             "clipboard history"
-        );
-        assert!(
-            item("win.snap_left") && hotkey("snap_left"),
-            "window management"
         );
         assert!(
             item("picker.pick") && hotkey("color_picker") && c.views.contains("colors"),

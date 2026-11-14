@@ -15,11 +15,13 @@ use windows::Win32::Graphics::Gdi::{
     HGDIOBJ, RGN_DIFF,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
-    IsIconic, IsWindowVisible, RegisterClassW, SetClassLongPtrW, SetLayeredWindowAttributes,
-    SetWindowPos, ShowWindow, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClassNameW, GetForegroundWindow,
+    GetWindowLongPtrW, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
+    IsWindowVisible, RegisterClassW, SetClassLongPtrW, SetLayeredWindowAttributes, SetWindowPos,
+    ShowWindow, EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
     EVENT_OBJECT_SHOW, GCLP_HBRBACKGROUND, GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, LWA_ALPHA,
     OBJID_WINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE,
     WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
@@ -284,6 +286,53 @@ pub fn unpin_now(window: isize) {
     remove(&mut lock(), window);
 }
 
+fn class_of(h: HWND) -> String {
+    let mut buf = [0u16; 64];
+    // SAFETY: reads the class name into `buf`, which is sized for it.
+    let n = unsafe { GetClassNameW(h, &mut buf) }.max(0) as usize;
+    String::from_utf16_lossy(&buf[..n.min(buf.len())])
+}
+
+fn title_of(h: HWND) -> String {
+    // SAFETY: reads the title into a buffer sized from the window's own length.
+    unsafe {
+        let len = GetWindowTextLengthW(h).max(0) as usize;
+        let mut buf = vec![0u16; len + 1];
+        let n = GetWindowTextW(h, &mut buf).max(0) as usize;
+        String::from_utf16_lossy(&buf[..n.min(len)])
+    }
+}
+
+/// The window in front that is not ours, waiting a moment after the Launcher hid for focus to land.
+fn front_window() -> Option<HWND> {
+    for _ in 0..16 {
+        // SAFETY: no arguments; returns a handle value or null.
+        let h = unsafe { GetForegroundWindow() };
+        if !h.0.is_null() {
+            let mut pid = 0u32;
+            // SAFETY: `pid` receives the owning process id of a handle just returned by Windows.
+            unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
+            // SAFETY: no arguments.
+            if pid != unsafe { GetCurrentProcessId() } {
+                return Some(h);
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    None
+}
+
+/// The desktop and the taskbar are in front when nothing else is, and are not for toggling.
+fn movable(h: HWND) -> bool {
+    // SAFETY: a plain query on a window handle.
+    let visible = unsafe { IsWindowVisible(h) }.as_bool();
+    let shell = matches!(
+        class_of(h).as_str(),
+        "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
+    );
+    visible && !shell && !crate::dwm::is_tool_window(h.0 as isize)
+}
+
 /// The number of topmost windows being followed and of hooks installed.
 pub fn counts() -> (usize, usize) {
     let st = lock();
@@ -295,11 +344,12 @@ pub struct Ops;
 
 impl TopmostOps for Ops {
     fn foreground(&mut self) -> Option<Target> {
-        use naobi_winmgr::WindowOps;
-        crate::window_ops::Ops.foreground().map(|w| Target {
-            hwnd: w.hwnd,
-            title: w.title,
-            elevated: w.elevated,
+        let h = front_window().filter(|h| movable(*h))?;
+        Some(Target {
+            hwnd: h.0 as isize,
+            title: title_of(h),
+            // Fails closed: a process that cannot be inspected counts as elevated (T-027).
+            elevated: crate::paste::is_elevated(h.0 as isize),
         })
     }
 

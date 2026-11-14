@@ -1,6 +1,5 @@
 //! Drawn icons for the built-in command rows (NCMD-29): our own simple shapes on a 24 x 24 grid, as SVG
-//! path data. Each glyph is an outline (stroked) and an optional region (filled, drawn faint): the snap
-//! commands show which part of the screen they take. No file, no font, no download.
+//! path data. Each glyph is an outline (stroked) and an optional region (filled, drawn faint). No file, no font, no download.
 
 /// `(item id, outline, region)`.
 const GLYPHS: &[(&str, &str, &str)] = &[
@@ -21,25 +20,6 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("sys.open_settings_file", "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6", ""),
     ("sys.pause_hotkeys", "M8 5v14M16 5v14", ""),
     ("sys.quit", "M6 6l12 12M18 6L6 18", ""),
-    // Window management: the screen, and the part the command takes.
-    ("win.snap_left", "M3 5h18v14H3z", "M3 5h9v14H3z"),
-    ("win.snap_right", "M3 5h18v14H3z", "M12 5h9v14h-9z"),
-    ("win.snap_up", "M3 5h18v14H3z", "M3 5h18v7H3z"),
-    ("win.snap_down", "M3 5h18v14H3z", "M3 12h18v7H3z"),
-    ("win.snap_top_left", "M3 5h18v14H3z", "M3 5h9v7H3z"),
-    ("win.snap_top_right", "M3 5h18v14H3z", "M12 5h9v7h-9z"),
-    ("win.snap_bottom_left", "M3 5h18v14H3z", "M3 12h9v7H3z"),
-    ("win.snap_bottom_right", "M3 5h18v14H3z", "M12 12h9v7h-9z"),
-    ("win.snap_left_third", "M3 5h18v14H3z", "M3 5h6v14H3z"),
-    ("win.snap_center_third", "M3 5h18v14H3z", "M9 5h6v14H9z"),
-    ("win.snap_right_third", "M3 5h18v14H3z", "M15 5h6v14h-6z"),
-    ("win.snap_first_two_thirds", "M3 5h18v14H3z", "M3 5h12v14H3z"),
-    ("win.snap_last_two_thirds", "M3 5h18v14H3z", "M9 5h12v14H9z"),
-    ("win.center", "M3 5h18v14H3z", "M7 8h10v8H7z"),
-    ("win.maximize", "M3 5h18v14H3z", "M3 5h18v14H3z"),
-    ("win.almost_maximize", "M3 5h18v14H3z", "M5 7h14v10H5z"),
-    ("win.restore", "M8 9h11v10H8zM11 5h10v10", ""),
-    ("win.next_display", "M2 6h11v9H2zM15 9h7v8h-7zM5 19h5", ""),
     // Always on Top, Awake, color picker.
     ("aot.toggle", "M9 4h6l-1 6 3 3H7l3-3zM12 13v7", ""),
     ("awake.on", COFFEE, ""),
@@ -106,6 +86,6 @@ mod tests {
         }
         assert_eq!(glyph("sys.lock").0, GLYPHS[0].1);
         assert_eq!(glyph("module.unknown"), GENERIC);
-        assert!(has_own_glyph("win.snap_left") && !has_own_glyph("module.unknown"));
+        assert!(has_own_glyph("aot.toggle") && !has_own_glyph("module.unknown"));
     }
 }

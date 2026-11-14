@@ -306,7 +306,8 @@ entries:
   - id: R-016
     type: requirement
     version: 1
-    status: active
+    status: superseded
+    superseded_by: D-039
     topic: 4
     answer: "setuju semua"
     recommendation: "Perintah keyboard ala Raycast: halves, thirds, quarters, center, maximize, almost-maximize, next display, restore; opsi gap; hotkey Ctrl+Alt+Panah (halves), Ctrl+Alt+Enter (maximize), Ctrl+Alt+C (center), Ctrl+Alt+Backspace (restore). Drag-zone overlay ala FancyZones di fase 2."
@@ -560,7 +561,8 @@ entries:
   - id: D-022
     type: decision
     version: 1
-    status: active
+    status: superseded
+    superseded_by: D-039
     topic: 4
     answer: "autonomous default"
     recommendation: "Define the ambiguous window-management words once so tests can assert them; keep state in memory and use no WinEvent hooks for window management (only a scoped hook while a window is topmost)."
@@ -715,3 +717,14 @@ entries:
     statement: "The Launcher runs a command line the Owner types after '>': PowerShell 7 (pwsh.exe, found through PATH or App Paths) with -NoExit -EncodedCommand (base64 of the UTF-16LE line, so the Owner's characters reach PowerShell unchanged) in a new console window started with the shell 'open' verb in %USERPROFILE%, outside the app's kill-on-close job; Windows PowerShell 5.1 when pwsh is not found; a first token that resolves to a readable PE image with the WINDOWS_GUI subsystem is started directly with the rest of the line as arguments, and a failed lookup falls back to the console; lookups run on Enter only and never touch a UNC or remote-drive path; the run history is the V2 table run_history (line_enc and program_enc DPAPI current-user blobs, last_run_at), at most 100 lines and 30 days, decrypted only while a '>' query is shown, deletable one by one, never logged; run rows are not armed (R-020 does not cover them), not counted in frecency, and carry no command text in item ids or icon keys; a process the Owner starts with '>' is the Owner's process, so R-010's no-socket rule covers the app and its own children and the network-silence session does not use '>'; module commands get search keywords in code, with no alias setting."
     links:
       decisions: ["D-014@2", "D-020@1", "D-024@1"]
+
+  - id: D-039
+    type: decision
+    version: 1
+    status: active
+    topic: 4
+    answer: "Request (2026-11-14): \"sejujurnya snap window gak terlalu aku pake jadi bisa dihapus saja\"."
+    recommendation: "Remove window snapping instead of keeping an unused module: less code, fewer hotkeys, a smaller exe."
+    statement: "Window snapping (R-016, D-022) is removed: the naobi-winmgr crate, its Launcher commands, the Ctrl+Alt hotkeys (snap_left, snap_right, snap_up, snap_down, maximize, center, restore) and the [window] gap setting no longer exist. A settings file written before this change still loads: the retired hotkey ids and the [window] section are read and ignored. The Rect type Always on Top needs moved to naobi-aot. The MVP is six modules: launcher, calculator, clipboard history, color picker, always-on-top and awake."
+    links:
+      decisions: ["D-014@2"]

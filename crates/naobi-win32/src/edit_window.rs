@@ -101,7 +101,7 @@ impl EditWindow {
 
     /// The window rectangle and the visible frame (without the invisible resize border), in physical
     /// pixels.
-    pub fn rects(&self) -> (naobi_winmgr::Rect, naobi_winmgr::Rect) {
+    pub fn rects(&self) -> (naobi_aot::Rect, naobi_aot::Rect) {
         let (mut outer, mut frame) = (RECT::default(), RECT::default());
         // SAFETY: each call writes one RECT into a local of this frame.
         unsafe {
@@ -113,7 +113,7 @@ impl EditWindow {
                 std::mem::size_of::<RECT>() as u32,
             );
         }
-        let r = |r: RECT| naobi_winmgr::Rect::new(r.left, r.top, r.right, r.bottom);
+        let r = |r: RECT| naobi_aot::Rect::new(r.left, r.top, r.right, r.bottom);
         (r(outer), r(frame))
     }
 
@@ -146,7 +146,7 @@ impl EditWindow {
     }
 
     /// The topmost border window the app draws, if one is showing (the app is another process).
-    pub fn border_rect() -> Option<naobi_winmgr::Rect> {
+    pub fn border_rect() -> Option<naobi_aot::Rect> {
         use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, IsWindowVisible};
         let mut r = RECT::default();
         // SAFETY: finds a window by class name and reads its rectangle into a local.
@@ -157,7 +157,7 @@ impl EditWindow {
             }
             GetWindowRect(h, &mut r).ok()?;
         }
-        Some(naobi_winmgr::Rect::new(r.left, r.top, r.right, r.bottom))
+        Some(naobi_aot::Rect::new(r.left, r.top, r.right, r.bottom))
     }
 
     /// What the edit control holds now.

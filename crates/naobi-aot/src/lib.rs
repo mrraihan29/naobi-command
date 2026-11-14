@@ -3,9 +3,11 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+pub mod rect;
 pub mod topmost;
 
 pub use commands::{AotCommands, Config};
+pub use rect::Rect;
 pub use topmost::{toggle, Outcome, Target, TopmostOps};
 
 use naobi_core::ui::Theme;

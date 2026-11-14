@@ -46,17 +46,6 @@ impl Default for Ui {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Window {
-    pub gap: u32,
-}
-impl Default for Window {
-    fn default() -> Self {
-        Self { gap: 8 }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
 pub struct Clipboard {
     pub retention_days: u32,
     pub max_entries: u32,
@@ -91,10 +80,9 @@ impl Default for Aot {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub general: General,
-    /// Keyed by hotkey id ("launcher", "snap_left", ...).
+    /// Keyed by hotkey id ("launcher", "topmost", ...).
     pub hotkeys: BTreeMap<String, KeyChord>,
     pub ui: Ui,
-    pub window: Window,
     pub clipboard: Clipboard,
     pub aot: Aot,
     pub quicklinks: Vec<Quicklink>,
@@ -106,24 +94,30 @@ struct Raw {
     general: General,
     hotkeys: BTreeMap<String, KeyChord>,
     ui: Ui,
-    window: Window,
+    /// Window snapping was removed; an old file may still hold the section, which is ignored.
+    #[allow(dead_code)] // naobi-allow: read only to accept a retired settings section
+    window: Option<toml::Table>,
     clipboard: Clipboard,
     aot: Aot,
     quicklinks: Option<Vec<Quicklink>>,
 }
 
-const DEFAULT_HOTKEYS: [(&str, u8, u32); 11] = [
+/// Hotkeys of the removed window snapping; an old file may still bind them, and they are ignored.
+const RETIRED_HOTKEYS: [&str; 7] = [
+    "snap_left",
+    "snap_right",
+    "snap_up",
+    "snap_down",
+    "maximize",
+    "center",
+    "restore",
+];
+
+const DEFAULT_HOTKEYS: [(&str, u8, u32); 4] = [
     ("launcher", ALT, 0x20),
     ("clipboard", ALT | SHIFT, 0x56),
     ("color_picker", WIN | SHIFT, 0x43),
     ("topmost", WIN | CTRL, 0x54),
-    ("snap_left", CTRL | ALT, 0x25),
-    ("snap_right", CTRL | ALT, 0x27),
-    ("snap_up", CTRL | ALT, 0x26),
-    ("snap_down", CTRL | ALT, 0x28),
-    ("maximize", CTRL | ALT, 0x0D),
-    ("center", CTRL | ALT, 0x43),
-    ("restore", CTRL | ALT, 0x08),
 ];
 
 /// D-024: Google, GitHub, YouTube, naobi.dev.
@@ -147,7 +141,6 @@ impl Default for Settings {
                 .map(|&(k, mods, vk)| (k.to_string(), KeyChord { mods, vk }))
                 .collect(),
             ui: Ui::default(),
-            window: Window::default(),
             clipboard: Clipboard::default(),
             aot: Aot::default(),
             quicklinks: DEFAULT_QUICKLINKS
@@ -174,13 +167,15 @@ impl Settings {
         if text.len() > MAX_FILE_BYTES {
             return Err(SettingsError::TooLarge);
         }
-        let raw: Raw = toml::from_str(text).map_err(|e| SettingsError::Syntax {
+        let mut raw: Raw = toml::from_str(text).map_err(|e| SettingsError::Syntax {
             line: e.span().and_then(|s| {
                 let head = text.as_bytes().get(..s.start)?;
                 Some(head.iter().filter(|&&b| b == b'\n').count() + 1)
             }),
             message: e.message().to_string(),
         })?;
+        raw.hotkeys
+            .retain(|k, _| !RETIRED_HOTKEYS.contains(&k.as_str()));
         // Hotkey ids must be known, and a global hotkey needs a modifier.
         for (k, c) in &raw.hotkeys {
             let known = DEFAULT_HOTKEYS.iter().any(|d| d.0 == k);
@@ -210,7 +205,6 @@ impl Settings {
             general: raw.general,
             hotkeys,
             ui: raw.ui,
-            window: raw.window,
             clipboard: raw.clipboard,
             aot: raw.aot,
             ..Settings::default()
@@ -285,19 +279,9 @@ launcher = "Alt+Space"
 clipboard = "Alt+Shift+V"
 color_picker = "Win+Shift+C"
 topmost = "Win+Ctrl+T"
-snap_left = "Ctrl+Alt+Left"
-snap_right = "Ctrl+Alt+Right"
-snap_up = "Ctrl+Alt+Up"
-snap_down = "Ctrl+Alt+Down"
-maximize = "Ctrl+Alt+Enter"
-center = "Ctrl+Alt+C"
-restore = "Ctrl+Alt+Backspace"
 
 [ui]
 text_scale = 1.0 # 1.0, 1.125 or 1.25
-
-[window]
-gap = 8
 
 [clipboard]
 retention_days = 30 # may be lowered, never raised above 30

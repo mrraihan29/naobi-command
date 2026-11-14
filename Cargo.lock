@@ -2648,7 +2648,6 @@ dependencies = [
  "naobi-picker",
  "naobi-ui",
  "naobi-win32",
- "naobi-winmgr",
  "serde_json",
  "tracing",
  "tracing-subscriber",
@@ -2735,17 +2734,8 @@ dependencies = [
  "naobi-aot",
  "naobi-core",
  "naobi-picker",
- "naobi-winmgr",
  "windows",
  "zeroize",
-]
-
-[[package]]
-name = "naobi-winmgr"
-version = "0.0.0"
-dependencies = [
- "naobi-core",
- "naobi-launcher",
 ]
 
 [[package]]

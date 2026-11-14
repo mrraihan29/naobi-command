@@ -990,3 +990,34 @@ fn clear_notice_drops_the_engine_banner() {
     l.clear_notice();
     assert!(l.screen().notice.is_none());
 }
+
+// @R-017
+#[test]
+fn r017_a_color_row_draws_its_hex_as_the_swatch() {
+    let color = |id: &str, title: &str| Item {
+        kind: ItemKind::Color,
+        ..item(id, title)
+    };
+    let (mut l, _) = engine(
+        vec![
+            color("c:1", "#914A3B"),
+            color("c:2", "914A3C"),
+            color("c:3", "#914A3"),
+            item("a:1", "#914A3D app"),
+        ],
+        Vec::new(),
+    );
+    type_text(&mut l, "914A3");
+    let s = l.screen();
+    let swatch = |title: &str| {
+        s.sections
+            .iter()
+            .flat_map(|sec| &sec.rows)
+            .find(|r| r.title == title)
+            .map(|r| r.swatch)
+    };
+    assert_eq!(swatch("#914A3B"), Some(Some(0x914A3B)));
+    assert_eq!(swatch("914A3C"), Some(None), "no hash: no swatch");
+    assert_eq!(swatch("#914A3"), Some(None), "not six digits: no swatch");
+    assert_eq!(swatch("#914A3D app"), Some(None), "not a Color item");
+}

@@ -16,6 +16,7 @@ pub mod inject;
 pub mod instance;
 pub mod notice;
 pub mod paste;
+pub mod picker;
 pub mod platform;
 pub mod power;
 #[cfg(feature = "perf")]

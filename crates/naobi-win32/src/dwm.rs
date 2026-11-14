@@ -34,6 +34,12 @@ pub fn find_window(title: &str) -> Option<isize> {
         .map(|h| h.0 as isize)
 }
 
+/// The id of the thread that owns window `h`, for tests that check where a window lives.
+pub fn window_thread(h: isize) -> u32 {
+    // SAFETY: reads the owner thread of a window handle value; the process id is not wanted.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(hwnd(h), None) }
+}
+
 fn set_cloak(h: isize, on: bool) {
     let v = BOOL::from(on);
     // SAFETY: DWMWA_CLOAK reads one BOOL; `v` outlives the call.

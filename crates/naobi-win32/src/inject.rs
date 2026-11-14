@@ -142,3 +142,44 @@ pub fn alt_shift_v() {
     // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
     unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
 }
+
+/// Presses and releases Win+Shift+C (the color picker hotkey).
+pub fn win_shift_c() {
+    let (win, c) = (VIRTUAL_KEY(0x5B), VIRTUAL_KEY(0x43));
+    let seq = [
+        key(VK_SHIFT, false),
+        key(win, false),
+        key(c, false),
+        key(c, true),
+        key(win, true),
+        key(VK_SHIFT, true),
+    ];
+    // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
+    unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
+}
+
+/// Moves the pointer to screen pixel `(x, y)` and clicks the left button there.
+pub fn click_at(x: i32, y: i32) {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT,
+    };
+    let button = |flags| INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dwFlags: flags,
+                ..Default::default()
+            },
+        },
+    };
+    // SAFETY: SetCursorPos takes plain values; SendInput reads a slice of initialised INPUT values.
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetCursorPos(x, y);
+        // Let the move reach the overlay before the button does.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        SendInput(
+            &[button(MOUSEEVENTF_LEFTDOWN), button(MOUSEEVENTF_LEFTUP)],
+            std::mem::size_of::<INPUT>() as i32,
+        );
+    }
+}

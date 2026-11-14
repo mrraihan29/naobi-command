@@ -179,7 +179,7 @@ impl Launcher {
             disabled: false,
             armed: armed == Some(h.id()),
             pinned: false,
-            swatch: None,
+            swatch: swatch_of(&h.item),
         };
         let mut sections = Vec::new();
         if !self.rows.is_empty() {
@@ -634,6 +634,15 @@ fn panel_view(p: &Panel) -> ActionPanelView {
             .collect(),
         selected: p.selected,
     }
+}
+
+/// A Color item's title is its `#RRGGBB`; the row draws that color as its swatch.
+fn swatch_of(item: &Item) -> Option<u32> {
+    if item.kind != ItemKind::Color {
+        return None;
+    }
+    let hex = item.title.strip_prefix('#').filter(|h| h.len() == 6)?;
+    u32::from_str_radix(hex, 16).ok()
 }
 
 fn kind_name(k: ItemKind) -> &'static str {

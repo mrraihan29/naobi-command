@@ -6,6 +6,7 @@ pub mod awake;
 pub mod builtin;
 pub mod clipboard;
 pub mod clipboard_capture;
+pub mod picker;
 pub mod winmgr;
 
 use naobi_core::command::{CommandSource, Cx};
@@ -144,6 +145,7 @@ pub fn register_all(modules: &mut Modules) {
     winmgr::register(modules);
     aot::register(modules);
     awake::register(modules);
+    picker::register(modules);
 }
 
 #[cfg(test)]

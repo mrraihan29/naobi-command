@@ -2645,6 +2645,7 @@ dependencies = [
  "naobi-clipboard",
  "naobi-core",
  "naobi-launcher",
+ "naobi-picker",
  "naobi-ui",
  "naobi-win32",
  "naobi-winmgr",
@@ -2707,6 +2708,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "naobi-picker"
+version = "0.0.0"
+dependencies = [
+ "naobi-core",
+ "rusqlite",
+]
+
+[[package]]
 name = "naobi-ui"
 version = "0.0.0"
 dependencies = [
@@ -2722,6 +2731,7 @@ version = "0.0.0"
 dependencies = [
  "naobi-aot",
  "naobi-core",
+ "naobi-picker",
  "naobi-winmgr",
  "windows",
  "zeroize",

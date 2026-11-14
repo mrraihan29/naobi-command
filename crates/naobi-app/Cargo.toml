@@ -20,6 +20,7 @@ naobi-core = { path = "../naobi-core" }
 naobi-winmgr = { path = "../naobi-winmgr" }
 naobi-aot = { path = "../naobi-aot" }
 naobi-awake = { path = "../naobi-awake" }
+naobi-picker = { path = "../naobi-picker" }
 naobi-launcher = { path = "../naobi-launcher" }
 naobi-ui = { path = "../naobi-ui" }
 naobi-win32 = { path = "../naobi-win32" }

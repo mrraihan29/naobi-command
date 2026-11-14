@@ -181,3 +181,91 @@ impl Drop for EditWindow {
         }
     }
 }
+
+unsafe extern "system" fn color_proc(
+    h: HWND,
+    m: u32,
+    w: WPARAM,
+    l: LPARAM,
+) -> windows::Win32::Foundation::LRESULT {
+    // SAFETY: forwards the message Windows delivered, unchanged.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::DefWindowProcW(h, m, w, l) }
+}
+
+/// A 200 x 200 topmost window filled with one color at screen (200, 200), for the color picker's
+/// tier 2 test. Its own thread pumps it, like `EditWindow`.
+pub struct ColorWindow {
+    thread_id: u32,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl ColorWindow {
+    /// `rgb` is `0xRRGGBB`.
+    pub fn open(rgb: u32) -> Option<Self> {
+        use windows::Win32::Graphics::Gdi::CreateSolidBrush;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            RegisterClassW, SetClassLongPtrW, ShowWindow, GCLP_HBRBACKGROUND, SW_SHOW, WNDCLASSW,
+            WS_EX_TOPMOST, WS_POPUP,
+        };
+        let (tx, rx) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            // SAFETY: a class, a popup window and its brush made and pumped on this one thread; the
+            // brush belongs to the class and lives until the process ends.
+            unsafe {
+                let class = WNDCLASSW {
+                    lpfnWndProc: Some(color_proc),
+                    lpszClassName: w!("NaobiTestColor"),
+                    ..Default::default()
+                };
+                RegisterClassW(&class);
+                let hwnd = CreateWindowExW(
+                    WS_EX_TOPMOST,
+                    w!("NaobiTestColor"),
+                    w!("naobi test color"),
+                    WS_POPUP,
+                    200,
+                    200,
+                    200,
+                    200,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .ok();
+                if let Some(h) = hwnd {
+                    let colorref = (rgb & 0xFF) << 16 | (rgb & 0xFF00) | (rgb >> 16);
+                    let brush = CreateSolidBrush(windows::Win32::Foundation::COLORREF(colorref));
+                    SetClassLongPtrW(h, GCLP_HBRBACKGROUND, brush.0 as isize);
+                    let _ = ShowWindow(h, SW_SHOW);
+                }
+                let _ = tx.send((hwnd.is_some(), GetCurrentThreadId()));
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+        });
+        let (ok, thread_id) = rx.recv().ok()?;
+        ok.then_some(Self {
+            thread_id,
+            thread: Some(thread),
+        })
+    }
+
+    /// The middle of the window, in screen pixels.
+    pub fn center(&self) -> (i32, i32) {
+        (300, 300)
+    }
+}
+
+impl Drop for ColorWindow {
+    fn drop(&mut self) {
+        // SAFETY: asks the window's own thread to end its message loop.
+        let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}

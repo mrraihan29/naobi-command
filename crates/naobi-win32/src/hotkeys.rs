@@ -170,11 +170,11 @@ mod tests {
     fn ids_follow_the_default_table_and_names_round_trip() {
         assert_eq!(name_for_id(0), None);
         let reg = Registry::new(&Settings::default());
-        assert_eq!(reg.entries.len(), 11);
+        assert_eq!(reg.entries.len(), 4);
         let (id, name, chord) = &reg.entries[0];
-        assert_eq!((*id, name.0.as_str()), (1, "center"));
-        assert_eq!(*chord, Settings::default().hotkeys["center"]);
-        assert_eq!(name_for_id(1), Some(HotkeyId("center".into())));
+        assert_eq!((*id, name.0.as_str()), (1, "clipboard"));
+        assert_eq!(*chord, Settings::default().hotkeys["clipboard"]);
+        assert_eq!(name_for_id(1), Some(HotkeyId("clipboard".into())));
     }
 
     // @R-008
@@ -190,7 +190,7 @@ mod tests {
             events,
             vec![AppEvent::HotkeyConflict(HotkeyId("launcher".into()))]
         );
-        assert_eq!(fake.live.len(), 10);
+        assert_eq!(fake.live.len(), 3);
     }
 
     // @R-008
@@ -205,7 +205,7 @@ mod tests {
         // The other process lets go of Alt+Space while the machine sleeps.
         fake.taken.clear();
         assert!(reg.register_all(&mut fake).is_empty());
-        assert_eq!(fake.live.len(), 11);
+        assert_eq!(fake.live.len(), 4);
     }
 
     // @R-022
@@ -214,7 +214,7 @@ mod tests {
         let mut reg = Registry::new(&Settings::default());
         let mut fake = Fake::default();
         reg.register_all(&mut fake);
-        assert_eq!(fake.live.len(), 11);
+        assert_eq!(fake.live.len(), 4);
 
         assert!(reg.set_paused(&mut fake, true).is_empty());
         assert!(fake.live.is_empty());
@@ -222,7 +222,7 @@ mod tests {
         assert!(fake.live.is_empty(), "no registration while paused");
 
         assert!(reg.set_paused(&mut fake, false).is_empty());
-        assert_eq!(fake.live.len(), 11);
+        assert_eq!(fake.live.len(), 4);
     }
 
     #[test]

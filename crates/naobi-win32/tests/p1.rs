@@ -25,7 +25,7 @@ fn d021_p1_forwards_all_listed_messages() {
     let fwd = |m: u32, w: usize| platform::forward(m, WPARAM(w), LPARAM(0));
     assert_eq!(
         fwd(WM_HOTKEY, 1),
-        Some(AppEvent::Hotkey(HotkeyId("center".into())))
+        Some(AppEvent::Hotkey(HotkeyId("clipboard".into())))
     );
     assert!(matches!(
         fwd(WM_CLIPBOARDUPDATE, 0),

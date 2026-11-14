@@ -16,6 +16,16 @@ use naobi_core::event::AppEvent;
 use naobi_core::ids::HotkeyId;
 use naobi_core::view_source::ViewSource;
 
+/// Puts a transient child in the app's kill-on-close job, so it cannot outlive the app (a crash, a kill,
+/// a child that ignores its closed stdin). A refusal is logged and the child runs as before.
+pub fn keep_in_job(child: &std::process::Child) {
+    static JOB: std::sync::OnceLock<Option<naobi_win32::job::Job>> = std::sync::OnceLock::new();
+    let job = JOB.get_or_init(|| naobi_win32::job::Job::kill_on_close().ok());
+    if !job.as_ref().is_some_and(|j| j.assign(child)) {
+        tracing::warn!("a child process could not be put in the job object");
+    }
+}
+
 /// The `AppEvent`s a module may subscribe to. Hotkeys have their own `subscribe`; the Launcher's own
 /// hotkey, `ShowRequested`, theme changes and conflicts are the controller's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

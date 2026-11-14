@@ -125,6 +125,7 @@ fn list_in_child() -> io::Result<Vec<AppEntry>> {
         .stderr(Stdio::null())
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()?;
+    super::keep_in_job(&child);
     let mut stdout = child
         .stdout
         .take()

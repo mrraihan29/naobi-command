@@ -22,6 +22,9 @@ pub struct Monitor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
     pub hwnd: isize,
+    /// The owning process. A window handle can be reused after the window closes; with the process id
+    /// it names the same window for Restore.
+    pub pid: u32,
     pub title: String,
     /// The rectangle `SetWindowPos` takes (shadow and resize borders included). A maximized window
     /// reports the rectangle it returns to.

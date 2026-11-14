@@ -137,6 +137,7 @@ impl Fake {
         Self {
             win: WindowInfo {
                 hwnd: 1,
+                pid: 100,
                 title: "Notes".into(),
                 outer,
                 border,
@@ -209,6 +210,23 @@ fn r016_restore_returns_pre_command_rectangle() {
         s.run(Command::Restore, &mut ops, 8),
         Outcome::NothingToRestore("Notes".into())
     );
+}
+
+// @R-016
+#[test]
+fn r016_a_reused_window_handle_of_another_process_is_not_restored() {
+    let mut ops = Fake::new(r(300, 200, 900, 700), Rect::default());
+    let mut s = Snapper::default();
+    assert_eq!(s.run(Command::LeftHalf, &mut ops, 8), Outcome::Moved);
+    // The window closed and Windows gave its handle to a new window of another program.
+    ops.win.pid = 200;
+    assert_eq!(
+        s.run(Command::Restore, &mut ops, 8),
+        Outcome::NothingToRestore("Notes".into())
+    );
+    // The new window's own first command is remembered on its own.
+    assert_eq!(s.run(Command::RightHalf, &mut ops, 8), Outcome::Moved);
+    assert_eq!(s.run(Command::Restore, &mut ops, 8), Outcome::Moved);
 }
 
 // @R-016

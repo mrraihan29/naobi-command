@@ -23,7 +23,7 @@ pub enum Outcome {
 #[derive(Default)]
 pub struct Snapper {
     /// Oldest first.
-    restore: Vec<(isize, Rect)>,
+    restore: Vec<((isize, u32), Rect)>,
 }
 
 /// The display that holds the middle of `r`, else the first one.
@@ -65,7 +65,7 @@ impl Snapper {
         let visible = w.outer.shrink(&w.border);
 
         if cmd == Command::Restore {
-            let Some(i) = self.restore.iter().position(|(h, _)| *h == w.hwnd) else {
+            let Some(i) = self.restore.iter().position(|(h, _)| *h == (w.hwnd, w.pid)) else {
                 return Outcome::NothingToRestore(w.title);
             };
             let (_, rect) = self.restore[i];
@@ -96,8 +96,8 @@ impl Snapper {
             return Outcome::Refused(w.title);
         }
         // Only the first command on a window records where it was.
-        if !self.restore.iter().any(|(h, _)| *h == w.hwnd) {
-            self.restore.push((w.hwnd, recorded));
+        if !self.restore.iter().any(|(h, _)| *h == (w.hwnd, w.pid)) {
+            self.restore.push(((w.hwnd, w.pid), recorded));
             if self.restore.len() > MAX_RESTORE {
                 self.restore.remove(0);
             }

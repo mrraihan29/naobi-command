@@ -139,8 +139,12 @@ impl WindowOps for Ops {
             .iter()
             .position(|(m, _)| *m == on.0 as isize)
             .unwrap_or(0);
+        let mut pid = 0u32;
+        // SAFETY: `pid` receives the owning process id of the window just read.
+        unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
         Some(WindowInfo {
             hwnd: h.0 as isize,
+            pid,
             title: title_of(h),
             outer: if maximized {
                 rect(placement.rcNormalPosition)

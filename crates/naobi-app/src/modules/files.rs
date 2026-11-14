@@ -181,6 +181,7 @@ impl ChildBackend {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
+        super::keep_in_job(&child);
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();
             return Err(std::io::Error::other("the search child has no pipes"));

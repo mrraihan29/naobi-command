@@ -15,6 +15,7 @@ pub mod icons;
 #[cfg(feature = "perf")]
 pub mod inject;
 pub mod instance;
+pub mod job;
 pub mod net_table;
 pub mod notice;
 pub mod paste;

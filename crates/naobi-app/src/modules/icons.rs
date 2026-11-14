@@ -190,6 +190,7 @@ impl Running {
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         let mut child = command.spawn()?;
+        super::keep_in_job(&child);
         let (Some(mut stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();
             return Err(std::io::Error::other("the icon child has no pipes"));

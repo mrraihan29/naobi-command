@@ -55,6 +55,7 @@ fn r019_timed_mode_sets_and_clears_power_request() {
 #[test]
 fn r019_indefinite_has_no_timers_and_off_clears_everything() {
     let (mut a, mut p) = (Awake::default(), Port::default());
+    assert!(!a.keeps_display());
     a.indefinite(&mut p, T0);
     assert_eq!((p.power, p.timers), (Some((true, false)), Some(None)));
     a.set_display(true, &mut p, T0);
@@ -190,6 +191,7 @@ fn d024_the_list_offers_30_min_1_h_2_h_and_a_typed_custom_one() {
         out,
         naobi_core::command::Outcome::Effects(vec![naobi_core::effect::Effect::Hide])
     );
+    assert_eq!(source.actions(&items[0].id).len(), 1);
     let id = ItemId("awake.display.on".into());
     source.run(&id, ActionId("run".into()), &mut Cx::default());
     assert_eq!(

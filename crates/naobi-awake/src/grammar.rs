@@ -38,7 +38,7 @@ pub fn parse(text: &str) -> Option<Cmd> {
 /// `30m`, `1h`, `90m`, `2h`: a whole number and one unit, at least a minute and at most a day.
 fn minutes(word: &str) -> Option<i64> {
     let (digits, unit) = word.split_at(word.len().checked_sub(1)?);
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     let n: i64 = digits.parse().ok()?;

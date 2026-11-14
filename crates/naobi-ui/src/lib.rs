@@ -182,7 +182,7 @@ fn start_focus_watch(hwnd: isize) {
         Duration::from_millis(120),
         move || {
             let is_fg = naobi_win32::paste::foreground_window() == hwnd;
-            let step = watch_step(&mut was_fg, is_fg, dwm::is_cloaked(hwnd));
+            let step = watch_step(&mut was_fg, is_fg, dwm::is_cloaked_by_app(hwnd));
             if step != Watch::Keep {
                 WATCH.with(|w| {
                     if let Some(t) = w.borrow().as_ref() {

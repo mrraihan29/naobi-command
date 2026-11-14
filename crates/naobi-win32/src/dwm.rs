@@ -57,6 +57,18 @@ pub fn is_cloaked(h: isize) -> bool {
     v != 0
 }
 
+/// True only while our own cloak hides the window (`DWM_CLOAKED_APP`); a virtual desktop switch cloaks
+/// it too, with another reason, and that is not the Launcher being hidden.
+pub fn is_cloaked_by_app(h: isize) -> bool {
+    const DWM_CLOAKED_APP: u32 = 1;
+    let mut v = 0u32;
+    // SAFETY: DWMWA_CLOAKED writes one u32 into `v`, which outlives the call.
+    let _ = unsafe {
+        DwmGetWindowAttribute(hwnd(h), DWMWA_CLOAKED, &mut v as *mut _ as *mut c_void, 4)
+    };
+    v & DWM_CLOAKED_APP != 0
+}
+
 /// True when the window has `WS_EX_TOOLWINDOW` and not `WS_EX_APPWINDOW`: no taskbar button, not in Alt+Tab.
 pub fn is_tool_window(h: isize) -> bool {
     // SAFETY: reads the extended style of a window handle; an invalid handle returns 0.

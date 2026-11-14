@@ -68,7 +68,10 @@ pub fn find_program(token: &str) -> Option<Found> {
 pub fn run_in_console(line: &str) -> std::io::Result<()> {
     let shell = pick_shell(find_program)
         .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
-    let params = format!("-NoExit -EncodedCommand {}", encoded_command(line));
+    let params = format!(
+        "-NoExit -EncodedCommand {}",
+        encoded_command(&callable(line))
+    );
     if params.len() > MAX_PARAMS {
         return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
     }
@@ -79,6 +82,16 @@ pub fn run_in_console(line: &str) -> std::io::Result<()> {
 pub fn start_program(path: &str, args: &str) -> std::io::Result<()> {
     let params = (!args.is_empty()).then_some(args);
     open_with(path, params, home().as_deref())
+}
+
+/// PowerShell reads a line that opens with a quote as a string, not a program (a quoted path with args)
+/// is an error. The call operator makes it run, which is what the Owner meant.
+fn callable(line: &str) -> std::borrow::Cow<'_, str> {
+    if line.starts_with(['"', '\'']) {
+        format!("& {line}").into()
+    } else {
+        line.into()
+    }
 }
 
 /// Base64 (RFC 4648, padded) of the UTF-16LE bytes of `line`: PowerShell's -EncodedCommand.
@@ -254,6 +267,15 @@ mod tests {
         b[0x98..0x9A].copy_from_slice(&magic.to_le_bytes());
         b[0x98 + 68..0x98 + 70].copy_from_slice(&subsystem.to_le_bytes());
         b
+    }
+
+    // @R-024
+    #[test]
+    fn r024_a_line_that_starts_with_a_quote_gets_the_call_operator() {
+        assert_eq!(callable(r#""C:\a b\x.exe" -v"#), r#"& "C:\a b\x.exe" -v"#);
+        assert_eq!(callable("'x' y"), "& 'x' y");
+        assert_eq!(callable("ping a"), "ping a");
+        assert_eq!(callable("Get-Date"), "Get-Date");
     }
 
     // @R-024

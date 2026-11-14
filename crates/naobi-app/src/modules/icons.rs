@@ -225,7 +225,15 @@ pub fn parse_answer(line: &str) -> Option<(String, Option<Icon>)> {
     if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
         return None;
     }
-    let rgba = from_hex(parts.next()?)?;
+    let mut rgba = from_hex(parts.next()?)?;
+    // The renderer blends these as premultiplied (color <= alpha) and overflows when a color is
+    // above its alpha. The shell does not promise that, and a lying child must not crash the UI.
+    for p in rgba.as_chunks_mut::<4>().0 {
+        let a = p[3];
+        for c in &mut p[..3] {
+            *c = (*c).min(a);
+        }
+    }
     (rgba.len() == (w * h * 4) as usize && parts.next().is_none())
         .then(|| (key.to_owned(), Some(Icon { w, h, rgba })))
 }
@@ -295,6 +303,9 @@ mod tests {
         assert_eq!(key, "a:Contoso!App");
         assert_eq!(icon, Some(Icon { w: 2, h: 1, rgba }));
         assert_eq!(parse_answer("e:txt\t-"), Some(("e:txt".to_owned(), None)));
+        // A color above its alpha is not premultiplied; it is clamped so the renderer cannot overflow.
+        let (_, icon) = parse_answer("e:txt\t1x1\t80ff0040").unwrap_or_default();
+        assert_eq!(icon.map(|i| i.rgba), Some(vec![0x40, 0x40, 0x00, 0x40]));
         for bad in [
             "",
             "e:txt",

@@ -252,3 +252,109 @@ mod tests {
         assert_eq!(EventKind::of(&AppEvent::HotkeyConflict(hk("x"))), None);
     }
 }
+
+/// R-004: the whole registry, built the way `run` builds it but in a throwaway data folder. Returns
+/// every item `(id, title)` the sources and views offer for a spread of queries, the view ids and the
+/// hotkey ids.
+#[cfg(test)]
+mod catalog {
+    use super::*;
+    use naobi_core::command::Query;
+    use std::collections::BTreeSet;
+
+    struct Catalog {
+        items: BTreeSet<(String, String)>,
+        views: BTreeSet<String>,
+        hotkeys: BTreeSet<String>,
+    }
+
+    fn build() -> Catalog {
+        let dir = std::env::temp_dir().join(format!("naobi-catalog-{}", std::process::id()));
+        std::env::set_var("NAOBI_DATA_DIR", dir.join("data"));
+        std::env::set_var("NAOBI_SETTINGS_DIR", dir.join("settings"));
+        // The perf build keeps clipboard capture off unless a test asks for it.
+        std::env::set_var("NAOBI_TEST_CLIPBOARD", "1");
+        let mut m = Modules::new();
+        register_all(&mut m);
+        let parts = m.into_parts();
+        let mut items = BTreeSet::new();
+        let sources = parts
+            .sources
+            .iter()
+            .map(|s| &**s)
+            .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource));
+        for source in sources {
+            for text in [
+                "", "2+2", "awake", "snap", "color", "lock", "clip", "snippet", "ocr",
+            ] {
+                for i in source.items(&Query { text: text.into() }).iter() {
+                    items.insert((i.id.0.clone(), i.title.clone()));
+                }
+            }
+        }
+        let views = parts.views.iter().map(|v| v.view_id().0).collect();
+        let hotkeys = parts
+            .router
+            .hotkeys
+            .iter()
+            .map(|(h, _)| h.0.clone())
+            .collect();
+        let _ = std::fs::remove_dir_all(dir);
+        Catalog {
+            items,
+            views,
+            hotkeys,
+        }
+    }
+
+    // @R-004
+    #[test]
+    fn r004_every_module_reachable_and_no_phase2_command() {
+        let c = build();
+        let item = |id: &str| c.items.iter().any(|(i, _)| i == id);
+        let hotkey = |id: &str| c.hotkeys.contains(id);
+        // The seven modules, each by one thing the Owner can reach: a Launcher row or its own hotkey.
+        assert!(item("sys.lock"), "launcher: system commands");
+        assert!(item("calc:4"), "calculator");
+        assert!(
+            hotkey("clipboard") && c.views.contains(naobi_clipboard::view::VIEW_ID),
+            "clipboard history"
+        );
+        assert!(
+            item("win.snap_left") && hotkey("snap_left"),
+            "window management"
+        );
+        assert!(
+            item("picker.pick") && hotkey("color_picker") && c.views.contains("colors"),
+            "color picker"
+        );
+        assert!(item("aot.toggle") && hotkey("topmost"), "always on top");
+        assert!(item("awake.on"), "awake");
+        // Phase 2 (R-004): none of it is in the build, by id or by title.
+        let phase2 = [
+            "snippet",
+            "ocr",
+            "extractor",
+            "remap",
+            "powerrename",
+            "rename",
+            "hosts",
+            "peek",
+            "emoji",
+            "resizer",
+        ];
+        let named = c
+            .items
+            .iter()
+            .flat_map(|(i, t)| [i.as_str(), t.as_str()])
+            .chain(c.views.iter().map(String::as_str))
+            .chain(c.hotkeys.iter().map(String::as_str));
+        for name in named {
+            let lower = name.to_ascii_lowercase();
+            assert!(
+                !phase2.iter().any(|p| lower.contains(p)),
+                "a phase-2 name in the MVP build: {name}"
+            );
+        }
+    }
+}

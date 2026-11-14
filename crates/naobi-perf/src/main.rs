@@ -1,9 +1,11 @@
+mod all;
 mod baseline;
 mod cold_start;
 mod exe_size;
 mod hotkey;
 mod idle;
 mod keystroke;
+mod network_silence;
 mod percentile;
 mod verdict;
 
@@ -22,6 +24,7 @@ fn main() -> Result<()> {
     let (mut runs, mut items) = (None::<usize>, 10_000usize);
     let mut pinned = false;
     let mut awake = false;
+    let mut minutes = 10u64;
     while let Some(flag) = args.next() {
         let val = args.next().ok_or_else(|| anyhow!("{flag} needs a value"))?;
         match flag.as_str() {
@@ -32,6 +35,7 @@ fn main() -> Result<()> {
             "--out" => out = PathBuf::from(val),
             "--pinned" => pinned = val != "0",
             "--awake" => awake = val != "0",
+            "--minutes" => minutes = val.parse()?,
             _ => bail!("unknown flag {flag}\n{USAGE}"),
         }
     }
@@ -45,6 +49,8 @@ fn main() -> Result<()> {
         "hotkey-to-visible" => hotkey::run(&default_exe, runs.unwrap_or(200), &out),
         "keystroke-to-results" => keystroke::run(&default_exe, runs.unwrap_or(200), items, &out),
         "cold-start" => cold_start::run(&default_exe, runs.unwrap_or(10), &out),
+        "network-silence" => network_silence::run(&default_exe, minutes, &out),
+        "all" => all::run(&default_exe, &out, seconds, minutes),
         _ => bail!("{USAGE}"),
     }
 }

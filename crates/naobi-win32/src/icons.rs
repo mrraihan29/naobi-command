@@ -10,13 +10,16 @@ use windows::Win32::Graphics::Gdi::{
     CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
     BITMAPINFOHEADER, DIB_RGB_COLORS, HBITMAP, HGDIOBJ,
 };
-use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
+use windows::Win32::Storage::FileSystem::{GetDriveTypeW, FILE_ATTRIBUTE_NORMAL};
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::Shell::{
     IShellItemImageFactory, SHCreateItemFromParsingName, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON,
     SHGFI_LARGEICON, SHGFI_USEFILEATTRIBUTES, SIIGBF_ICONONLY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
+
+/// `GetDriveTypeW` for a local fixed disk.
+const DRIVE_FIXED: u32 = 3;
 
 /// The size asked of the shell for an app, twice the 22 px the row shows so it stays sharp at 200%.
 const APP_PX: i32 = 44;
@@ -33,8 +36,29 @@ pub fn with_com<T>(f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// True when `id` may be handed to the shell for an icon: a package or program name, a
+/// `{known folder}\x.exe` id, or a path on a local fixed drive. A path on a network, removable or
+/// missing drive is refused (opening it would reach the network or stall, T-030), and so is a
+/// shortcut or internet shortcut, whose own icon location is never to be followed.
+pub fn icon_id_is_local(id: &str) -> bool {
+    let lower = id.to_ascii_lowercase();
+    if lower.ends_with(".lnk") || lower.ends_with(".url") || lower.ends_with(".library-ms") {
+        return false;
+    }
+    let b = id.as_bytes();
+    if b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+        let root = HSTRING::from(format!("{}:\\", char::from(b[0]).to_ascii_uppercase()));
+        // SAFETY: a plain query on a drive root string that lives for the call.
+        return unsafe { GetDriveTypeW(&root) } == DRIVE_FIXED;
+    }
+    true
+}
+
 /// The icon of the app whose `shell:AppsFolder\<id>` entry is `id`. Call it inside `with_com`.
 pub fn app_icon(id: &str) -> Option<Icon> {
+    if !icon_id_is_local(id) {
+        return None;
+    }
     let path = HSTRING::from(format!(r"shell:AppsFolder\{id}"));
     // SAFETY: the item and the bitmap it makes are owned here; the bitmap is deleted by
     // `bitmap_pixels`' caller below.
@@ -95,7 +119,12 @@ pub fn ext_icon(ext: &str) -> Option<Icon> {
                             .iter_mut()
                             .zip(m.rgba.as_chunks::<4>().0)
                         {
-                            p[3] = if q[0] == 0 { 255 } else { 0 };
+                            if q[0] == 0 {
+                                p[3] = 255;
+                            } else {
+                                // Premultiplied: a transparent pixel has no color.
+                                *p = [0, 0, 0, 0];
+                            }
                         }
                     }
                 }
@@ -156,7 +185,7 @@ unsafe fn bitmap_pixels(hbm: HBITMAP) -> Option<Icon> {
             DIB_RGB_COLORS,
         );
         let _ = DeleteDC(dc);
-        if lines == 0 {
+        if lines != h {
             return None;
         }
         for p in bgra.as_chunks_mut::<4>().0 {

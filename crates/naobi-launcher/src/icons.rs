@@ -39,8 +39,21 @@ impl IconCache {
     }
 }
 
-/// True for a key the icon child may be asked for. An app id that is a UNC or URL path is refused,
-/// so no icon request can reach a network share (T-030); an extension is letters and digits only.
+/// What the icon child (or its watchdog) says about a key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Answer {
+    Icon(Icon),
+    /// The key has no icon: it is not asked for again.
+    Missing,
+    /// The child died, hung or did not start: ask again, a few times.
+    Retry,
+}
+
+/// True for a key the icon child may be asked for. Packages and programs are named by ids that
+/// have no colon; a path may only be `X:\` on a drive. So a UNC or device path, a URL, a `shell:`
+/// or `ms-settings:` id, an alternate stream and a `..` step are all refused, and so is a
+/// shortcut, whose icon location is never to be followed (T-030). An extension is letters and
+/// digits only.
 pub fn askable(key: &str) -> bool {
     if let Some(ext) = key.strip_prefix("e:") {
         return ext.len() <= 16 && ext.bytes().all(|b| b.is_ascii_alphanumeric());
@@ -48,11 +61,27 @@ pub fn askable(key: &str) -> bool {
     let Some(id) = key.strip_prefix("a:") else {
         return false;
     };
+    let lower = id.to_ascii_lowercase();
+    let drive = id.as_bytes();
+    let rest = if drive.len() >= 3
+        && drive[0].is_ascii_alphabetic()
+        && drive[1] == b':'
+        && drive[2] == b'\\'
+    {
+        &id[2..]
+    } else {
+        id
+    };
     !id.is_empty()
         && id.len() <= 512
         && !id.starts_with(['\\', '/'])
+        && !rest.contains(':')
         && !id.contains("//")
-        && !id.contains(":\\\\")
         && !id.contains("\\\\")
+        && !id.contains("..\\")
+        && !id.contains("\\..")
+        && !lower.ends_with(".lnk")
+        && !lower.ends_with(".url")
+        && !lower.ends_with(".library-ms")
         && !id.chars().any(char::is_control)
 }

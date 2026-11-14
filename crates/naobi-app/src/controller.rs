@@ -8,11 +8,10 @@ use naobi_core::event::AppEvent;
 use naobi_core::ids::{EntryId, HotkeyId, ViewId};
 use naobi_core::item::Item;
 use naobi_core::notice::{Notice, NoticeKind};
-use naobi_core::ui::Icon;
 use naobi_core::ui::{Screen, UiEvent};
-use naobi_launcher::icons::{askable, IconCache};
+use naobi_launcher::icons::{askable, Answer, IconCache};
 use naobi_launcher::{Clock, Launcher};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// What the controller needs from the outside.
 pub trait Host {
@@ -70,7 +69,12 @@ pub struct Controller {
     icons: IconCache,
     /// Icon keys asked for and not yet answered with a picture.
     icons_asked: HashSet<String>,
+    /// How many times the icon child failed on a key.
+    icon_failures: HashMap<String, u8>,
 }
+
+/// A key whose icon failed this many times (a crashing or hanging handler) is given up on.
+const MAX_ICON_TRIES: u8 = 2;
 
 /// How long "Copied" shows before the Launcher hides (DESIGN_SYSTEM).
 const CONFIRM_MS: u64 = 120;
@@ -85,6 +89,7 @@ impl Controller {
             asked: None,
             icons: IconCache::default(),
             icons_asked: HashSet::new(),
+            icon_failures: HashMap::new(),
         }
     }
 
@@ -119,13 +124,24 @@ impl Controller {
         }
     }
 
-    /// Icons arrived (`None` for a key that has none): the next snapshot shows them.
-    pub fn on_icons(&mut self, found: Vec<(String, Option<Icon>)>, host: &mut dyn Host) {
-        for (key, icon) in found {
-            // A key without an icon stays in `icons_asked`: it is not asked for again.
-            if let Some(icon) = icon {
-                self.icons_asked.remove(&key);
-                self.icons.insert(key, icon);
+    /// Icons arrived, or did not: the next snapshot shows them. A key that has none is not asked for
+    /// again; a key whose child died or hung is asked for again, twice at most.
+    pub fn on_icons(&mut self, found: Vec<(String, Answer)>, host: &mut dyn Host) {
+        for (key, answer) in found {
+            match answer {
+                Answer::Icon(icon) => {
+                    self.icons_asked.remove(&key);
+                    self.icon_failures.remove(&key);
+                    self.icons.insert(key, icon);
+                }
+                Answer::Missing => {}
+                Answer::Retry => {
+                    let tries = self.icon_failures.entry(key.clone()).or_insert(0);
+                    *tries += 1;
+                    if *tries < MAX_ICON_TRIES {
+                        self.icons_asked.remove(&key);
+                    }
+                }
             }
         }
         self.present(host);
@@ -332,6 +348,7 @@ mod tests {
     use naobi_core::db::Db;
     use naobi_core::ids::{ActionId, ItemId};
     use naobi_core::item::{Action, Item, ItemKind};
+    use naobi_core::ui::Icon;
     use naobi_core::ui::{Key, KeyChord};
     use naobi_launcher::frecency::Frecency;
     use std::sync::Arc;
@@ -860,11 +877,33 @@ mod tests {
             h: 1,
             rgba: vec![9, 9, 9, 255],
         };
-        c.on_icons(vec![("a:notepad".into(), Some(icon.clone()))], &mut h);
+        c.on_icons(
+            vec![("a:notepad".into(), Answer::Icon(icon.clone()))],
+            &mut h,
+        );
         assert_eq!(icon_of(&h).as_deref(), Some(&icon));
         assert_eq!(asked(&h), 1, "loaded: nothing more to ask");
         // A key with no icon is not asked for again either.
-        c.on_icons(vec![("a:other".into(), None)], &mut h);
+        c.on_icons(vec![("a:other".into(), Answer::Missing)], &mut h);
         assert_eq!(asked(&h), 1);
+    }
+
+    // @R-012
+    #[test]
+    fn r012_a_key_whose_child_died_is_asked_again_twice_then_given_up() {
+        let mut c = controller();
+        let mut h = Fake::default();
+        c.show(&mut h);
+        c.on_ui_event(UiEvent::TextChanged("note".into()), &mut h);
+        let asked = |h: &Fake| h.log.iter().filter(|l| *l == "icons a:notepad").count();
+        assert_eq!(asked(&h), 1);
+        // The child died with the key in flight: the same key is asked for once more ...
+        c.on_icons(vec![("a:notepad".into(), Answer::Retry)], &mut h);
+        assert_eq!(asked(&h), 2);
+        // ... and when that fails too the key is given up on: no loop of requests and redraws.
+        c.on_icons(vec![("a:notepad".into(), Answer::Retry)], &mut h);
+        assert_eq!(asked(&h), 2);
+        c.on_ui_event(UiEvent::TextChanged("notepa".into()), &mut h);
+        assert_eq!(asked(&h), 2);
     }
 }

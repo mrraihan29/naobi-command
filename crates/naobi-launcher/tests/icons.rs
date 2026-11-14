@@ -55,7 +55,8 @@ fn r010_a_key_that_could_reach_a_share_is_never_asked_for() {
         "e:7z",
         r"a:Microsoft.WindowsNotepad_8wekyb3d8bbwe!App",
         r"a:{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\notepad.exe",
-        r"a:C:\ProgramData\Microsoft\Windows\Start Menu\x.lnk",
+        r"a:C:\Users\me\AppData\Local\Programs\Python\Python311\python.exe",
+        "a:com.squirrel.Discord.Discord",
     ] {
         assert!(askable(good), "{good}");
     }
@@ -67,6 +68,16 @@ fn r010_a_key_that_could_reach_a_share_is_never_asked_for() {
         r"a:\evil",
         "a://evil/x",
         "a:https://evil/x",
+        r"a:C:\ProgramData\Microsoft\Windows\Start Menu\x.lnk",
+        r"a:C:\x\planted.URL",
+        "a:shell:Downloads",
+        "a:ms-settings:display",
+        r"a:C:\x\app.exe:stream",
+        r"a:\\?\C:\x.exe",
+        r"a:\\.\pipe\x",
+        r"a:C:\x\..\..\y.exe",
+        r"a:..\y.exe",
+        r"a:C:rel.exe",
         r"a:C:\\evil",
         "a:x\ny",
         "e:t.xt",

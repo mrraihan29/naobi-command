@@ -1,5 +1,5 @@
 //! Tier 2 (interactive desktop, dogfood instance quit, PowerToys Run off): starts the real exe,
-//! reads its readiness lines and drives it with Alt+Space. The `perf` feature is on for this file
+//! reads its readiness lines and drives it with Ctrl+Space. The `perf` feature is on for this file
 //! through the self dev-dependency, so the exe prints its lines and `inject` exists.
 use naobi_win32::{dwm, inject, platform, token};
 use std::io::{BufRead, BufReader};
@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 mod support {
     use super::*;
-    /// One app at a time: they all own Alt+Space.
+    /// One app at a time: they all own Ctrl+Space.
     pub static DESKTOP: Mutex<()> = Mutex::new(());
 
     pub struct App {
@@ -120,7 +120,7 @@ fn r006_hotkey_before_window_ready_is_served() {
     let app = App::launch(None);
     app.wait("tray_ready");
     let injected = platform::qpc();
-    inject::alt_space();
+    inject::launcher();
     let ready = app.wait("window_ready");
     assert!(
         ready > injected,
@@ -142,13 +142,13 @@ fn r023_hwnd_stable_across_100_cycles() {
     app.wait("window_ready");
     let hwnd = launcher().unwrap();
     for i in 0..100 {
-        inject::alt_space();
+        inject::launcher();
         assert!(
             until(Duration::from_secs(2), visible),
             "cycle {i}: not shown"
         );
         assert_eq!(launcher(), Some(hwnd), "cycle {i}: HWND changed");
-        inject::alt_space();
+        inject::launcher();
         assert!(
             until(Duration::from_secs(2), cloaked),
             "cycle {i}: not hidden"

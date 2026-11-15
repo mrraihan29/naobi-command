@@ -62,10 +62,10 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 
 #### Launcher and platform
 
-**R-008** (v1): As the owner, I press Alt+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently.
+**R-008** (v1): As the owner, I press Ctrl+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently.
 
-- Alt+Space opens the launcher from any foreground app
-- When Alt+Space is taken by another process, a visible conflict notice names the hotkey
+- Ctrl+Space opens the launcher from any foreground app
+- When Ctrl+Space is taken by another process, a visible conflict notice names the hotkey
 
 **R-012** (v2): (critical) As the owner, I type into one root search that mixes apps, files, commands, quicklinks and calculator results, ranked exact alias first, then fuzzy title match with a frecency boost of at most 20% of the fuzzy score, with file results in a trailing section because Windows Search results arrive last; Enter runs the primary action, Ctrl+Enter the secondary action, Ctrl+K opens the action panel, and Esc clears the query, then pops the view, then hides the launcher; a view opened directly by its own hotkey (for example clipboard history via Alt+Shift+V) hides on Esc instead of popping to the root view.
 
@@ -458,7 +458,7 @@ N/A under UU 27/2022 (PDP Law): the Owner processes only their own data on their
 
 ```toml
 [general]   autostart = false                     # HKCU Run value
-[hotkeys]   launcher = "Alt+Space"  clipboard = "Alt+Shift+V"  color_picker = "Win+Shift+C"
+[hotkeys]   launcher = "Ctrl+Space"  clipboard = "Alt+Shift+V"  color_picker = "Win+Shift+C"
             topmost = "Win+Ctrl+T"  snap_left = "Ctrl+Alt+Left"  # others per D-022
 [ui]        text_scale = 1.0                      # 1.0, 1.125 or 1.25
 [window]    gap = 8
@@ -532,8 +532,8 @@ sequenceDiagram
   participant U as P5 UI shell
   participant F as File search worker
   participant S as Shell
-  Note over P,W: Startup RegisterHotKey Alt+Space. On failure a Notice names the hotkey (R-008)
-  O->>W: press Alt+Space
+  Note over P,W: Startup RegisterHotKey Ctrl+Space. On failure a Notice names the hotkey (R-008)
+  O->>W: press Ctrl+Space
   W->>P: WM_HOTKEY
   P->>P: record paste target (foreground window)
   P->>C: AppEvent Hotkey(Launcher), t0
@@ -1018,7 +1018,7 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | R-005 | Out of scope for the MVP: Raycast extension compatibility, any third-party plugin system, and AI features; all modules are built into the Rust binary. | D-001, D-010 | §3.4, §6.2 T-016 | `r005_no_dynamic_loading_no_ai_calls` (tier 1 catalog test plus `cargo deny` bans) | |
 | R-006 | Performance budgets: hotkey-to-visible p95 <= 50 ms; keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results; idle working set <= 40 MB total, measured without working-set trimming; idle CPU < 0.5% averaged over 60 s; process start to tray-ready (tray icon shown, hotkeys registered) <= 300 ms, pre-warmed launcher window ready <= 1.5 s after process start, and a hotkey pressed before the window is ready is served as soon as it is; release exe <= 20 MB. The installed PowerToys is measured as the baseline. | D-034, D-013, D-021, D-025 | §3.6, §9.2 | `naobi-perf` verdicts (tray-ready <= 300 ms and window-ready <= 1.5 s are separate); `r006_percentile_function` (tier 1); `r006_hotkey_before_window_ready_is_served` (tier 2) | |
 | R-007 | The UI applies the Naobi design tokens from naobi.dev DESIGN.md with a light 'paper' theme and a dark 'stone' theme that follow the Windows app theme, embeds Inter and JetBrains Mono, uses English copy, meets WCAG 2.2 AA contrast, and every capability is operable by keyboard alone. | D-030, D-032, D-034 | §7; DESIGN_SYSTEM.md | `r007_token_pairs_meet_wcag_aa`, `r007_theme_switch_without_restart` (tier 1 with fake theme source); manual keyboard-only pass (Narrator when accessibility support is switched on, D-032) | |
-| R-008 | As the owner, I press Alt+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently. | D-012, D-018, D-029 | seq-hotkey-to-launch; ADR-0004 | `r008_alt_space_opens_launcher`, `r008_conflict_notice_names_hotkey` (tier 2, also checks the sticky banner and tray tooltip) | |
+| R-008 | As the owner, I press Ctrl+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently. | D-012, D-018, D-029 | seq-hotkey-to-launch; ADR-0004 | `r008_ctrl_space_opens_launcher`, `r008_conflict_notice_names_hotkey` (tier 2, also checks the sticky banner and tray tooltip) | |
 | R-009 | All data stays local: settings as TOML in %APPDATA%\NaobiCommand, clipboard history in SQLite with entry contents encrypted by Windows DPAPI (current user), retained for at most 30 days or 1,000 entries; clipboard updates flagged with ExcludeClipboardContentFromMonitorProcessing or CanIncludeInClipboardHistory=0 are never stored; a 'Clear clipboard history' command deletes all entries. UU 27/2022 does not apply because the owner processes only their own data on their own device. | D-014, D-015 | §4; erd; ADR-0006 | `r009_content_not_plaintext_in_db_file` (tier 2: real DPAPI cipher, scans naobi.db and naobi.db-wal), `r009_retention_purges_old_and_excess`, `r009_exclusion_flag_not_stored`, `r009_clear_history_leaves_zero` | |
 | R-010 | The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model. | D-011, D-024, D-033, D-038 | §6; dfd | `r010_main_token_not_elevated` (tier 2), `naobi-perf network-silence` (verdict id `r010_no_socket_during_session`, tier 3), `r010_file_row_icon_does_not_touch_unc` (tier 2), `r010_stride_rows_have_mitigation_test_or_risk` (tier 1, parses REPORT.md) | |
 | R-011 | The app never runs elevated in the MVP; when a module targets an elevated window it cannot control (UIPI), it shows a notice naming the window instead of failing silently. A UIAccess build is reconsidered in phase 2. | D-022 | seq-window-snap; §6.2 T-027 | `r011_pin_elevated_window_notice_and_no_change` (tier 1 with fake WindowOps; manual with an elevated Notepad) | |

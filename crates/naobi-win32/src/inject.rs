@@ -1,7 +1,7 @@
 //! Key injection for tier 2 tests and naobi-perf. Compiled only with feature `perf`.
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, SendInput, UnregisterHotKey, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_ALT, VIRTUAL_KEY, VK_LCONTROL, VK_MENU, VK_RETURN,
+    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOD_CONTROL, VIRTUAL_KEY, VK_LCONTROL, VK_MENU, VK_RETURN,
     VK_SHIFT, VK_SPACE,
 };
 
@@ -22,7 +22,7 @@ fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
     }
 }
 
-/// Presses and releases Alt+Space (the launcher hotkey).
+/// Presses and releases Alt+Space.
 pub fn alt_space() {
     let seq = [
         key(VK_MENU, false),
@@ -34,7 +34,7 @@ pub fn alt_space() {
     unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
 }
 
-/// Presses and releases Left Ctrl+Space (the owner's PowerToys Command Palette hotkey, NCMD-6).
+/// Presses and releases Left Ctrl+Space.
 pub fn ctrl_space() {
     let seq = [
         key(VK_LCONTROL, false),
@@ -44,6 +44,11 @@ pub fn ctrl_space() {
     ];
     // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
     unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
+}
+
+/// Presses the launcher hotkey (Ctrl+Space, R-008).
+pub fn launcher() {
+    ctrl_space();
 }
 
 /// Types `text` as Unicode key events, one character at a time (tier 2 tests).
@@ -89,11 +94,11 @@ impl Drop for HeldChord {
     }
 }
 
-/// Registers Alt+Space on the calling thread. None when someone else already holds it.
-pub fn hold_alt_space() -> Option<HeldChord> {
+/// Registers the launcher hotkey (Ctrl+Space) on the calling thread. None when someone else already holds it.
+pub fn hold_launcher() -> Option<HeldChord> {
     const ID: i32 = 0x7E57;
     // SAFETY: plain values; no window, so the chord belongs to this thread's message queue.
-    unsafe { RegisterHotKey(None, ID, MOD_ALT, VK_SPACE.0.into()) }
+    unsafe { RegisterHotKey(None, ID, MOD_CONTROL, VK_SPACE.0.into()) }
         .ok()
         .map(|()| HeldChord(ID))
 }

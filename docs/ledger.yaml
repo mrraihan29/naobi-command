@@ -114,10 +114,10 @@ entries:
     topic: 4
     answer: "setuju dengan semuanya!"
     recommendation: "Alt+Space untuk launcher; PowerToys Run/CmdPal dimatikan saat migrasi supaya tidak bentrok."
-    statement: "As the owner, I press Alt+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently."
+    statement: "As the owner, I press Ctrl+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently."
     acceptance:
-      - "Alt+Space opens the launcher from any foreground app"
-      - "When Alt+Space is taken by another process, a visible conflict notice names the hotkey"
+      - "Ctrl+Space opens the launcher from any foreground app"
+      - "When Ctrl+Space is taken by another process, a visible conflict notice names the hotkey"
     links:
       tickets: ["NCMD-12@1", "NCMD-13@1"]
 

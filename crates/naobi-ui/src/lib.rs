@@ -588,7 +588,7 @@ mod ui_check {
         armed_row.armed = true;
         let mut notice = screen(vec![section("System", vec![armed_row])]);
         notice.notice = Some(NoticeView {
-            message: "Alt+Space is taken by another app".into(),
+            message: "Ctrl+Space is taken by another app".into(),
         });
 
         // An armed row or a Notice keeps the primary action and Actions chips (DESIGN_SYSTEM.md).

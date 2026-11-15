@@ -1,4 +1,4 @@
-//! Tier 2 (interactive desktop, dogfood instance quit, PowerToys Run off): Alt+Space, type a name,
+//! Tier 2 (interactive desktop, dogfood instance quit, PowerToys Run off): Ctrl+Space, type a name,
 //! Enter starts the target and the Launcher cloaks. The `perf` feature is on for this file through
 //! the self dev-dependency, so `inject` and the test target source exist. The spawned exe gets a
 //! throwaway autostart key, removed when the test ends.
@@ -54,7 +54,7 @@ fn r012_hotkey_to_app_launch() {
     let launcher = || dwm::find_window(naobi_ui::TITLE);
     let ready = until(Duration::from_secs(5), || launcher().is_some());
     let shown = ready && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), || {
             launcher().is_some_and(|h| !dwm::is_cloaked(h))
         })
@@ -80,7 +80,7 @@ fn r012_hotkey_to_app_launch() {
         eprintln!("test data kept in {}", dir.display());
     }
     assert!(ready, "launcher window never appeared");
-    assert!(shown, "Alt+Space did not show the launcher");
+    assert!(shown, "Ctrl+Space did not show the launcher");
     assert!(launched, "Enter did not start the target");
     assert!(cloaked, "the launcher did not cloak after the launch");
 }
@@ -124,7 +124,7 @@ fn r012_hotkey_to_an_installed_app_from_the_catalog() {
     // The catalog is scanned in a child process after start; the shell needs about a second.
     std::thread::sleep(Duration::from_secs(5));
     let shown = ready && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), || {
             launcher().is_some_and(|h| !dwm::is_cloaked(h))
         })
@@ -154,7 +154,7 @@ fn r012_hotkey_to_an_installed_app_from_the_catalog() {
         eprintln!("test data kept in {}", dir.display());
     }
     assert!(ready, "launcher window never appeared");
-    assert!(shown, "Alt+Space did not show the launcher");
+    assert!(shown, "Ctrl+Space did not show the launcher");
     assert!(started, "Enter on \"notepad\" did not start Notepad");
     assert!(cloaked, "the launcher did not cloak after the launch");
 }
@@ -190,7 +190,7 @@ fn r007_click_outside_closes_and_a_click_on_a_row_runs_it() {
     let visible = || launcher().is_some_and(|h| !dwm::is_cloaked(h));
     let ready = until(Duration::from_secs(5), || launcher().is_some());
     let mut shown = ready && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), visible)
     };
     // Give the window the foreground and the watch a few ticks, then click beside it.
@@ -203,7 +203,7 @@ fn r007_click_outside_closes_and_a_click_on_a_row_runs_it() {
         });
     // Open again, type the target's name and click its row (the first one).
     shown = outside_closed && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), visible)
     };
     let row_ran = shown && {
@@ -256,7 +256,7 @@ fn r007_dragging_the_footer_moves_the_launcher_and_keeps_it_on_the_screen() {
     let visible = || launcher().is_some_and(|h| !dwm::is_cloaked(h));
     let ready = until(Duration::from_secs(5), || launcher().is_some());
     let shown = ready && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), visible)
     };
     std::thread::sleep(Duration::from_millis(700));

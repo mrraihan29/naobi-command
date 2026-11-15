@@ -1,5 +1,5 @@
 //! Tier 2 (interactive desktop, dogfood instance quit, PowerToys Run off): drives the real exe with
-//! Alt+Space. The `perf` feature is on for this file through the self dev-dependency, so `inject` exists.
+//! Ctrl+Space. The `perf` feature is on for this file through the self dev-dependency, so `inject` exists.
 //! Every spawned exe gets a throwaway autostart key, removed when the test ends, so a run never
 //! rewrites the Owner's Run value.
 use naobi_win32::{autostart, dwm, inject};
@@ -7,7 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// One app at a time: they all own Alt+Space.
+/// One app at a time: they all own Ctrl+Space.
 static DESKTOP: Mutex<()> = Mutex::new(());
 
 /// A throwaway autostart key for one test's spawns. Removed on drop, even when an assertion fails.
@@ -61,19 +61,19 @@ fn spawn_app(run_key: &RunKey) -> Child {
 // @R-008
 #[test]
 #[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
-fn r008_alt_space_opens_launcher() {
+fn r008_ctrl_space_opens_launcher() {
     let _desktop = DESKTOP.lock().unwrap_or_else(|e| e.into_inner());
     let run_key = RunKey::new("r008");
     let mut app = spawn_app(&run_key);
     let ready = until(Duration::from_secs(5), || launcher().is_some());
     let shown = ready && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), visible)
     };
     let _ = app.kill();
     let _ = app.wait();
     assert!(ready, "launcher window never appeared");
-    assert!(shown, "Alt+Space did not show the launcher");
+    assert!(shown, "Ctrl+Space did not show the launcher");
 }
 
 // @R-023

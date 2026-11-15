@@ -114,7 +114,7 @@ const RETIRED_HOTKEYS: [&str; 7] = [
 ];
 
 const DEFAULT_HOTKEYS: [(&str, u8, u32); 4] = [
-    ("launcher", ALT, 0x20),
+    ("launcher", CTRL, 0x20),
     ("clipboard", ALT | SHIFT, 0x56),
     ("color_picker", WIN | SHIFT, 0x43),
     ("topmost", WIN | CTRL, 0x54),
@@ -275,7 +275,7 @@ const DEFAULT_TOML: &str = r##"# Naobi Command settings. Changes apply when the 
 autostart = false
 
 [hotkeys]
-launcher = "Alt+Space"
+launcher = "Ctrl+Space"
 clipboard = "Alt+Shift+V"
 color_picker = "Win+Shift+C"
 topmost = "Win+Ctrl+T"

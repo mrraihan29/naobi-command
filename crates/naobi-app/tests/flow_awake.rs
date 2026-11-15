@@ -31,7 +31,7 @@ impl Drop for RunKey {
 fn command(line: &str) -> bool {
     let visible = || dwm::find_window(naobi_ui::TITLE).is_some_and(|h| !dwm::is_cloaked(h));
     if !visible() {
-        inject::alt_space();
+        inject::launcher();
         if !until(Duration::from_secs(3), visible) {
             return false;
         }

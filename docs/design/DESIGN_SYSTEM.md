@@ -185,7 +185,7 @@ Everything in the MVP is reachable with the keyboard (R-007). Key meaning is dec
 | Ctrl+. | Pin or unpin the clipboard entry (from Raycast) |
 | Ctrl+X | Delete the clipboard entry when the query is empty (with text in the field it stays a cut; use Ctrl+K for Delete) |
 | `>` at the start of the root search | Run mode: the run row and the run history; Enter runs, Ctrl+K offers Delete from Run History (R-024) |
-| Alt+Space | Open the Launcher (R-008) |
+| Ctrl+Space | Open the Launcher (R-008) |
 | Alt+Shift+V | Open clipboard history (R-015) |
 
 Focus model: while the Launcher is open, keyboard focus stays in the search field and the list selection is a virtual cursor exposed to assistive technology as the active descendant. In the action panel, focus moves to its filter field and Esc returns it. When the Launcher hides because of Esc or Enter, focus returns to the Paste target or the previously focused window (unless the action launched a process); when it hides because focus moved to another window, it only cloaks and that window keeps the keyboard. A paste from clipboard history restores the previous clipboard about 300 ms later for text, image and file list within the D-015 limits; rich text, HTML, spreadsheet ranges and app-private formats come back degraded (D-019 v5).

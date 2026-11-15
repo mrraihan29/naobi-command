@@ -1,4 +1,4 @@
-//! Tier 2 (interactive desktop, dogfood instance quit): Alt+Space, `>` and a command line, Enter opens
+//! Tier 2 (interactive desktop, dogfood instance quit): Ctrl+Space, `>` and a command line, Enter opens
 //! a PowerShell console that runs exactly that line and stays open, the Launcher cloaks, and the line
 //! is in no file of the data directory in plaintext (R-024, T-034). The `perf` feature is on for this
 //! file through the self dev-dependency, so `inject` exists.
@@ -77,7 +77,7 @@ fn r024_run_flow_opens_console_and_leaves_no_plaintext() {
     let launcher = || dwm::find_window(naobi_ui::TITLE);
     let ready = until(Duration::from_secs(5), || launcher().is_some());
     let shown = ready && {
-        inject::alt_space();
+        inject::launcher();
         until(Duration::from_secs(2), || {
             launcher().is_some_and(|h| !dwm::is_cloaked(h))
         })
@@ -119,7 +119,7 @@ fn r024_run_flow_opens_console_and_leaves_no_plaintext() {
         eprintln!("test data kept in {}", dir.display());
     }
     assert!(ready, "launcher window never appeared");
-    assert!(shown, "Alt+Space did not show the launcher");
+    assert!(shown, "Ctrl+Space did not show the launcher");
     assert!(launched, "Enter on the > line did not run it");
     assert!(cloaked, "the launcher did not cloak after the run");
     assert!(stayed, "the console did not stay open after the line ended");

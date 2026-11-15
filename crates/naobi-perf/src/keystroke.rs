@@ -71,7 +71,7 @@ pub fn run(exe: &Path, runs: usize, items: usize, out: &Path) -> Result<()> {
         bail!("backdrop precondition failed: the pixel under the Launcher already equals its background");
     }
     let cpu = BgCpu::start(pid);
-    inject::alt_space();
+    inject::launcher();
     let end = Instant::now() + Duration::from_secs(2);
     while screen.pixel(px, py) != bg {
         if Instant::now() > end {
@@ -125,7 +125,7 @@ pub fn run(exe: &Path, runs: usize, items: usize, out: &Path) -> Result<()> {
         }
     }
     let bg_cpu = cpu.finish(pid);
-    inject::alt_space();
+    inject::launcher();
     if upper.len() < runs {
         bail!(
             "only {} of {runs} valid runs ({discarded} discarded)",

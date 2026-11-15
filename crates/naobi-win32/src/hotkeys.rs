@@ -182,7 +182,7 @@ mod tests {
     fn r008_conflict_is_reported_and_other_chords_still_register() {
         let mut reg = Registry::new(&Settings::default());
         let mut fake = Fake {
-            taken: BTreeSet::from([0x20]), // Space: Alt+Space is owned by another process
+            taken: BTreeSet::from([0x20]), // Space: Ctrl+Space is owned by another process
             ..Fake::default()
         };
         let events = reg.register_all(&mut fake);
@@ -202,7 +202,7 @@ mod tests {
             ..Fake::default()
         };
         assert_eq!(reg.register_all(&mut fake).len(), 1);
-        // The other process lets go of Alt+Space while the machine sleeps.
+        // The other process lets go of Ctrl+Space while the machine sleeps.
         fake.taken.clear();
         assert!(reg.register_all(&mut fake).is_empty());
         assert_eq!(fake.live.len(), 4);

@@ -19,7 +19,7 @@ fn d024_default_quicklink_aliases() {
     let aliases: Vec<_> = s.quicklinks.iter().map(|q| q.alias.as_str()).collect();
     assert_eq!(aliases, ["g", "gh", "yt", "naobi"]);
     let h = &s.hotkeys;
-    assert_eq!(h["launcher"], chord(ALT, 0x20));
+    assert_eq!(h["launcher"], chord(CTRL, 0x20));
     assert_eq!(h["clipboard"], chord(ALT | SHIFT, b'V'.into()));
     assert_eq!(h["color_picker"], chord(WIN | SHIFT, b'C'.into()));
     assert_eq!(h["topmost"], chord(WIN | CTRL, b'T'.into()));

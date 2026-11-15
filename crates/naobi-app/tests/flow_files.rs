@@ -75,7 +75,7 @@ fn r013_typing_an_indexed_file_name_shows_the_files_section() {
         dwm::find_window(naobi_ui::TITLE).is_some()
     });
     std::thread::sleep(Duration::from_millis(800));
-    inject::alt_space();
+    inject::launcher();
     let opened = until(Duration::from_secs(3), || {
         dwm::find_window(naobi_ui::TITLE).is_some_and(|h| !dwm::is_cloaked(h))
     });

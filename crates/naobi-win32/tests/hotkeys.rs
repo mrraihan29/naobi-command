@@ -5,17 +5,22 @@ use std::time::{Duration, Instant};
 use naobi_core::settings::Settings;
 use naobi_win32::platform;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_NOREPEAT, VK_SPACE,
+    RegisterHotKey, UnregisterHotKey, MOD_CONTROL, MOD_NOREPEAT, VK_SPACE,
 };
 
 const PROBE_ID: i32 = 0x7F00;
 
-/// True when Alt+Space is free system-wide.
-fn alt_space_free() -> bool {
+/// True when Ctrl+Space is free system-wide.
+fn launcher_free() -> bool {
     // SAFETY: registers a probe id on this thread's queue and releases it at once; no pointers.
     unsafe {
-        let free =
-            RegisterHotKey(None, PROBE_ID, MOD_ALT | MOD_NOREPEAT, VK_SPACE.0 as u32).is_ok();
+        let free = RegisterHotKey(
+            None,
+            PROBE_ID,
+            MOD_CONTROL | MOD_NOREPEAT,
+            VK_SPACE.0 as u32,
+        )
+        .is_ok();
         if free {
             let _ = UnregisterHotKey(None, PROBE_ID);
         }
@@ -46,14 +51,14 @@ fn r022_pause_hotkeys_unregisters_all() {
         );
     });
     assert!(
-        wait_until(|| !alt_space_free()),
-        "P1 holds Alt+Space once started"
+        wait_until(|| !launcher_free()),
+        "P1 holds Ctrl+Space once started"
     );
     assert!(platform::set_hotkeys_paused(true));
-    assert!(wait_until(alt_space_free), "Pause released every chord");
+    assert!(wait_until(launcher_free), "Pause released every chord");
     assert!(platform::set_hotkeys_paused(false));
     assert!(
-        wait_until(|| !alt_space_free()),
+        wait_until(|| !launcher_free()),
         "resume registers the chords again"
     );
 }

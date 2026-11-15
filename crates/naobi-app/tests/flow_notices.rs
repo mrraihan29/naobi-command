@@ -1,4 +1,4 @@
-//! Tier 2 (interactive desktop, dogfood instance quit): another program holds Alt+Space, so the app
+//! Tier 2 (interactive desktop, dogfood instance quit): another program holds Ctrl+Space, so the app
 //! cannot register its Launcher hotkey and must raise the conflict Notice (R-008, D-018).
 use naobi_win32::{autostart, dwm, inject};
 use std::process::{Command, Stdio};
@@ -33,7 +33,7 @@ fn r008_conflict_notice_names_hotkey() {
         std::process::id()
     ));
     // This process owns the chord first (if another program already does, the conflict is there too).
-    let _held = inject::hold_alt_space();
+    let _held = inject::hold_launcher();
     let mut app = match Command::new(env!("CARGO_BIN_EXE_naobi-app"))
         .env("NAOBI_TEST_RUN_KEY", &run_key.0)
         .env("NAOBI_PERF_ITEMS", "0")

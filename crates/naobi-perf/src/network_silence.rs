@@ -52,7 +52,7 @@ fn owned(table: &[(u32, Socket)], pids: &[u32]) -> Vec<(u32, Socket)> {
 fn hide_launcher() {
     if let Some(h) = dwm::find_window(naobi_ui_title()) {
         if !dwm::is_cloaked(h) {
-            inject::alt_space();
+            inject::launcher();
         }
     }
 }
@@ -68,7 +68,7 @@ fn nap(stop: &AtomicBool, ms: u64) {
 fn session(stop: &AtomicBool) {
     let edit = EditWindow::open();
     while !stop.load(Ordering::Relaxed) {
-        inject::alt_space();
+        inject::launcher();
         nap(stop, 500);
         inject::text("calc 2+2");
         nap(stop, 500);

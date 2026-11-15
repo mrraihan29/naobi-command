@@ -113,7 +113,7 @@ fn pin_one(_child: &Child) -> Option<naobi_win32::edit_window::EditWindow> {
 /// Types `awake 30m` into the Launcher and runs it.
 fn start_awake() -> bool {
     std::thread::sleep(SETTLE);
-    naobi_win32::inject::alt_space();
+    naobi_win32::inject::launcher();
     std::thread::sleep(Duration::from_millis(600));
     naobi_win32::inject::text("awake 30m");
     std::thread::sleep(Duration::from_millis(600));

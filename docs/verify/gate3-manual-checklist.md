@@ -10,7 +10,7 @@ The automated half of Gate 3 is `cargo test --workspace`, `cargo test --workspac
 
 ## 1. R-007: keyboard only, and Narrator
 
-- [ ] **Launcher.** Alt+Space opens it; type to search; Up/Down moves; Enter runs; Tab opens the action list;
+- [ ] **Launcher.** Ctrl+Space opens it; type to search; Up/Down moves; Enter runs; Tab opens the action list;
   Esc closes. Nothing needs the mouse.
 - [ ] **Every module by keyboard.** From the Launcher, without the mouse: run an app, run a calculation (`2+2`),
   open clipboard history (Alt+Shift+V) and paste an entry, toggle Always on Top

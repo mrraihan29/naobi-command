@@ -1,4 +1,4 @@
-//! `hotkey-to-visible` (R-006): t0 = QPC just before SendInput of Alt+Space, t1 = first poll where a pixel
+//! `hotkey-to-visible` (R-006): t0 = QPC just before SendInput of Ctrl+Space, t1 = first poll where a pixel
 //! inside the Launcher rectangle of the composed desktop equals the Launcher background color.
 //! Also holds what both latency metrics share: the child exe, the pinned conditions, the backdrop.
 use crate::keystroke::parse_line;
@@ -82,12 +82,12 @@ impl App {
         })
     }
 
-    /// Waits for the readiness line `ev`; returns its QPC ticks. Fails if the exe exits (e.g. Alt+Space is taken).
+    /// Waits for the readiness line `ev`; returns its QPC ticks. Fails if the exe exits (e.g. Ctrl+Space is taken).
     pub fn wait(&mut self, ev: &str) -> Result<i64> {
         let end = Instant::now() + Duration::from_secs(10);
         loop {
             if self.child.try_wait()?.is_some() {
-                bail!("ENV: the exe exited before {ev} (is Alt+Space taken by another process?)");
+                bail!("ENV: the exe exited before {ev} (is Ctrl+Space taken by another process?)");
             }
             let left = end.saturating_duration_since(Instant::now());
             match self
@@ -190,7 +190,7 @@ pub fn run_once(
     None
 }
 
-/// Shows or hides the Launcher with Alt+Space until `cond` holds, so a run starts from a known state.
+/// Shows or hides the Launcher with Ctrl+Space until `cond` holds, so a run starts from a known state.
 fn settle(mut cond: impl FnMut() -> bool) -> bool {
     let end = Instant::now() + POLL_TIMEOUT;
     while Instant::now() < end {
@@ -214,14 +214,14 @@ pub fn prepare(exe: &Path, items: usize) -> Result<(App, Rect, Backdrop)> {
     app.wait("tray_ready")?;
     app.wait("window_ready")?;
     let hwnd = dwm::find_window(naobi_ui_title()).ok_or_else(|| anyhow!("no Launcher window"))?;
-    inject::alt_space();
+    inject::launcher();
     if !settle(|| !dwm::is_cloaked(hwnd)) {
         bail!("warm-up show never happened");
     }
     std::thread::sleep(Duration::from_millis(300));
     let rect =
         probe::window_rect(naobi_ui_title()).ok_or_else(|| anyhow!("no Launcher rectangle"))?;
-    inject::alt_space();
+    inject::launcher();
     if !settle(|| dwm::is_cloaked(hwnd)) {
         bail!("warm-up hide never happened");
     }
@@ -279,7 +279,7 @@ pub fn run(exe: &Path, runs: usize, out: &Path) -> Result<()> {
         let t = run_once(
             || screen.pixel(px, py),
             bg,
-            inject::alt_space,
+            inject::launcher,
             qpc,
             POLL_TIMEOUT,
         );
@@ -287,7 +287,7 @@ pub fn run(exe: &Path, runs: usize, out: &Path) -> Result<()> {
             Some(ticks) => ms.push(qpc_to_ms(ticks)),
             None => discarded += 1,
         }
-        inject::alt_space();
+        inject::launcher();
         if !settle(|| dwm::is_cloaked(hwnd)) {
             bail!("hide never happened");
         }

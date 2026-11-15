@@ -7,8 +7,8 @@ sequenceDiagram
   participant U as P5 UI shell
   participant F as File search worker
   participant S as Shell
-  Note over P,W: Startup RegisterHotKey Alt+Space. On failure a Notice names the hotkey (R-008)
-  O->>W: press Alt+Space
+  Note over P,W: Startup RegisterHotKey Ctrl+Space. On failure a Notice names the hotkey (R-008)
+  O->>W: press Ctrl+Space
   W->>P: WM_HOTKEY
   P->>P: record paste target (foreground window)
   P->>C: AppEvent Hotkey(Launcher), t0

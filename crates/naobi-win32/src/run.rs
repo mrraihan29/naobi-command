@@ -62,8 +62,8 @@ pub fn find_program(token: &str) -> Option<Found> {
         .find_map(|p| probe(Path::new(&p)))
 }
 
-/// Runs `line` in a new console window that stays open (a Rio window when Rio is installed under
-/// %LOCALAPPDATA%\Rio, else the default console host):
+/// Runs `line` in a new console window that stays open (an Alacritty window when it is installed under
+/// %LOCALAPPDATA%\Alacritty, else the default console host):
 /// `<shell> -NoExit -EncodedCommand <base64>`, the profile loads, working folder %USERPROFILE%.
 /// `ErrorKind::NotFound` when neither pwsh.exe nor powershell.exe resolves.
 pub fn run_in_console(line: &str) -> std::io::Result<()> {
@@ -73,9 +73,9 @@ pub fn run_in_console(line: &str) -> std::io::Result<()> {
         "-NoExit -EncodedCommand {}",
         encoded_command(&callable(line))
     );
-    // The Owner's terminal, when it is installed: the same shell and line, in a Rio window.
-    let (file, params) = match rio() {
-        Some(rio) => (rio, format!("-e \"{shell}\" {params}")),
+    // The Owner's terminal, when it is installed: the same shell and line, in an Alacritty window.
+    let (file, params) = match alacritty() {
+        Some(term) => (term, format!("-e \"{shell}\" {params}")),
         None => (shell, params),
     };
     if params.len() > MAX_PARAMS {
@@ -84,11 +84,11 @@ pub fn run_in_console(line: &str) -> std::io::Result<()> {
     open_with(&file, Some(&params), home().as_deref())
 }
 
-/// `%LOCALAPPDATA%/Rio/rio.exe` when it exists on a local path (never a UNC one, T-035).
-fn rio() -> Option<String> {
+/// `%LOCALAPPDATA%/Alacritty/alacritty.exe` when it exists on a local path (never a UNC one, T-035).
+fn alacritty() -> Option<String> {
     let path = PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
-        .join("Rio")
-        .join("rio.exe");
+        .join("Alacritty")
+        .join("alacritty.exe");
     let text = path.to_str()?;
     (!text.starts_with(r"\\") && path.is_file()).then(|| text.to_owned())
 }

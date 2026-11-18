@@ -108,17 +108,25 @@ pub struct RowView {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActionPanelView {
+    /// The selected Item's title (R-026).
+    pub title: String,
     pub filter: String,
     pub actions: Vec<ActionView>,
     pub selected: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ActionView {
     pub label: String,
     pub shortcut: Option<String>,
     /// `Some(reason)` marks the action unavailable; it is listed dimmed with the reason.
     pub reason: Option<String>,
+    /// The drawn icon's name.
+    pub glyph: String,
+    /// Actions of one group sit together; a hairline divides the groups (R-026).
+    pub group: u8,
+    /// Destroys something: listed last, in the danger style.
+    pub destructive: bool,
 }
 
 /// A Notice banner. The message names its subject; the banner is always announced.
@@ -245,6 +253,8 @@ pub enum UiEvent {
     RowHovered(usize),
     /// The view marker's back control: leaves a pushed view.
     Back,
+    /// The action panel's filter text changed.
+    PanelFilter(String),
     Dismissed,
 }
 

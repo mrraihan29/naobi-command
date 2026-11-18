@@ -425,7 +425,7 @@ The upgrade keeps one process, one window and the existing data flow: the engine
 
 | Crate | Change |
 |---|---|
-| `naobi-core` | `tokens`: the contrast calculation moves here from the test, as `contrast_failures(&Palette)`. New `theme_file`: `ThemeId`, `Density`, `Shape`, `Fonts`, `ResolvedTheme`, `parse`, `resolve`. `settings`: `[theme]` slots and `with_theme_slot(text, slot, id)`. `ui`: view marker, matched title letters, grouped actions, preview facts and swatches, theme preview. `item::Action`: glyph, group, destructive flag. `command::Outcome::Stay` keeps the Launcher open with effects and an optional row to select |
+| `naobi-core` | `tokens`: the contrast calculation moves here from the test, as `contrast_failures(&Palette)`. New `theme_file`: `ThemeId`, `Density`, `Shape`, `Fonts`, `ResolvedTheme`, `parse`, `resolve`. `settings`: `[theme]` slots and `with_theme_slot(text, slot, id)`. `ui`: view marker, matched title letters, grouped actions, preview facts and swatches, theme preview. `ui::ActionView`: glyph, group, destructive flag, set by the engine from the action id. `command::Outcome::Stay` keeps the Launcher open with effects and an optional row to select |
 | `naobi-launcher` | The ranker returns the matched title letters for shown rows. The engine fills the view marker, the panel title and the footer's view name, and passes back the selected theme for preview |
 | `naobi-clipboard` | `preview` returns the content with its facts from one decrypted read |
 | `naobi-ui` | `app.slint` takes theme tokens as properties; rows, panel, footer and panes follow the design system. `model.rs` computes line offsets for scrolling and Alt numbers, and maps match data |

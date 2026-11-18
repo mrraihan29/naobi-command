@@ -279,6 +279,8 @@ fn apply(ui: &AppWindow, s: Screen) {
     let panel = s.action_panel.as_ref();
     ui.set_panel_open(panel.is_some());
     ui.set_panel_filter(panel.map_or("", |p| p.filter.as_str()).into());
+    ui.set_panel_title(panel.map_or("", |p| p.title.as_str()).into());
+    ui.set_panel_height(panel.map_or(0.0, model::panel_height));
     let actions = panel.map(model::actions).unwrap_or_default();
     ui.set_actions(ModelRc::new(VecModel::from(actions)));
 }
@@ -427,6 +429,8 @@ pub fn run(
         ui.on_row_hovered(move |i| f(UiEvent::RowHovered(i.max(0) as usize)));
         let f = on_event.clone();
         ui.on_back_activated(move || f(UiEvent::Back));
+        let f = on_event.clone();
+        ui.on_panel_filter_edited(move |text| f(UiEvent::PanelFilter(text.into())));
         wire_keys(&ui, on_event);
     }
     // The native window exists only once the loop runs: park it off-screen, then cloak it in setup.
@@ -610,22 +614,29 @@ mod ui_check {
 
         let mut panel = results.clone();
         panel.action_panel = Some(ActionPanelView {
+            title: "Visual Studio Code".into(),
             filter: String::new(),
             actions: vec![
                 ActionView {
                     label: "Open".into(),
                     shortcut: Some("Enter".into()),
-                    reason: None,
+                    glyph: "action.open".into(),
+                    ..ActionView::default()
                 },
                 ActionView {
-                    label: "Copy path".into(),
-                    shortcut: Some("Ctrl Enter".into()),
-                    reason: None,
+                    label: "Open Containing Folder".into(),
+                    shortcut: Some("Ctrl+Enter".into()),
+                    glyph: "action.folder".into(),
+                    group: 1,
+                    ..ActionView::default()
                 },
                 ActionView {
-                    label: "Run as administrator".into(),
-                    shortcut: None,
-                    reason: Some("Not available for this app".into()),
+                    label: "Delete".into(),
+                    shortcut: Some("Ctrl+X".into()),
+                    glyph: "action.delete".into(),
+                    group: 2,
+                    destructive: true,
+                    ..ActionView::default()
                 },
             ],
             selected: 1,
@@ -763,6 +774,53 @@ mod ui_check {
         r025_kind_and_hint_end_at_the_right_edge(&ui, &window);
         r028_held_backspace_stays_in_the_view(&ui);
         r028_alt_number_runs_the_nth_visible_row(&ui, &window);
+        r026_filter_is_last_and_keeps_focus(&ui, &window);
+    }
+
+    // @R-026
+    /// While the panel is open, typing goes to its filter and the arrows still reach the core. The
+    /// filter's focus ring is on the panel's last pixels.
+    fn r026_filter_is_last_and_keeps_focus(ui: &AppWindow, window: &MinimalSoftwareWindow) {
+        use slint::platform::WindowEvent;
+        set_palette(ui, &tokens::PAPER);
+        let (_, s) = views().swap_remove(1);
+        apply(ui, s);
+        let edited = Rc::new(RefCell::new(String::new()));
+        let seen = edited.clone();
+        ui.on_panel_filter_edited(move |text| *seen.borrow_mut() = text.into());
+        let arrows = Rc::new(std::cell::Cell::new(0));
+        let count = arrows.clone();
+        ui.on_key_pressed(move |text, _, _, _| {
+            let up: slint::SharedString = SlintKey::UpArrow.into();
+            count.set(count.get() + i32::from(text == up));
+            text == up
+        });
+        let size = ui.window().size();
+        let mut px = vec![PremultipliedRgbaColor::default(); (size.width * size.height) as usize];
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        for _ in 0..2 {
+            slint::platform::update_timers_and_animations();
+            window.request_redraw();
+            window.draw_if_needed(|renderer| {
+                renderer.render(&mut px, size.width as usize);
+            });
+        }
+        assert!(ui.get_filter_focused(), "the filter has the keyboard");
+        let focus = tokens::PAPER.focus;
+        // The panel ends at 427 with a 1 px border; the ring is right above it.
+        let ring = px[(425 * size.width + 500) as usize];
+        assert_eq!(
+            (ring.red, ring.green, ring.blue),
+            (focus.r, focus.g, focus.b)
+        );
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: "o".into() });
+        assert_eq!(edited.borrow().as_str(), "o");
+        ui.window().dispatch_event(WindowEvent::KeyPressed {
+            text: SlintKey::UpArrow.into(),
+        });
+        assert_eq!(arrows.get(), 1, "Up still moves the selected action");
+        ui.set_panel_filter("".into());
     }
 
     // @R-028

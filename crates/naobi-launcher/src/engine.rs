@@ -30,7 +30,11 @@ enum Mode {
 
 struct Panel {
     target: Hit,
+    /// Every action, in display order.
+    all: Vec<Action>,
+    /// The actions the filter leaves.
     actions: Vec<Action>,
+    filter: String,
     selected: usize,
 }
 
@@ -153,6 +157,20 @@ impl Launcher {
                 if matches!(self.mode, Mode::Pushed(_)) && self.panel.is_none() {
                     self.mode = Mode::Root;
                     self.reset();
+                }
+                vec![]
+            }
+            UiEvent::PanelFilter(text) => {
+                if let Some(p) = &mut self.panel {
+                    let wanted = text.to_lowercase();
+                    p.actions = p
+                        .all
+                        .iter()
+                        .filter(|a| a.label.to_lowercase().contains(&wanted))
+                        .cloned()
+                        .collect();
+                    p.filter = text;
+                    p.selected = 0;
                 }
                 vec![]
             }
@@ -686,10 +704,13 @@ impl Launcher {
         let Some(target) = self.selected_hit().cloned() else {
             return;
         };
-        let actions = self.source(target.src).actions(target.id());
+        let mut actions = self.source(target.src).actions(target.id());
+        actions.sort_by_key(|a| action_style(&a.id.0).group);
         self.panel = Some(Panel {
             target,
+            all: actions.clone(),
             actions,
+            filter: String::new(),
             selected: 0,
         });
     }
@@ -764,16 +785,56 @@ fn step(i: usize, n: usize, delta: isize) -> usize {
     }
 }
 
+struct ActionStyle {
+    glyph: &'static str,
+    group: u8,
+    destructive: bool,
+}
+
+/// How an action looks and where it sits in the panel, by its id (R-026). Other ids are the color
+/// formats, which copy.
+fn action_style(id: &str) -> ActionStyle {
+    let (glyph, group, destructive) = match id {
+        "open" => ("action.open", 0, false),
+        "run" => ("action.run", 0, false),
+        "paste" => ("action.paste", 0, false),
+        "folder" => ("action.folder", 1, false),
+        "pin" => ("action.pin", 1, false),
+        "delete" => ("action.delete", 2, true),
+        _ => ("action.copy", 0, false),
+    };
+    ActionStyle {
+        glyph,
+        group,
+        destructive,
+    }
+}
+
 fn panel_view(p: &Panel) -> ActionPanelView {
+    let item = &p.target.item;
     ActionPanelView {
-        filter: String::new(),
+        title: item.title.clone(),
+        filter: p.filter.clone(),
         actions: p
             .actions
             .iter()
-            .map(|a| ActionView {
-                label: a.label.clone(),
-                shortcut: a.shortcut.map(|c| c.to_string()),
-                reason: a.enabled.clone().err(),
+            .map(|a| {
+                let style = action_style(&a.id.0);
+                let key = if a.id == item.primary {
+                    Some("Enter".to_owned())
+                } else if item.secondary.as_ref() == Some(&a.id) {
+                    Some("Ctrl+Enter".to_owned())
+                } else {
+                    None
+                };
+                ActionView {
+                    label: a.label.clone(),
+                    shortcut: a.shortcut.map(|c| c.to_string()).or(key),
+                    reason: a.enabled.clone().err(),
+                    glyph: style.glyph.to_owned(),
+                    group: style.group,
+                    destructive: style.destructive,
+                }
             })
             .collect(),
         selected: p.selected,

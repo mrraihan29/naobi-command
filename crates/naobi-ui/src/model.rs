@@ -204,13 +204,32 @@ pub fn actions(p: &ActionPanelView) -> Vec<ActionLine> {
     p.actions
         .iter()
         .enumerate()
-        .map(|(i, a)| ActionLine {
-            label: a.label.as_str().into(),
-            shortcut: a.shortcut.as_deref().unwrap_or_default().into(),
-            reason: a.reason.as_deref().unwrap_or_default().into(),
-            selected: i == p.selected,
+        .map(|(i, a)| {
+            let keys: Vec<SharedString> = a
+                .shortcut
+                .iter()
+                .flat_map(|s| s.split('+'))
+                .map(SharedString::from)
+                .collect();
+            ActionLine {
+                label: a.label.as_str().into(),
+                keys: ModelRc::new(VecModel::from(keys)),
+                reason: a.reason.as_deref().unwrap_or_default().into(),
+                selected: i == p.selected,
+                glyph: crate::glyphs::glyph(&a.glyph).0.into(),
+                starts_group: i > 0 && p.actions[i - 1].group != a.group,
+                danger: a.destructive,
+            }
         })
         .collect()
+}
+
+/// The action panel's height: title, rows, group hairlines and the filter, in logical px.
+pub fn panel_height(p: &ActionPanelView) -> f32 {
+    const CHROME: f32 = 2.0 + 29.0 + 38.0;
+    let rows = p.actions.len().max(1) as f32 * 32.0;
+    let groups = p.actions.windows(2).filter(|w| w[0].group != w[1].group);
+    CHROME + rows + groups.count() as f32 * 9.0
 }
 
 /// (kind, text, picture) for the preview pane. Kind 0 is no preview; the others are listed in
@@ -263,6 +282,7 @@ fn pixels(width: u32, height: u32, rgba: &[u8]) -> Option<SharedPixelBuffer<Rgba
 mod tests {
     use super::*;
     use naobi_core::ui::{ActionView, Section, ViewModel};
+    use slint::Model;
 
     fn row(title: &str) -> RowView {
         RowView {
@@ -557,19 +577,40 @@ mod tests {
     }
 
     #[test]
+    fn panel_adds_a_hairline_between_groups_only() {
+        let action = |group| ActionView {
+            label: "a".into(),
+            group,
+            ..ActionView::default()
+        };
+        let panel = ActionPanelView {
+            title: "Notepad".into(),
+            filter: String::new(),
+            actions: vec![action(0), action(0), action(2)],
+            selected: 0,
+        };
+        let starts: Vec<bool> = actions(&panel).iter().map(|a| a.starts_group).collect();
+        assert_eq!(starts, [false, false, true]);
+        assert_eq!(panel_height(&panel), 69.0 + 96.0 + 9.0);
+    }
+
+    #[test]
     fn actions_keep_labels_shortcuts_reasons_and_one_selection() {
         let panel = ActionPanelView {
+            title: "Notepad".into(),
             filter: String::new(),
             actions: vec![
                 ActionView {
                     label: "Open".into(),
                     shortcut: Some("Enter".into()),
                     reason: None,
+                    ..ActionView::default()
                 },
                 ActionView {
                     label: "Uninstall".into(),
                     shortcut: None,
                     reason: Some("Not available".into()),
+                    ..ActionView::default()
                 },
             ],
             selected: 1,
@@ -577,11 +618,11 @@ mod tests {
         let out = actions(&panel);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].label.as_str(), "Open");
-        assert_eq!(out[0].shortcut.as_str(), "Enter");
+        assert_eq!(out[0].keys.iter().collect::<Vec<_>>(), ["Enter"]);
         assert_eq!(out[0].reason.as_str(), "");
         assert!(!out[0].selected);
         assert_eq!(out[1].label.as_str(), "Uninstall");
-        assert_eq!(out[1].shortcut.as_str(), "");
+        assert_eq!(out[1].keys.row_count(), 0);
         assert_eq!(out[1].reason.as_str(), "Not available");
         assert!(out[1].selected);
     }

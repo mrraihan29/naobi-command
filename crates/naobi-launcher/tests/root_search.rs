@@ -1127,3 +1127,82 @@ fn r028_a_view_opened_by_its_hotkey_is_named_without_a_back_control() {
         "Back does not apply here"
     );
 }
+
+/// A source whose actions come in the wrong order on purpose.
+struct Menu;
+
+impl CommandSource for Menu {
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
+        vec![Item {
+            primary: ActionId("open".into()),
+            ..item("menu:1", "Report.txt")
+        }]
+        .into()
+    }
+    fn actions(&self, _id: &ItemId) -> Vec<Action> {
+        vec![
+            action("delete", "Delete"),
+            action("pin", "Pin"),
+            action("open", "Open"),
+        ]
+    }
+    fn run(&self, _id: &ItemId, act: ActionId, _cx: &mut Cx) -> Outcome {
+        Outcome::Effects(vec![Effect::Launch(LaunchTarget::ShellItem(act.0))])
+    }
+}
+
+fn menu_engine() -> Launcher {
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("in-memory db: {e}"));
+    let frecency =
+        Frecency::open(db, T0_MS / 1000).unwrap_or_else(|e| panic!("frecency open: {e}"));
+    Launcher::new(
+        vec![Box::new(Menu)],
+        vec![],
+        frecency,
+        Box::new(FakeClock(Rc::new(Cell::new(T0_MS)))),
+    )
+}
+
+// @R-026
+#[test]
+fn r026_panel_has_title_groups_and_glyphs() {
+    let mut l = menu_engine();
+    ctrl(&mut l, Key::K);
+    let panel = l.screen().action_panel.expect("panel open");
+    assert_eq!(panel.title, "Report.txt");
+    let groups: Vec<u8> = panel.actions.iter().map(|a| a.group).collect();
+    assert_eq!(groups, [0, 1, 2]);
+    assert!(panel.actions.iter().all(|a| !a.glyph.is_empty()));
+    assert_eq!(panel.actions[0].shortcut.as_deref(), Some("Enter"));
+}
+
+// @R-026
+#[test]
+fn r026_destructive_actions_come_last() {
+    let mut l = menu_engine();
+    ctrl(&mut l, Key::K);
+    let panel = l.screen().action_panel.expect("panel open");
+    let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
+    assert_eq!(labels, ["Open", "Pin", "Delete"]);
+    assert_eq!(
+        panel
+            .actions
+            .iter()
+            .map(|a| a.destructive)
+            .collect::<Vec<_>>(),
+        [false, false, true]
+    );
+}
+
+// @R-026
+#[test]
+fn r026_the_filter_narrows_the_actions_and_enter_runs_what_is_left() {
+    let mut l = menu_engine();
+    ctrl(&mut l, Key::K);
+    assert!(l.handle(UiEvent::PanelFilter("PI".into())).is_empty());
+    let panel = l.screen().action_panel.expect("panel open");
+    assert_eq!(panel.filter, "PI");
+    assert_eq!(panel.actions.len(), 1);
+    let effects = key(&mut l, Key::Enter);
+    assert!(effects.contains(&Effect::Launch(LaunchTarget::ShellItem("pin".into()))));
+}

@@ -38,6 +38,14 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("run.history", "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2", ""),
     ("quicklink", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", ""),
     ("calc", "M5 9h14M5 15h14", ""),
+    // Actions in the action panel.
+    ("action.open", "M14 5h5v5M19 5l-8 8M18 14v5H5V6h5", ""),
+    ("action.run", "M8 5l10 7-10 7z", ""),
+    ("action.paste", "M9 4h6v3H9zM7 6H5v14h14V6h-2M9 13h6M9 17h4", ""),
+    ("action.copy", "M9 9h11v11H9zM5 15V4h11", ""),
+    ("action.folder", "M3 6h6l2 3h10v10H3z", ""),
+    ("action.pin", "M14 4l6 6-5 1-4 4-1 5-3-3-4 4 4-4-3-3 5-1 4-4z", ""),
+    ("action.delete", "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13", ""),
 ];
 
 const COFFEE: &str =

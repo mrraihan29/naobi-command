@@ -198,7 +198,7 @@ fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
     assert_eq!(s.placeholder, "Search clipboard history...");
     assert_eq!(s.footer.primary.as_deref(), Some("Paste"));
     assert_eq!(s.footer.secondary.as_deref(), Some("Copy"));
-    // Ctrl+K lists Pin and Delete with their keys.
+    // Ctrl+K lists every action with its key.
     l.handle(key(Key::K, true));
     let panel = l.screen().action_panel.expect("panel");
     let keys: Vec<_> = panel
@@ -206,5 +206,5 @@ fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
         .iter()
         .filter_map(|a| a.shortcut.clone())
         .collect();
-    assert_eq!(keys, vec!["Ctrl+.", "Ctrl+X"]);
+    assert_eq!(keys, vec!["Enter", "Ctrl+Enter", "Ctrl+.", "Ctrl+X"]);
 }

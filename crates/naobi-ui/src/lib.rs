@@ -10,7 +10,7 @@ use naobi_core::tokens::{self, Palette};
 use naobi_core::ui::{Key, KeyChord, Screen, Theme, UiEvent, ViewModel};
 use naobi_win32::dwm;
 use slint::platform::Key as SlintKey;
-use slint::{ComponentHandle, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -21,7 +21,7 @@ use std::time::Duration;
 mod generated {
     slint::include_modules!();
 }
-use generated::{AppWindow, Tokens};
+use generated::{AppWindow, Line, Tokens};
 
 /// Title of the Launcher window; tier 2 tests find it by this.
 pub const TITLE: &str = "Naobi Command Launcher";
@@ -247,7 +247,10 @@ fn apply(ui: &AppWindow, s: Screen) {
     resize(ui);
 
     let lines = model::lines(&s);
-    ui.set_lines(ModelRc::new(VecModel::from(lines.items)));
+    update_lines(ui, lines.items);
+    ui.set_lines_height(lines.height);
+    ui.set_selected_top(lines.selected_top);
+    ui.set_selected_bottom(lines.selected_bottom);
     ui.set_selected(lines.selected);
     ui.set_query(s.query.as_str().into());
     ui.set_count_text(model::count_text(&s).into());
@@ -275,6 +278,26 @@ fn apply(ui: &AppWindow, s: Screen) {
     ui.set_panel_filter(panel.map_or("", |p| p.filter.as_str()).into());
     let actions = panel.map(model::actions).unwrap_or_default();
     ui.set_actions(ModelRc::new(VecModel::from(actions)));
+}
+
+/// Puts `items` into the list's model row by row, so a keystroke reuses the row elements it can
+/// instead of rebuilding them all.
+fn update_lines(ui: &AppWindow, items: Vec<Line>) {
+    let current = ui.get_lines();
+    let Some(model) = current.as_any().downcast_ref::<VecModel<Line>>() else {
+        ui.set_lines(ModelRc::new(VecModel::from(items)));
+        return;
+    };
+    while model.row_count() > items.len() {
+        model.remove(model.row_count() - 1);
+    }
+    for (i, item) in items.into_iter().enumerate() {
+        if i == model.row_count() {
+            model.push(item);
+        } else if model.row_data(i).as_ref() != Some(&item) {
+            model.set_row_data(i, item);
+        }
+    }
 }
 
 /// Maps a key event to a `Key`. Named keys need no modifier; Ctrl chords arrive as the letter or
@@ -683,6 +706,56 @@ mod ui_check {
                         &px,
                     );
                 }
+            }
+        }
+        assert_selected_row_stays_in_view(&ui, &window);
+    }
+
+    // @D-042
+    /// Headers and rows differ in height, and moving to either end of the list still shows the whole
+    /// selected row. The row is found by its accent bar on screen.
+    fn assert_selected_row_stays_in_view(ui: &AppWindow, window: &MinimalSoftwareWindow) {
+        const LIST_TOP: u32 = 68;
+        const LIST_BOTTOM: u32 = 431;
+        set_palette(ui, &tokens::PAPER);
+        for with_header in [false, true] {
+            for selected in [49, 0, 49] {
+                let rows = |from: usize, to: usize| -> Vec<RowView> {
+                    (from..to)
+                        .map(|i| row("Application", &format!("App {i}"), ""))
+                        .collect()
+                };
+                let mut s = screen(vec![
+                    Section {
+                        header: None,
+                        rows: rows(0, 40),
+                    },
+                    Section {
+                        header: with_header.then(|| "Files".to_owned()),
+                        rows: rows(40, 50),
+                    },
+                ]);
+                s.selected = selected;
+                apply(ui, s);
+                let size = ui.window().size();
+                let mut px =
+                    vec![PremultipliedRgbaColor::default(); (size.width * size.height) as usize];
+                // The first frame runs the scroll, the second shows it.
+                for _ in 0..2 {
+                    slint::platform::update_timers_and_animations();
+                    window.request_redraw();
+                    window.draw_if_needed(|renderer| {
+                        renderer.render(&mut px, size.width as usize);
+                    });
+                }
+                let accent = tokens::PAPER.accent;
+                let bar = (LIST_TOP..LIST_BOTTOM)
+                    .filter(|y| {
+                        let p = px[(y * size.width + 1) as usize];
+                        (p.red, p.green, p.blue) == (accent.r, accent.g, accent.b)
+                    })
+                    .count();
+                assert_eq!(bar, 40, "row {selected}, Files header {with_header}");
             }
         }
     }

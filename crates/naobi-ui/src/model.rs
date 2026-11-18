@@ -10,10 +10,19 @@ pub const BASE_HEIGHT: f32 = 475.0;
 /// The Launcher may take at most this share of the work area height (ui.text_scale rule).
 pub const WORK_AREA_SHARE: f32 = 0.9;
 
-/// The list lines and the line index of the selected row (-1 when there is none).
+/// A result row's height at 100% text scale, logical px (D-042).
+pub const ROW_HEIGHT: f32 = 40.0;
+/// A section header's height at 100% text scale, logical px (D-042).
+pub const SECTION_HEIGHT: f32 = 28.0;
+
+/// The list lines, the line index of the selected row (-1 when there is none), where that row sits
+/// and how tall all the lines are, in logical px.
 pub struct Lines {
     pub items: Vec<Line>,
     pub selected: i32,
+    pub selected_top: f32,
+    pub selected_bottom: f32,
+    pub height: f32,
 }
 
 pub fn color(c: Rgba) -> Color {
@@ -40,17 +49,24 @@ pub fn lines(s: &Screen) -> Lines {
     let mut items = Vec::new();
     let mut selected = -1;
     let mut row = 0;
+    let (row_height, section_height) = (ROW_HEIGHT * s.text_scale, SECTION_HEIGHT * s.text_scale);
+    let (mut top, mut selected_top, mut selected_bottom) = (0.0, 0.0, 0.0);
     for section in &s.sections {
         if let Some(header) = &section.header {
             items.push(Line {
                 is_header: true,
                 title: header.as_str().into(),
+                top,
+                height: section_height,
                 ..Default::default()
             });
+            top += section_height;
         }
         for r in &section.rows {
             if row == s.selected {
                 selected = items.len() as i32;
+                selected_top = top;
+                selected_bottom = top + row_height;
             }
             let icon = r.icon.as_deref().and_then(icon_image);
             let glyph = r
@@ -81,11 +97,20 @@ pub fn lines(s: &Screen) -> Lines {
                 glyph_region: glyph.map_or("", |g| g.1).into(),
                 glyph_trailing: trailing.flatten().map_or("", |g| g.0).into(),
                 row: row as i32,
+                top,
+                height: row_height,
             });
+            top += row_height;
             row += 1;
         }
     }
-    Lines { items, selected }
+    Lines {
+        items,
+        selected,
+        selected_top,
+        selected_bottom,
+        height: top,
+    }
 }
 
 /// The accessible name of a row: title, subtitle and kind; an empty part is left out, and an
@@ -239,6 +264,37 @@ mod tests {
         // a, b, the "Files" header, c: a click on c reports row 2, the index the engine selects by.
         assert_eq!(rows, [(false, 0), (false, 1), (true, 0), (false, 2)]);
         assert_eq!(l.selected, 3);
+    }
+
+    // @D-042
+    #[test]
+    fn d042_headers_are_28_rows_40_and_both_follow_the_text_scale() {
+        let sections = vec![
+            Section {
+                header: None,
+                rows: vec![row("a")],
+            },
+            Section {
+                header: Some("Files".into()),
+                rows: vec![row("b")],
+            },
+        ];
+        let mut s = screen(sections, 1);
+        let l = lines(&s);
+        let boxes: Vec<(f32, f32)> = l.items.iter().map(|x| (x.top, x.height)).collect();
+        assert_eq!(boxes, [(0.0, 40.0), (40.0, 28.0), (68.0, 40.0)]);
+        assert_eq!(
+            (l.selected_top, l.selected_bottom, l.height),
+            (68.0, 108.0, 108.0)
+        );
+        s.text_scale = 1.25;
+        let l = lines(&s);
+        let boxes: Vec<(f32, f32)> = l.items.iter().map(|x| (x.top, x.height)).collect();
+        assert_eq!(boxes, [(0.0, 50.0), (50.0, 35.0), (85.0, 50.0)]);
+        assert_eq!(
+            (l.selected_top, l.selected_bottom, l.height),
+            (85.0, 135.0, 135.0)
+        );
     }
 
     #[test]

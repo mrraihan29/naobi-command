@@ -1,4 +1,4 @@
-import { ListView } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import "../assets/Inter-subset.ttf";
 import "../assets/JetBrainsMono-Regular.ttf";
 
@@ -26,6 +26,9 @@ export struct Line {
     glyph-trailing: string,
     // Row number among the rows (headers have none); what a click reports.
     row: int,
+    // Where the line sits in the list, set by naobi-ui::model.
+    top: length,
+    height: length,
 }
 
 export struct ActionLine {
@@ -76,12 +79,13 @@ component Chip inherits Rectangle {
 
 component HeaderItem inherits Rectangle {
     in property <string> text;
-    height: 40px * Tokens.scale;
     accessible-role: AccessibleRole.text;
     accessible-label: root.text;
     Text {
         x: 16px;
-        y: 12px * Tokens.scale;
+        y: parent.height - self.height - 4px;
+        height: 20px * Tokens.scale;
+        vertical-alignment: center;
         text: root.text;
         font-size: 13px * Tokens.scale;
         font-weight: 500;
@@ -114,7 +118,6 @@ component ResultRow inherits Rectangle {
     // Both carry the pointer's position in the window.
     callback hovered(length, length);
     callback scrolled(length, length);
-    height: 40px * Tokens.scale;
     clip: true;
     background: line.selected ? Tokens.surface-selected : transparent;
     accessible-role: AccessibleRole.list-item;
@@ -246,16 +249,23 @@ component ResultRow inherits Rectangle {
 }
 
 // One list position: a header or a row. The role of each kind is constant, so each has its own element.
+// Its content exists only near the visible part of the list.
 component LineItem inherits Rectangle {
     in property <Line> line;
+    in property <bool> near;
     callback activated();
     callback hovered(length, length);
     callback scrolled(length, length);
-    height: 40px * Tokens.scale;
-    if line.is-header : HeaderItem {
+    y: line.top;
+    height: line.height;
+    if root.near && line.is-header : HeaderItem {
+        width: parent.width;
+        height: parent.height;
         text: line.title;
     }
-    if !line.is-header : ResultRow {
+    if root.near && !line.is-header : ResultRow {
+        width: parent.width;
+        height: parent.height;
         line: root.line;
         activated => { root.activated(); }
         hovered(x, y) => { root.hovered(x, y); }
@@ -365,9 +375,13 @@ export component AppWindow inherits Window {
     // False while the window is cloaked: nothing animates then.
     in-out property <bool> active: false;
     in property <[Line]> lines;
+    // Line index of the selected row, and where it sits.
     in property <int> selected: 0;
+    in property <length> selected-top;
+    in property <length> selected-bottom;
+    // Height of all the lines.
+    in property <length> lines-height;
     in-out property <string> query;
-    // Line index of the selected row; headers count, so the scroll math is uniform.
     in property <string> count-text;
     in property <string> notice;
     in property <string> footer-primary;
@@ -404,11 +418,15 @@ export component AppWindow inherits Window {
         if (selected < 0) {
             return;
         }
-        if (selected * 40px * Tokens.scale < -list.content-y) {
-            list.content-y = -selected * 40px * Tokens.scale;
-        } else if ((selected + 1) * 40px * Tokens.scale > -list.content-y + list.visible-height) {
-            list.content-y = -((selected + 1) * 40px * Tokens.scale - list.visible-height);
+        if (selected-top < -list.content-y) {
+            list.content-y = -selected-top;
+        } else if (selected-bottom > -list.content-y + list.visible-height) {
+            list.content-y = -(selected-bottom - list.visible-height);
         }
+    }
+    // A shorter list must not leave the view scrolled past its end.
+    changed lines-height => {
+        list.content-y = max(list.content-y, min(0px, list.visible-height - lines-height));
     }
 
     FocusScope {
@@ -532,13 +550,19 @@ export component AppWindow inherits Window {
                 }
                 HorizontalLayout {
                     vertical-stretch: 1;
-                    list := ListView {
+                    // Lines differ in height, so each is placed exactly. The list holds at most 50 rows.
+                    list := ScrollView {
                         horizontal-stretch: root.preview-kind == 0 ? 1 : 0;
                         preferred-width: 300px;
+                        content-width: self.visible-width;
+                        content-height: root.lines-height;
                         accessible-role: AccessibleRole.list;
                         accessible-label: "Results";
                         for l[i] in root.lines : LineItem {
+                            width: list.visible-width;
                             line: l;
+                            near: l.top + l.height >= -list.content-y - 80px
+                                && l.top <= -list.content-y + list.visible-height + 80px;
                             activated => { root.row-activated(l.row); }
                             hovered(x, y) => {
                                 if (abs(x - root.pointer-x) >= 1px || abs(y - root.pointer-y) >= 1px) {

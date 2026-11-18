@@ -54,6 +54,8 @@ pub struct Screen {
     /// The search field's hint while it is empty.
     pub placeholder: String,
     pub preview: Option<PreviewView>,
+    /// Facts about the previewed entry (R-027).
+    pub facts: Vec<crate::view_source::Fact>,
     pub empty: Option<EmptyView>,
     pub loading: bool,
     pub reduced_motion: bool,
@@ -209,6 +211,7 @@ impl From<ViewModel> for Screen {
             },
             placeholder: "Search apps and commands, or type > to run one...".into(),
             preview: None,
+            facts: Vec::new(),
             empty: None,
             loading: false,
             reduced_motion: false,

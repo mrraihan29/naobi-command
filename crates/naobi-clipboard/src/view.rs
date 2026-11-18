@@ -8,7 +8,7 @@ use naobi_core::effect::Effect;
 use naobi_core::ids::{ActionId, EntryId, ItemId, ViewId};
 use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
-use naobi_core::view_source::{Preview, ViewSource};
+use naobi_core::view_source::{Fact, Preview, ViewSource};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// The history is read by the Launcher and written by the capture thread.
@@ -64,6 +64,54 @@ fn first_line(preview: &str) -> String {
         .take(TITLE_CHARS)
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
+}
+
+fn fact(label: &str, value: String) -> Fact {
+    Fact {
+        label: label.to_owned(),
+        value,
+    }
+}
+
+fn counted(n: usize, word: &str) -> String {
+    let plural = if n == 1 { "" } else { "s" };
+    format!("{n} {word}{plural}")
+}
+
+/// The pixel size stored in a PNG's header.
+fn png_size(png: &[u8]) -> Option<(u32, u32)> {
+    let reader = png::Decoder::new(std::io::Cursor::new(png))
+        .read_info()
+        .ok()?;
+    let info = reader.info();
+    Some((info.width, info.height))
+}
+
+/// What the preview pane says about an entry (R-027): type, length or size, and copy time.
+fn entry_facts(meta: &EntryMeta, payload: &[u8], now: i64) -> Vec<Fact> {
+    let text = || String::from_utf8_lossy(payload);
+    let (kind, detail) = match meta.kind {
+        Kind::Text => (
+            "Text",
+            fact("Length", counted(text().chars().count(), "character")),
+        ),
+        Kind::Image => (
+            "Image",
+            fact(
+                "Size",
+                png_size(payload).map_or("Unknown".to_owned(), |(w, h)| format!("{w} x {h}")),
+            ),
+        ),
+        Kind::Files => (
+            "Files",
+            fact("Count", counted(text().lines().count(), "file")),
+        ),
+    };
+    vec![
+        fact("Type", kind.to_owned()),
+        detail,
+        fact("Copied", relative(now, meta.last_copied_at)),
+    ]
 }
 
 pub struct ClipboardView {
@@ -203,27 +251,32 @@ impl ViewSource for ClipboardView {
     }
 
     fn preview(&self, id: &ItemId) -> Option<Preview> {
+        self.pane(id).map(|(preview, _)| preview)
+    }
+
+    fn pane(&self, id: &ItemId) -> Option<(Preview, Vec<Fact>)> {
         let n = entry_id(id)?;
         let h = lock(&self.history);
         let meta = h.get(n).ok().flatten()?;
         let payload = match h.payload(n) {
             Ok(p) => p?,
-            Err(_) => return Some(Preview::Text(UNREADABLE.to_owned())),
+            Err(_) => return Some((Preview::Text(UNREADABLE.to_owned()), Vec::new())),
         };
-        match meta.kind {
-            Kind::Text => Some(Preview::Text(
+        let facts = entry_facts(&meta, &payload, h.now_s());
+        let preview = match meta.kind {
+            Kind::Text => Preview::Text(
                 String::from_utf8_lossy(&payload)
                     .chars()
                     .take(PREVIEW_CHARS)
                     .collect(),
-            )),
-            Kind::Files => Some(Preview::Files(
+            ),
+            Kind::Files => Preview::Files(
                 String::from_utf8_lossy(&payload)
                     .lines()
                     .map(str::to_owned)
                     .collect(),
-            )),
-            Kind::Image => Some(decode_png(&payload).unwrap_or_else(|| {
+            ),
+            Kind::Image => decode_png(&payload).unwrap_or_else(|| {
                 Preview::Text(
                     h.preview(n)
                         .ok()
@@ -231,8 +284,9 @@ impl ViewSource for ClipboardView {
                         .map(|p| p.to_string())
                         .unwrap_or_default(),
                 )
-            })),
-        }
+            }),
+        };
+        Some((preview, facts))
     }
 }
 
@@ -328,5 +382,35 @@ impl CommandSource for ClipboardCommands {
             },
             _ => Outcome::Done,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // @R-027
+    #[test]
+    fn r027_an_image_entry_states_its_pixel_size() {
+        let mut png_bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png_bytes, 3, 2);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().expect("header");
+            writer.write_image_data(&[0; 24]).expect("pixels");
+        }
+        let meta = EntryMeta {
+            id: 1,
+            kind: Kind::Image,
+            last_copied_at: 100,
+            pinned: false,
+            source_exe: None,
+            byte_size: png_bytes.len() as i64,
+        };
+        let facts = entry_facts(&meta, &png_bytes, 160);
+        assert_eq!(facts[0], fact("Type", "Image".into()));
+        assert_eq!(facts[1], fact("Size", "3 x 2".into()));
+        assert_eq!(facts[2], fact("Copied", "1 min ago".into()));
     }
 }

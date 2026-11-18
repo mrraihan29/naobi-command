@@ -1,6 +1,6 @@
 //! Pure mapping from `naobi_core::ui::Screen` to the Slint models. No window is needed, so these
 //! run in `cargo test -p naobi-ui`.
-use crate::generated::{ActionLine, Line, TitleRun};
+use crate::generated::{ActionLine, FactLine, Line, TitleRun};
 use naobi_core::tokens::Rgba;
 use naobi_core::ui::{ActionPanelView, PreviewView, RowView, Screen};
 use slint::{Color, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
@@ -230,6 +230,16 @@ pub fn panel_height(p: &ActionPanelView) -> f32 {
     let rows = p.actions.len().max(1) as f32 * 32.0;
     let groups = p.actions.windows(2).filter(|w| w[0].group != w[1].group);
     CHROME + rows + groups.count() as f32 * 9.0
+}
+
+pub fn facts(s: &Screen) -> Vec<FactLine> {
+    s.facts
+        .iter()
+        .map(|f| FactLine {
+            label: f.label.as_str().into(),
+            value: f.value.as_str().into(),
+        })
+        .collect()
 }
 
 /// (kind, text, picture) for the preview pane. Kind 0 is no preview; the others are listed in

@@ -275,6 +275,7 @@ fn apply(ui: &AppWindow, s: Screen) {
     ui.set_preview_kind(kind);
     ui.set_preview_text(text);
     ui.set_preview_image(picture);
+    ui.set_preview_facts(ModelRc::new(VecModel::from(model::facts(&s))));
 
     let panel = s.action_panel.as_ref();
     ui.set_panel_open(panel.is_some());
@@ -566,6 +567,13 @@ mod ui_check {
         }
     }
 
+    fn fact(label: &str, value: &str) -> naobi_core::view_source::Fact {
+        naobi_core::view_source::Fact {
+            label: label.into(),
+            value: value.into(),
+        }
+    }
+
     fn section(header: &str, rows: Vec<RowView>) -> Section {
         Section {
             header: Some(header.into()),
@@ -657,6 +665,11 @@ mod ui_check {
             ],
         )]);
         clipboard.selected = 1;
+        clipboard.facts = vec![
+            fact("Type", "Image"),
+            fact("Size", "4 x 3"),
+            fact("Copied", "3 min ago"),
+        ];
         clipboard.preview = Some(PreviewView::Image {
             width: 4,
             height: 3,

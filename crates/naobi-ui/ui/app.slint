@@ -54,6 +54,12 @@ export struct ActionLine {
     danger: bool,
 }
 
+// One labelled fact under a preview.
+export struct FactLine {
+    label: string,
+    value: string,
+}
+
 // DESIGN_SYSTEM.md tokens. The values come from naobi-core::tokens and are set once at startup.
 export global Tokens {
     in-out property <color> surface-window;
@@ -479,44 +485,81 @@ component PreviewPane inherits Rectangle {
     in property <int> kind;
     in property <string> text;
     in property <image> picture;
+    in property <[FactLine]> facts;
+    property <length> facts-height: root.facts.length == 0 ? 0px : root.facts.length * 20px * Tokens.scale + 19px;
     horizontal-stretch: 1;
     background: Tokens.surface-well;
     border-radius: 4px;
     clip: true;
-    if root.kind == 1 : Text {
-        // type.preview: JetBrains Mono.
-        x: 12px;
-        y: 12px;
-        width: parent.width - 24px;
-        text: root.text;
-        wrap: word-wrap;
-        font-family: "JetBrains Mono";
-        font-size: 13px * Tokens.scale;
-        color: Tokens.text-primary;
+    Rectangle {
+        y: 0;
+        height: parent.height - root.facts-height;
+        clip: true;
+        if root.kind == 1 : Text {
+            // type.preview: JetBrains Mono.
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            text: root.text;
+            wrap: word-wrap;
+            font-family: "JetBrains Mono";
+            font-size: 13px * Tokens.scale;
+            color: Tokens.text-primary;
+        }
+        if root.kind == 2 : Image {
+            x: 8px;
+            y: 8px;
+            width: parent.width - 16px;
+            height: parent.height - 16px;
+            source: root.picture;
+            image-fit: contain;
+        }
+        if root.kind == 4 : Text {
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            text: root.text;
+            wrap: word-wrap;
+            font-size: 13px * Tokens.scale;
+            color: Tokens.text-muted;
+        }
+        if root.kind == 5 : Text {
+            x: 12px;
+            y: 12px;
+            text: "Nothing selected";
+            font-size: 13px * Tokens.scale;
+            color: Tokens.text-muted;
+        }
     }
-    if root.kind == 2 : Image {
-        x: 8px;
-        y: 8px;
-        width: parent.width - 16px;
-        height: parent.height - 16px;
-        source: root.picture;
-        image-fit: contain;
-    }
-    if root.kind == 4 : Text {
-        x: 12px;
-        y: 12px;
-        width: parent.width - 24px;
-        text: root.text;
-        wrap: word-wrap;
-        font-size: 13px * Tokens.scale;
-        color: Tokens.text-muted;
-    }
-    if root.kind == 5 : Text {
-        x: 12px;
-        y: 12px;
-        text: "Nothing selected";
-        font-size: 13px * Tokens.scale;
-        color: Tokens.text-muted;
+    if root.facts.length > 0 : Rectangle {
+        y: parent.height - root.facts-height;
+        height: root.facts-height;
+        Rectangle { y: 0; height: 1px; background: Tokens.line-hair; }
+        VerticalLayout {
+            padding-top: 9px;
+            padding-bottom: 10px;
+            padding-left: 12px;
+            padding-right: 12px;
+            for f in root.facts : HorizontalLayout {
+                height: 20px * Tokens.scale;
+                spacing: 8px;
+                Text {
+                    width: 82px;
+                    text: f.label;
+                    font-size: 12px * Tokens.scale;
+                    color: Tokens.text-muted;
+                    vertical-alignment: center;
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: f.value;
+                    font-size: 12px * Tokens.scale;
+                    color: Tokens.text-primary;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
     }
 }
 
@@ -559,6 +602,7 @@ export component AppWindow inherits Window {
     in property <int> preview-kind;
     in property <string> preview-text;
     in property <image> preview-image;
+    in property <[FactLine]> preview-facts;
     in property <bool> panel-open;
     in-out property <string> panel-filter;
     in property <string> panel-title;
@@ -796,10 +840,17 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
-                    if root.preview-kind != 0 : PreviewPane {
-                        kind: root.preview-kind;
-                        text: root.preview-text;
-                        picture: root.preview-image;
+                    if root.preview-kind != 0 : HorizontalLayout {
+                        horizontal-stretch: 1;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        padding-right: 8px;
+                        PreviewPane {
+                            kind: root.preview-kind;
+                            text: root.preview-text;
+                            picture: root.preview-image;
+                            facts: root.preview-facts;
+                        }
                     }
                 }
                 Rectangle { height: 1px; background: Tokens.line-hair; }

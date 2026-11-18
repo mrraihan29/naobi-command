@@ -15,7 +15,7 @@ use naobi_core::ui::{
     ActionPanelView, ActionView, EmptyView, FooterView, Key, KeyChord, NoticeView, PreviewView,
     RowView, Screen, Section, UiEvent, ViewBar,
 };
-use naobi_core::view_source::{Preview, ViewSource};
+use naobi_core::view_source::{Fact, Preview, ViewSource};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -321,6 +321,7 @@ impl Launcher {
             });
         }
         let target = self.selected_hit();
+        let (preview, facts) = self.preview();
         let footer = FooterView {
             primary: target.and_then(|h| self.primary_label(h, armed == Some(h.id()))),
             secondary: target.and_then(|h| self.secondary_label(h)),
@@ -342,7 +343,8 @@ impl Launcher {
                 Mode::Pushed(i) | Mode::Hotkey(i) => self.views[i].placeholder(),
             }
             .to_owned(),
-            preview: self.preview(),
+            preview,
+            facts,
             empty: self.empty_view(),
             loading: !pending.is_empty(),
             reduced_motion: false,
@@ -735,13 +737,15 @@ impl Launcher {
             .map(|a| a.label)
     }
 
-    fn preview(&self) -> Option<PreviewView> {
-        let i = match self.mode {
-            Mode::Root => return None,
-            Mode::Pushed(i) | Mode::Hotkey(i) => i,
+    fn preview(&self) -> (Option<PreviewView>, Vec<Fact>) {
+        let (Mode::Pushed(i) | Mode::Hotkey(i)) = self.mode else {
+            return (None, Vec::new());
         };
-        let h = self.selected_hit()?;
-        match self.views[i].preview(h.id())? {
+        let Some((preview, facts)) = self.selected_hit().and_then(|h| self.views[i].pane(h.id()))
+        else {
+            return (None, Vec::new());
+        };
+        let view = match preview {
             Preview::Text(t) => Some(PreviewView::Text(t)),
             Preview::Files(f) => Some(PreviewView::Text(f.join("\n"))),
             // ponytail: image previews need a PNG decoder and RGBA conversion, not in this engine yet.
@@ -751,7 +755,8 @@ impl Launcher {
                 height: h,
                 rgba,
             }),
-        }
+        };
+        (view, facts)
     }
 
     fn selected_hit(&self) -> Option<&Hit> {

@@ -19,6 +19,13 @@ pub enum Preview {
     Files(Vec<String>),
 }
 
+/// One labelled fact shown under a preview. It never holds the entry's content (R-027).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fact {
+    pub label: String,
+    pub value: String,
+}
+
 pub trait ViewSource: CommandSource {
     fn view_id(&self) -> ViewId;
     /// The name shown in the search header and the footer.
@@ -28,6 +35,10 @@ pub trait ViewSource: CommandSource {
     /// True when the view has its own hotkey, so Esc hides instead of popping.
     fn opened_by_hotkey(&self) -> bool;
     fn preview(&self, id: &ItemId) -> Option<Preview>;
+    /// The preview and the facts about it, read together.
+    fn pane(&self, id: &ItemId) -> Option<(Preview, Vec<Fact>)> {
+        self.preview(id).map(|p| (p, Vec::new()))
+    }
     /// False when the view filters and orders its own items (a history is newest first, and its
     /// search looks inside the text), so the engine keeps them as they come.
     fn ranked(&self) -> bool {

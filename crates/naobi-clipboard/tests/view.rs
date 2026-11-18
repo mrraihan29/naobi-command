@@ -2,6 +2,7 @@
 use naobi_clipboard::testing::{FakeClock, TaggedCipher};
 use naobi_clipboard::view::{share, ClipboardCommands, ClipboardView, Shared, VIEW_ID};
 use naobi_clipboard::{Captured, Content, Flags, History};
+use naobi_core::db::schema::MIGRATIONS;
 use naobi_core::db::Db;
 use naobi_core::effect::Effect;
 use naobi_core::ids::{EntryId, ViewId};
@@ -207,4 +208,56 @@ fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
         .filter_map(|a| a.shortcut.clone())
         .collect();
     assert_eq!(keys, vec!["Enter", "Ctrl+Enter", "Ctrl+.", "Ctrl+X"]);
+}
+
+fn facts(s: &Screen) -> Vec<(String, String)> {
+    s.facts
+        .iter()
+        .map(|f| (f.label.clone(), f.value.clone()))
+        .collect()
+}
+
+fn pair(label: &str, value: &str) -> (String, String) {
+    (label.to_owned(), value.to_owned())
+}
+
+// @R-027
+#[test]
+fn r027_preview_facts_for_text_image_and_files() {
+    let (mut l, h, clock) = setup();
+    copy(&h, "a note");
+    clock.advance(120_000);
+    open(&mut l);
+    assert_eq!(
+        facts(&l.screen()),
+        [
+            pair("Type", "Text"),
+            pair("Length", "6 characters"),
+            pair("Copied", "2 min ago")
+        ]
+    );
+    h.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .on_change(Captured {
+            flags: Flags::default(),
+            marker: false,
+            owner_exe: None,
+            content: Content::Files(vec![r"C:\a.txt".into(), r"C:\b.txt".into()]),
+        })
+        .unwrap_or_else(|e| panic!("on_change: {e}"));
+    l.handle(UiEvent::TextChanged(String::new()));
+    assert_eq!(
+        facts(&l.screen()),
+        [
+            pair("Type", "Files"),
+            pair("Count", "2 files"),
+            pair("Copied", "just now")
+        ]
+    );
+}
+
+// @R-027
+#[test]
+fn r027_schema_version_unchanged() {
+    assert_eq!(MIGRATIONS.len(), 2, "the facts come from stored data");
 }

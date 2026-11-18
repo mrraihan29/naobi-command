@@ -7,6 +7,7 @@ use serde::Deserialize;
 use crate::chord::{KeyChord, ALT, CTRL, SHIFT, WIN};
 use crate::error::SettingsError;
 use crate::quicklink::Quicklink;
+use crate::theme_file;
 
 pub const MAX_FILE_BYTES: usize = 256 * 1024;
 /// D-015: the file may lower retention, never raise it.
@@ -77,12 +78,29 @@ impl Default for Aot {
     }
 }
 
+/// The Theme of each Windows app mode (R-032).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ThemeSlots {
+    pub light: String,
+    pub dark: String,
+}
+impl Default for ThemeSlots {
+    fn default() -> Self {
+        Self {
+            light: "paper".into(),
+            dark: "stone".into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub general: General,
     /// Keyed by hotkey id ("launcher", "topmost", ...).
     pub hotkeys: BTreeMap<String, KeyChord>,
     pub ui: Ui,
+    pub theme: ThemeSlots,
     pub clipboard: Clipboard,
     pub aot: Aot,
     pub quicklinks: Vec<Quicklink>,
@@ -94,6 +112,7 @@ struct Raw {
     general: General,
     hotkeys: BTreeMap<String, KeyChord>,
     ui: Ui,
+    theme: ThemeSlots,
     /// Window snapping was removed; an old file may still hold the section, which is ignored.
     #[allow(dead_code)] // naobi-allow: read only to accept a retired settings section
     window: Option<toml::Table>,
@@ -141,6 +160,7 @@ impl Default for Settings {
                 .map(|&(k, mods, vk)| (k.to_string(), KeyChord { mods, vk }))
                 .collect(),
             ui: Ui::default(),
+            theme: ThemeSlots::default(),
             clipboard: Clipboard::default(),
             aot: Aot::default(),
             quicklinks: DEFAULT_QUICKLINKS
@@ -205,6 +225,7 @@ impl Settings {
             general: raw.general,
             hotkeys,
             ui: raw.ui,
+            theme: raw.theme,
             clipboard: raw.clipboard,
             aot: raw.aot,
             ..Settings::default()
@@ -212,6 +233,21 @@ impl Settings {
         if !TEXT_SCALES.contains(&s.ui.text_scale) {
             note("ui.text_scale must be 1.0, 1.125 or 1.25; using 1.0".into());
             s.ui = Ui::default();
+        }
+        let defaults = ThemeSlots::default();
+        if !theme_file::is_theme_name(&s.theme.light) {
+            note(format!(
+                "theme.light is not a theme name; using {}",
+                defaults.light
+            ));
+            s.theme.light = defaults.light;
+        }
+        if !theme_file::is_theme_name(&s.theme.dark) {
+            note(format!(
+                "theme.dark is not a theme name; using {}",
+                defaults.dark
+            ));
+            s.theme.dark = defaults.dark;
         }
         if s.aot.border_color != "auto" && !is_hex_color(&s.aot.border_color) {
             note("aot.border_color must be \"auto\" or #RRGGBB; using auto".into());
@@ -282,6 +318,10 @@ topmost = "Win+Ctrl+T"
 
 [ui]
 text_scale = 1.0 # 1.0, 1.125 or 1.25
+
+[theme]
+light = "paper" # used when Windows is in light mode
+dark = "stone"  # used when Windows is in dark mode
 
 [clipboard]
 retention_days = 30 # may be lowered, never raised above 30

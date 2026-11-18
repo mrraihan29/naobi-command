@@ -19,6 +19,7 @@ use naobi_core::event::AppEvent;
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::Settings;
 use naobi_core::theme::{self, Look};
+use naobi_core::theme_file::{self, Catalog, ResolvedTheme};
 use naobi_core::ui::{Key, NoticeView, Screen, Theme, UiEvent, ViewModel};
 use naobi_launcher::frecency::Frecency;
 use naobi_launcher::{Clock, Launcher};
@@ -42,6 +43,12 @@ struct State {
     settings: Option<Settings>,
     look: Look,
     notices: NoticeCenter,
+    /// The Custom themes on disk.
+    catalog: Catalog,
+    /// The Theme in use.
+    theme: Option<ResolvedTheme>,
+    /// The Theme Notices that are raised now.
+    theme_notices: Vec<String>,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
@@ -54,6 +61,9 @@ static STATE: Mutex<State> = Mutex::new(State {
         reduced_motion: false,
     },
     notices: NoticeCenter::new(),
+    catalog: Catalog::new(),
+    theme: None,
+    theme_notices: Vec::new(),
 });
 
 fn state() -> std::sync::MutexGuard<'static, State> {
@@ -354,22 +364,62 @@ fn on_hotkeys_held(names: &[naobi_core::ids::HotkeyId]) {
     }
 }
 
-/// R-007: Windows changed its theme or animation setting. The look follows it, palette included.
+const THEME_SUBJECT: &str = "Theme";
+
+/// Works out the Theme for the current slot and Windows mode, redraws when it changed, and keeps the
+/// Theme Notices in step: one the Owner dismissed is not raised again until its text changes.
+fn refresh_theme(s: &mut State) {
+    let slots = s.settings.clone().unwrap_or_default().theme;
+    let (active, mut messages) = theme_file::resolve(&slots, s.look.theme, &s.catalog);
+    messages.extend(s.catalog.problems.iter().cloned());
+    let old = std::mem::replace(&mut s.theme_notices, messages.clone());
+    for gone in old.iter().filter(|m| !messages.contains(m)) {
+        s.notices.clear(THEME_SUBJECT, gone);
+    }
+    if s.theme.as_ref() != Some(&active) {
+        if let Some(ui) = &s.ui {
+            ui.set_theme(&active);
+        }
+        s.theme = Some(active);
+    }
+    for message in messages.into_iter().filter(|m| !old.contains(m)) {
+        raise_notice(
+            s,
+            Notice {
+                subject: THEME_SUBJECT.into(),
+                message,
+                kind: NoticeKind::Warning,
+            },
+        );
+    }
+    sync_tray(&s.notices);
+}
+
+/// R-007: Windows changed its theme or animation setting. The look follows it, the Theme slot included.
 fn on_theme() {
     let mut s = state();
     if let Some(look) = theme::follow(&AppEvent::ThemeChanged, &SystemTheme, s.look) {
-        let palette_changed = look.theme != s.look.theme;
+        let mode_changed = look.theme != s.look.theme;
         s.look = look;
         // The topmost borders follow Windows between light and dark too (R-018 v2).
-        if palette_changed {
+        if mode_changed {
             modules::aot::restyle();
+            refresh_theme(&mut s);
         }
         if let Some(ui) = s.ui.clone() {
-            if palette_changed {
-                ui.set_theme(look.theme);
-            }
             post_view(&ui, &s);
         }
+    }
+}
+
+/// Runs on the index worker once the themes folder settled (R-031): a saved file applies at once.
+fn on_themes_changed(dir: &Path) {
+    let catalog = modules::themes::load(dir);
+    let mut s = state();
+    s.catalog = catalog;
+    refresh_theme(&mut s);
+    if let Some(ui) = s.ui.clone() {
+        post_view(&ui, &s);
     }
 }
 
@@ -389,6 +439,7 @@ fn on_settings_changed(path: &Path) {
         for n in notices {
             raise_notice(&mut s, n);
         }
+        refresh_theme(&mut s);
     }
     // Changed chords are registered now, without a restart (D-009); a refused one raises the usual
     // conflict Notice.
@@ -540,6 +591,17 @@ pub fn run() -> anyhow::Result<()> {
     report("tray_ready");
     let mut jobs = Vec::new();
     if let Some(dir) = settings_dir {
+        let themes = modules::themes::folder(&dir);
+        if let Err(e) = std::fs::create_dir_all(&themes) {
+            tracing::warn!(error = ?e.kind(), "the themes folder was not created");
+        }
+        state().catalog = modules::themes::load(&themes);
+        jobs.push(index_worker::Job {
+            dirs: vec![(themes.clone(), false)],
+            initial: false,
+            settle: None,
+            run: Box::new(move || on_themes_changed(&themes)),
+        });
         let path = dir.join(settings_runtime::FILE_NAME);
         jobs.push(index_worker::Job {
             dirs: vec![(dir, false)],
@@ -557,9 +619,15 @@ pub fn run() -> anyhow::Result<()> {
         for n in boot_notices {
             raise_notice(&mut s, n);
         }
+        refresh_theme(&mut s);
     }
-    let look = state().look;
-    naobi_ui::run(look.theme, on_event, on_ready)?;
+    let active = {
+        let s = state();
+        s.theme
+            .clone()
+            .unwrap_or_else(|| theme_file::builtin(s.look.theme))
+    };
+    naobi_ui::run(&active, on_event, on_ready)?;
     Ok(())
 }
 

@@ -9,6 +9,7 @@ pub mod clipboard_capture;
 pub mod files;
 pub mod icons;
 pub mod picker;
+pub mod themes;
 
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;

@@ -6,8 +6,9 @@ mod model;
 
 pub use glyphs::has_own_glyph;
 
-use naobi_core::tokens::{self, Palette};
-use naobi_core::ui::{Key, KeyChord, Screen, Theme, UiEvent, ViewModel};
+use naobi_core::theme_file::ResolvedTheme;
+use naobi_core::tokens::Palette;
+use naobi_core::ui::{Key, KeyChord, Screen, UiEvent, ViewModel};
 use naobi_win32::dwm;
 use slint::platform::Key as SlintKey;
 use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
@@ -70,9 +71,10 @@ impl UiHandle {
         });
     }
 
-    /// Switches the palette while the window lives (R-007: Windows changed light or dark).
-    pub fn set_theme(&self, theme: Theme) {
-        self.on_ui(move |ui, _| set_palette(ui, palette_of(theme)));
+    /// Draws with `theme` from now on (R-007, R-030): no restart is needed.
+    pub fn set_theme(&self, theme: &ResolvedTheme) {
+        let palette = theme.palette;
+        self.on_ui(move |ui, _| set_palette(ui, &palette));
     }
 
     pub fn show(&self) {
@@ -208,13 +210,6 @@ fn show_now(ui: &AppWindow, hwnd: isize) {
     ui.set_active(true);
     dwm::show(hwnd, height);
     ui.invoke_focus_input();
-}
-
-fn palette_of(theme: Theme) -> &'static Palette {
-    match theme {
-        Theme::Paper => &tokens::PAPER,
-        Theme::Stone => &tokens::STONE,
-    }
 }
 
 fn set_palette(ui: &AppWindow, p: &Palette) {
@@ -392,12 +387,12 @@ fn wire_keys(ui: &AppWindow, on_event: Events) {
 /// Creates the Launcher window hidden, wires its events and runs the main-thread loop until quit.
 /// Once the native window exists and is cloaked, `on_ready` receives the handle.
 pub fn run(
-    theme: Theme,
+    theme: &ResolvedTheme,
     on_event: impl Fn(UiEvent) + 'static,
     on_ready: impl FnOnce(UiHandle) + Send + 'static,
 ) -> Result<(), slint::PlatformError> {
     let ui = AppWindow::new()?;
-    set_palette(&ui, palette_of(theme));
+    set_palette(&ui, &theme.palette);
     // The window size comes from Rust only: 750 x frame_height, here at 100% and no work area.
     resize(&ui);
     let on_event = Rc::new(on_event);
@@ -530,6 +525,7 @@ mod tests {
 #[cfg(test)]
 mod ui_check {
     use super::*;
+    use naobi_core::tokens;
     use naobi_core::ui::{
         ActionPanelView, ActionView, EmptyView, FooterView, NoticeView, PreviewView, RowView,
         Section,

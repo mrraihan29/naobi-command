@@ -82,3 +82,91 @@ pub const STONE: Palette = Palette {
     hair: Rgba::rgb(0x4A433A),
     strong: Rgba::rgb(0x5A5249),
 };
+
+fn luminance(c: Rgba) -> f64 {
+    let lin = |v: u8| {
+        let s = f64::from(v) / 255.0;
+        if s <= 0.03928 {
+            s / 12.92
+        } else {
+            ((s + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+}
+
+/// The WCAG contrast ratio of two opaque colors.
+pub fn contrast(a: Rgba, b: Rgba) -> f64 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// Composites `fg` (with its alpha) over an opaque `bg`.
+pub fn over(fg: Rgba, bg: Rgba) -> Rgba {
+    let mix = |f: u8, b: u8| {
+        let a = f64::from(fg.a) / 255.0;
+        (f64::from(f) * a + f64::from(b) * (1.0 - a)).round() as u8
+    };
+    Rgba {
+        r: mix(fg.r, bg.r),
+        g: mix(fg.g, bg.g),
+        b: mix(fg.b, bg.b),
+        a: 255,
+    }
+}
+
+/// (name, foreground, background, minimum ratio). Text needs 4.5:1, UI components and the accent or
+/// focus marks 3:1 (R-007).
+fn contrast_pairs(p: &Palette) -> [(&'static str, Rgba, Rgba, f64); 17] {
+    const TEXT: f64 = 4.5;
+    const UI: f64 = 3.0;
+    [
+        ("primary on window", p.text_primary, p.window, TEXT),
+        ("primary on raised", p.text_primary, p.raised, TEXT),
+        ("primary on selected", p.text_primary, p.selected, TEXT),
+        ("primary on well", p.text_primary, p.well, TEXT),
+        ("secondary on window", p.text_secondary, p.window, TEXT),
+        // Subtitles, kinds, key caps and action reasons on a selected row all use this pair. Muted
+        // ink is not listed here: paper's fails on the selected wash by design.
+        (
+            "subtitle on selected",
+            p.subtitle_selected,
+            p.selected,
+            TEXT,
+        ),
+        ("muted on window", p.text_muted, p.window, TEXT),
+        ("muted on raised", p.text_muted, p.raised, TEXT),
+        ("muted on well", p.text_muted, p.well, TEXT),
+        ("danger on window", p.danger, p.window, TEXT),
+        ("danger on selected", p.danger, p.selected, TEXT),
+        ("success on window", p.success, p.window, TEXT),
+        ("accent on window", p.accent, p.window, UI),
+        ("accent on selected", p.accent, p.selected, UI),
+        ("focus on window", p.focus, p.window, UI),
+        ("focus on raised", p.focus, p.raised, UI),
+        ("focus on selected", p.focus, p.selected, UI),
+    ]
+}
+
+/// One color pair below its WCAG 2.2 AA minimum.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContrastFailure {
+    pub pair: &'static str,
+    pub ratio: f64,
+    pub minimum: f64,
+}
+
+/// The pairs of `p` below WCAG 2.2 AA, in table order.
+pub fn contrast_failures(p: &Palette) -> Vec<ContrastFailure> {
+    contrast_pairs(p)
+        .into_iter()
+        .filter_map(|(pair, fg, bg, minimum)| {
+            let ratio = contrast(over(fg, bg), bg);
+            (ratio < minimum).then_some(ContrastFailure {
+                pair,
+                ratio,
+                minimum,
+            })
+        })
+        .collect()
+}

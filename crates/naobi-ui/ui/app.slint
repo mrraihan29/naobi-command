@@ -200,6 +200,8 @@ component ResultRow inherits Rectangle {
     // Both carry the pointer's position in the window.
     callback hovered(length, length);
     callback scrolled(length, length);
+    // The Alt number this row answers to while Alt is held; 0 for none.
+    in property <int> cue;
     clip: true;
     background: line.selected ? Tokens.surface-selected : transparent;
     accessible-role: AccessibleRole.list-item;
@@ -328,12 +330,26 @@ component ResultRow inherits Rectangle {
                 stroke-line-join: round;
             }
         }
-        if line.hint != "" : Chip {
+        if root.cue > 0 : Rectangle {
+            width: 20px;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-width: 1px;
+            border-color: Tokens.accent;
+            border-radius: 2px;
+            Text {
+                text: root.cue;
+                font-size: 12px * Tokens.scale;
+                font-weight: 600;
+                color: Tokens.text-primary;
+            }
+        }
+        if root.cue == 0 && line.hint != "" : Chip {
             y: (parent.height - self.height) / 2;
             text: line.hint;
             on-selected: line.selected;
         }
-        if line.hint == "" && line.right != "" : Text {
+        if root.cue == 0 && line.hint == "" && line.right != "" : Text {
             // type.kind.
             text: line.right;
             font-size: 12px * Tokens.scale;
@@ -364,6 +380,7 @@ component ResultRow inherits Rectangle {
 component LineItem inherits Rectangle {
     in property <Line> line;
     in property <bool> near;
+    in property <int> cue;
     callback activated();
     callback hovered(length, length);
     callback scrolled(length, length);
@@ -378,6 +395,7 @@ component LineItem inherits Rectangle {
         width: parent.width;
         height: parent.height;
         line: root.line;
+        cue: root.cue;
         activated => { root.activated(); }
         hovered(x, y) => { root.hovered(x, y); }
         scrolled(x, y) => { root.scrolled(x, y); }
@@ -520,6 +538,22 @@ export component AppWindow inherits Window {
     callback row-activated(int);
     callback row-hovered(int);
     callback back-activated();
+    // Alt shows a number on the first nine visible rows; `cue-base` is the first of them.
+    in-out property <bool> alt-held;
+    in-out property <int> cue-base;
+    out property <length> list-scroll: -list.content-y;
+    out property <length> list-height: list.visible-height;
+    callback cues-moved();
+    changed list-scroll => {
+        if (alt-held) {
+            cues-moved();
+        }
+    }
+    changed active => {
+        if (!active) {
+            alt-held = false;
+        }
+    }
     // Where the pointer last was over a row: only motion away from it selects, so a list scrolling
     // under a still pointer does not steal the selection.
     property <length> pointer-x;
@@ -545,7 +579,18 @@ export component AppWindow inherits Window {
     }
 
     FocusScope {
+        capture-key-released(e) => {
+            if (e.text == Key.Alt) {
+                root.alt-held = false;
+            }
+            reject
+        }
         capture-key-pressed(e) => {
+            if (e.text == Key.Alt) {
+                root.alt-held = true;
+                root.cues-moved();
+                return reject;
+            }
             // Backspace edits the field while it holds text; Ctrl+X cuts while text is selected.
             if (e.text == Key.Backspace && root.query != "") {
                 return reject;
@@ -690,6 +735,11 @@ export component AppWindow inherits Window {
                             line: l;
                             near: l.top + l.height >= -list.content-y - 80px
                                 && l.top <= -list.content-y + list.visible-height + 80px;
+                            cue: root.alt-held && !l.is-header && !l.disabled
+                                && l.row >= root.cue-base && l.row < root.cue-base + 9
+                                && l.top + l.height / 2 >= root.list-scroll
+                                && l.top + l.height / 2 <= root.list-scroll + root.list-height
+                                ? l.row - root.cue-base + 1 : 0;
                             activated => { root.row-activated(l.row); }
                             hovered(x, y) => {
                                 if (abs(x - root.pointer-x) >= 1px || abs(y - root.pointer-y) >= 1px) {

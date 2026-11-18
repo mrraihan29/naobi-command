@@ -121,6 +121,19 @@ pub fn lines(s: &Screen) -> Lines {
     }
 }
 
+/// The rows a person can see in the list, top to bottom: more than half of each is inside the view
+/// from `scroll` to `scroll + height`. Headers and rows that cannot run do not count.
+pub fn visible_rows(lines: impl Iterator<Item = Line>, scroll: f32, height: f32) -> Vec<usize> {
+    lines
+        .filter(|l| !l.is_header && !l.disabled)
+        .filter(|l| {
+            let middle = l.top + l.height / 2.0;
+            middle >= scroll && middle <= scroll + height
+        })
+        .map(|l| l.row.max(0) as usize)
+        .collect()
+}
+
 /// The title cut where matched and other letters meet; nothing when no letter matched.
 fn title_runs(title: &str, matched: &[u32]) -> Vec<(String, bool)> {
     if matched.is_empty() {
@@ -305,6 +318,29 @@ mod tests {
         // a, b, the "Files" header, c: a click on c reports row 2, the index the engine selects by.
         assert_eq!(rows, [(false, 0), (false, 1), (true, 0), (false, 2)]);
         assert_eq!(l.selected, 3);
+    }
+
+    // @R-028
+    #[test]
+    fn r028_visible_rows_skip_headers_disabled_rows_and_rows_mostly_out_of_view() {
+        let mut off = row("off");
+        off.disabled = true;
+        let l = lines(&screen(
+            vec![
+                Section {
+                    header: None,
+                    rows: vec![row("a"), row("b"), row("c")],
+                },
+                Section {
+                    header: Some("Files".into()),
+                    rows: vec![row("d"), off],
+                },
+            ],
+            0,
+        ));
+        // a 0-40, b 40-80, c 80-120, Files 120-148, d 148-188, off 188-228.
+        assert_eq!(visible_rows(l.items.iter().cloned(), 25.0, 130.0), [1, 2]);
+        assert_eq!(visible_rows(l.items.iter().cloned(), 101.0, 128.0), [3]);
     }
 
     // @R-025

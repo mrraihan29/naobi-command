@@ -330,6 +330,62 @@ fn key_from(text: &str, ctrl: bool) -> Option<Key> {
     }
 }
 
+/// The rows on screen now, top to bottom.
+fn visible_rows(ui: &AppWindow) -> Vec<usize> {
+    model::visible_rows(
+        ui.get_lines().iter(),
+        ui.get_list_scroll(),
+        ui.get_list_height(),
+    )
+}
+
+/// A key the window reports. Alt+1 to Alt+9 run the Nth visible row (R-028); the rest go to the core.
+fn on_key(
+    ui: &AppWindow,
+    text: &str,
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    on_event: &Events,
+) -> bool {
+    if alt && !ctrl && !shift {
+        if let Some(n @ 1..=9) = text.parse::<usize>().ok().filter(|_| text.len() == 1) {
+            if let Some(row) = visible_rows(ui).get(n - 1) {
+                on_event(UiEvent::RowActivated(*row));
+            }
+            return true;
+        }
+    }
+    match key_from(text, ctrl) {
+        Some(key) => {
+            on_event(UiEvent::Key(KeyChord {
+                key,
+                ctrl,
+                alt,
+                shift,
+            }));
+            true
+        }
+        None => false,
+    }
+}
+
+/// Connects the window's keys and its Alt number cues.
+fn wire_keys(ui: &AppWindow, on_event: Events) {
+    let weak = ui.as_weak();
+    ui.on_key_pressed(move |text, ctrl, alt, shift| {
+        weak.upgrade()
+            .is_some_and(|ui| on_key(&ui, &text, ctrl, alt, shift, &on_event))
+    });
+    let weak = ui.as_weak();
+    ui.on_cues_moved(move || {
+        if let Some(ui) = weak.upgrade() {
+            let first = visible_rows(&ui).first().copied().unwrap_or(0);
+            ui.set_cue_base(first as i32);
+        }
+    });
+}
+
 /// Creates the Launcher window hidden, wires its events and runs the main-thread loop until quit.
 /// Once the native window exists and is cloaked, `on_ready` receives the handle.
 pub fn run(
@@ -371,18 +427,7 @@ pub fn run(
         ui.on_row_hovered(move |i| f(UiEvent::RowHovered(i.max(0) as usize)));
         let f = on_event.clone();
         ui.on_back_activated(move || f(UiEvent::Back));
-        ui.on_key_pressed(move |text, ctrl, alt, shift| match key_from(&text, ctrl) {
-            Some(key) => {
-                on_event(UiEvent::Key(KeyChord {
-                    key,
-                    ctrl,
-                    alt,
-                    shift,
-                }));
-                true
-            }
-            None => false,
-        });
+        wire_keys(&ui, on_event);
     }
     // The native window exists only once the loop runs: park it off-screen, then cloak it in setup.
     ui.window()
@@ -717,6 +762,67 @@ mod ui_check {
         assert_selected_row_stays_in_view(&ui, &window);
         r025_kind_and_hint_end_at_the_right_edge(&ui, &window);
         r028_held_backspace_stays_in_the_view(&ui);
+        r028_alt_number_runs_the_nth_visible_row(&ui, &window);
+    }
+
+    // @R-028
+    /// Alt shows numbers from the first visible row, and Alt+N runs that row. The list is scrolled
+    /// to its end, so the numbers do not start at the top of the list.
+    fn r028_alt_number_runs_the_nth_visible_row(ui: &AppWindow, window: &MinimalSoftwareWindow) {
+        use slint::platform::WindowEvent;
+        let activated = Rc::new(RefCell::new(Vec::new()));
+        let seen = activated.clone();
+        wire_keys(
+            ui,
+            Rc::new(move |ev| {
+                if let UiEvent::RowActivated(row) = ev {
+                    seen.borrow_mut().push(row);
+                }
+            }),
+        );
+        let rows = (0..50)
+            .map(|i| row("Application", &format!("App {i}"), ""))
+            .collect();
+        let mut s = screen(vec![Section { header: None, rows }]);
+        s.selected = 49;
+        apply(ui, s);
+        let size = ui.window().size();
+        let mut px = vec![PremultipliedRgbaColor::default(); (size.width * size.height) as usize];
+        for _ in 0..2 {
+            slint::platform::update_timers_and_animations();
+            window.request_redraw();
+            window.draw_if_needed(|renderer| {
+                renderer.render(&mut px, size.width as usize);
+            });
+        }
+        ui.invoke_focus_input();
+        let press = |text: slint::SharedString| {
+            ui.window()
+                .dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+            ui.window()
+                .dispatch_event(WindowEvent::KeyReleased { text });
+        };
+        let alt: slint::SharedString = SlintKey::Alt.into();
+        assert!(!ui.get_alt_held(), "no cues before Alt");
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: alt.clone() });
+        assert!(ui.get_alt_held(), "cues while Alt is held");
+        assert_eq!(
+            ui.get_cue_base(),
+            41,
+            "the first row more than half in view"
+        );
+        press("1".into());
+        press("9".into());
+        press("0".into());
+        assert_eq!(
+            *activated.borrow(),
+            [41, 49],
+            "Alt+0 and missing rows do nothing"
+        );
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: alt });
+        assert!(!ui.get_alt_held(), "cues end with Alt");
     }
 
     // @R-028

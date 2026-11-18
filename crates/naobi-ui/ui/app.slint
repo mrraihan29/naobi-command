@@ -80,6 +80,9 @@ export global Tokens {
     in-out property <color> danger;
     in-out property <color> line-hair;
     in-out property <color> line-strong;
+    // The active Theme's font families.
+    in-out property <string> font-interface: "Inter";
+    in-out property <string> font-mono: "JetBrains Mono";
     // The active Theme's corner radii.
     in-out property <length> radius-row: 2px;
     in-out property <length> radius-chip: 2px;
@@ -322,7 +325,7 @@ component ResultRow inherits Rectangle {
         if line.subtitle != "" : Text {
             // type.meta for technical text, type.kind otherwise.
             text: line.subtitle;
-            font-family: line.subtitle-mono ? "JetBrains Mono" : "Inter";
+            font-family: line.subtitle-mono ? Tokens.font-mono : Tokens.font-interface;
             font-size: 12px * Tokens.scale;
             color: line.selected ? Tokens.subtitle-selected : Tokens.text-muted;
             vertical-alignment: center;
@@ -515,7 +518,7 @@ component PreviewPane inherits Rectangle {
             width: parent.width - 24px;
             text: root.text;
             wrap: word-wrap;
-            font-family: "JetBrains Mono";
+            font-family: Tokens.font-mono;
             font-size: 13px * Tokens.scale;
             color: Tokens.text-primary;
         }
@@ -609,7 +612,7 @@ export component AppWindow inherits Window {
     no-frame: true;
     always-on-top: true;
     background: Tokens.surface-window;
-    default-font-family: "Inter";
+    default-font-family: Tokens.font-interface;
 
     // Window size is set from Rust (lib.rs resize: 750 x model::frame_height). Nothing in this
     // file sizes the window, so the footer always sits at the bottom edge.

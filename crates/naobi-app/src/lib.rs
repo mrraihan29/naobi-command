@@ -27,7 +27,7 @@ use naobi_launcher::{Clock, Launcher};
 use naobi_ui::UiHandle;
 use naobi_win32::theme::SystemTheme;
 use naobi_win32::{
-    autostart, clipboard_marker, dwm, foreground, instance, notice, platform, shell_exec,
+    autostart, clipboard_marker, dwm, fonts, foreground, instance, notice, platform, shell_exec,
 };
 use notices::NoticeCenter;
 use std::cell::RefCell;
@@ -320,7 +320,11 @@ fn post_view(ui: &UiHandle, s: &State) {
     let preview = screen
         .theme_preview
         .as_deref()
-        .and_then(|id| theme_file::find(id, &s.catalog));
+        .and_then(|id| theme_file::find(id, &s.catalog))
+        .map(|mut theme| {
+            theme_file::check_fonts(&mut theme, fonts::is_installed);
+            theme
+        });
     if let Some(theme) = preview.as_ref().or(s.theme.as_ref()) {
         screen.row_height = theme.density.row_height();
         let mut drawn = s.drawn.borrow_mut();
@@ -407,7 +411,8 @@ pub(crate) fn active_palette() -> Palette {
 /// Theme Notices in step: one the Owner dismissed is not raised again until its text changes.
 fn refresh_theme(s: &mut State) {
     let slots = s.settings.clone().unwrap_or_default().theme;
-    let (active, mut messages) = theme_file::resolve(&slots, s.look.theme, &s.catalog);
+    let (mut active, mut messages) = theme_file::resolve(&slots, s.look.theme, &s.catalog);
+    messages.extend(theme_file::check_fonts(&mut active, fonts::is_installed));
     messages.extend(s.catalog.problems.iter().cloned());
     let old = std::mem::replace(&mut s.theme_notices, messages.clone());
     for gone in old.iter().filter(|m| !messages.contains(m)) {

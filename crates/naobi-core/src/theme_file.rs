@@ -529,6 +529,22 @@ pub fn contrast_message(theme: &ResolvedTheme) -> Option<String> {
     ))
 }
 
+/// Clears the font families `installed` does not know, so the embedded fonts are used, and says which
+/// ones (R-030).
+pub fn check_fonts(theme: &mut ResolvedTheme, installed: impl Fn(&str) -> bool) -> Vec<String> {
+    let id = theme.id.clone();
+    let mut messages = Vec::new();
+    for family in [&mut theme.fonts.interface, &mut theme.fonts.mono] {
+        if let Some(name) = family.as_deref().filter(|name| !installed(name)) {
+            messages.push(format!(
+                "{id}.toml: the font {name} is not installed; using the embedded font"
+            ));
+            *family = None;
+        }
+    }
+    messages
+}
+
 /// The Theme of the slot for Windows mode `mode`, and what the Owner must be told about it. A slot that
 /// names no usable Theme gives the Built-in theme of that mode.
 pub fn resolve(slots: &ThemeSlots, mode: Theme, catalog: &Catalog) -> (ResolvedTheme, Vec<String>) {
@@ -622,6 +638,20 @@ mod tests {
         assert_eq!(t.density, Density::Compact);
         assert_eq!(t.density.row_height(), 36.0);
         assert_eq!(t.fonts.interface.as_deref(), Some("Segoe UI"));
+    }
+
+    // @R-030
+    #[test]
+    fn r030_missing_font_falls_back_with_notice() {
+        let text = "[fonts]\ninterface = \"Segoe UI\"\nmono = \"Gone Mono\"\n";
+        let mut theme = parse("fonts", text).expect("parses").theme;
+        let notes = check_fonts(&mut theme, |family| family == "Segoe UI");
+        assert_eq!(theme.fonts.interface.as_deref(), Some("Segoe UI"));
+        assert_eq!(theme.fonts.mono, None);
+        assert_eq!(
+            notes,
+            ["fonts.toml: the font Gone Mono is not installed; using the embedded font"]
+        );
     }
 
     // @R-032

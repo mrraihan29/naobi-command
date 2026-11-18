@@ -150,7 +150,7 @@ pub fn run(exe: &Path, out: &Path, idle_seconds: u64, minutes: u64) -> Result<()
     hotkey::run(exe, 200, out)?;
     keystroke::run(exe, 200, ITEMS, out)?;
     cold_start::run(exe, 10, out)?;
-    idle::run(exe, idle_seconds, out, true, true)?;
+    idle::run(exe, idle_seconds, out, true, true, None)?;
     exe_size::run(exe, out)?;
     network_silence::run(exe, minutes, out)?;
     let entries: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(out)?)?;

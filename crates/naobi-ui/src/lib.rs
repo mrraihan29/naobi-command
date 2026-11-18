@@ -237,6 +237,15 @@ fn set_theme_tokens(ui: &AppWindow, theme: &ResolvedTheme) {
     t.set_radius_row(f32::from(theme.shape.row));
     t.set_radius_chip(f32::from(theme.shape.chip));
     t.set_radius_control(f32::from(theme.shape.control));
+    t.set_font_interface(theme.fonts.interface.as_deref().unwrap_or("Inter").into());
+    t.set_font_mono(
+        theme
+            .fonts
+            .mono
+            .as_deref()
+            .unwrap_or("JetBrains Mono")
+            .into(),
+    );
 }
 
 /// Sets the window height from the text scale and the work area (model::frame_height).
@@ -1059,8 +1068,11 @@ mod ui_check {
         theme.shape.row = 6;
         theme.shape.chip = 3;
         theme.shape.control = 9;
+        theme.fonts.interface = Some("Segoe UI".into());
         set_theme_tokens(ui, &theme);
         let t = ui.global::<Tokens>();
+        assert_eq!(t.get_font_interface().as_str(), "Segoe UI");
+        assert_eq!(t.get_font_mono().as_str(), "JetBrains Mono");
         assert_eq!(
             (
                 t.get_radius_row(),

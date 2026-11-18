@@ -1,5 +1,5 @@
 use crate::verdict::{record, verdict};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use naobi_win32::autostart;
 use naobi_win32::process::ProcessMetrics;
 use serde_json::json;
@@ -14,13 +14,34 @@ const SETTLE: Duration = Duration::from_secs(3);
 /// Starts `exe`, waits `SETTLE` (3 s) for start-up to finish, then samples for `seconds` and
 /// prints working set, private bytes and CPU percent of one core as JSON. Records the R-006
 /// verdicts. Fails if the process exits before the end. The process is never trimmed.
-pub fn run(exe: &Path, seconds: u64, out: &Path, pinned: bool, awake: bool) -> Result<()> {
+pub fn run(
+    exe: &Path,
+    seconds: u64,
+    out: &Path,
+    pinned: bool,
+    awake: bool,
+    theme: Option<&Path>,
+) -> Result<()> {
     // The release exe syncs the Owner's HKCU Run value with its settings; the guard puts it back.
     let _run_value = RunValue::save()?;
     let sandbox = std::env::temp_dir().join(format!("naobi-idle-{}", std::process::id()));
     // A data directory seeded beforehand (for example with 1,000 clipboard entries) is used as given
     // and left alone; otherwise the run starts from an empty one.
     let seeded = std::env::var_os("NAOBI_IDLE_DATA_DIR").map(std::path::PathBuf::from);
+    // `--theme <file>`: both Theme slots use this file, as R-030's font budget is measured with one.
+    if let Some(file) = theme {
+        let id = file
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow!("the theme file has no name"))?;
+        let settings = sandbox.join("settings");
+        std::fs::create_dir_all(settings.join("themes"))?;
+        std::fs::copy(file, settings.join("themes").join(format!("{id}.toml")))?;
+        std::fs::write(
+            settings.join("settings.toml"),
+            format!("[theme]\nlight = \"{id}\"\ndark = \"{id}\"\n"),
+        )?;
+    }
     let mut child = Command::new(exe)
         .env(
             "NAOBI_DATA_DIR",
@@ -156,6 +177,7 @@ mod tests {
             &out,
             false,
             false,
+            None,
         );
         assert!(r.is_err());
         assert!(!out.exists());

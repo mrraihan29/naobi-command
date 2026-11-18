@@ -9,6 +9,7 @@ pub mod dpapi;
 pub mod dwm;
 #[cfg(feature = "perf")]
 pub mod edit_window;
+pub mod fonts;
 pub mod foreground;
 pub mod hotkeys;
 pub mod icons;

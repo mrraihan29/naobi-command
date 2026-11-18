@@ -12,7 +12,7 @@ mod verdict;
 use anyhow::{anyhow, bail, Result};
 use std::path::PathBuf;
 
-const USAGE: &str = "usage: naobi-perf idle --exe <path> --seconds <n> [--pinned 1] [--awake 1] [--out <file>]\n       naobi-perf exe-size --exe <path> [--out <file>]\n       naobi-perf hotkey-to-visible [--exe <path>] [--runs <n>]\n       naobi-perf keystroke-to-results [--exe <path>] [--runs <n>] [--items <n>]\n       naobi-perf cold-start [--exe <path>] [--runs <n>]\n(the last three default to target/release/naobi-app.exe, built with --features perf)";
+const USAGE: &str = "usage: naobi-perf idle --exe <path> --seconds <n> [--pinned 1] [--awake 1] [--theme <file>] [--out <file>]\n       naobi-perf exe-size --exe <path> [--out <file>]\n       naobi-perf hotkey-to-visible [--exe <path>] [--runs <n>]\n       naobi-perf keystroke-to-results [--exe <path>] [--runs <n>] [--items <n>]\n       naobi-perf cold-start [--exe <path>] [--runs <n>]\n(the last three default to target/release/naobi-app.exe, built with --features perf)";
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -25,6 +25,7 @@ fn main() -> Result<()> {
     let mut pinned = false;
     let mut awake = false;
     let mut minutes = 10u64;
+    let mut theme = None;
     while let Some(flag) = args.next() {
         let val = args.next().ok_or_else(|| anyhow!("{flag} needs a value"))?;
         match flag.as_str() {
@@ -36,6 +37,7 @@ fn main() -> Result<()> {
             "--pinned" => pinned = val != "0",
             "--awake" => awake = val != "0",
             "--minutes" => minutes = val.parse()?,
+            "--theme" => theme = Some(PathBuf::from(val)),
             _ => bail!("unknown flag {flag}\n{USAGE}"),
         }
     }
@@ -44,7 +46,7 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| PathBuf::from("target/release/naobi-app.exe"));
     let exe = exe.ok_or_else(|| anyhow!("--exe is required\n{USAGE}"));
     match cmd.as_str() {
-        "idle" => idle::run(&exe?, seconds, &out, pinned, awake),
+        "idle" => idle::run(&exe?, seconds, &out, pinned, awake, theme.as_deref()),
         "exe-size" => exe_size::run(&exe?, &out),
         "hotkey-to-visible" => hotkey::run(&default_exe, runs.unwrap_or(200), &out),
         "keystroke-to-results" => keystroke::run(&default_exe, runs.unwrap_or(200), items, &out),

@@ -44,6 +44,11 @@ pub enum Outcome {
     Done,
     /// The action changed what the view lists (pin, delete): the Launcher stays open and ranks again.
     Refresh,
+    /// Like `Refresh`, with effects to run and optionally the row to select afterwards.
+    Stay {
+        effects: Vec<Effect>,
+        select: Option<ItemId>,
+    },
     Effects(Vec<Effect>),
     Failed(Notice),
 }

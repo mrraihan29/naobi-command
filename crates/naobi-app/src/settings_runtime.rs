@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use naobi_core::error::SettingsError;
 use naobi_core::notice::{Notice, NoticeKind};
-use naobi_core::settings::{Settings, MAX_FILE_BYTES};
+use naobi_core::settings::{with_theme_slot, Settings, MAX_FILE_BYTES};
 
 pub const FILE_NAME: &str = "settings.toml";
 
@@ -52,6 +52,24 @@ pub fn reload(path: &Path, last: &Settings) -> (Settings, Vec<Notice>) {
     }
 }
 
+/// Sets Theme slot `slot` in the Settings file and returns the settings it now holds (R-031). The file
+/// is replaced whole through a temporary file, and one that does not parse is left alone (T-040).
+pub fn write_theme_slot(path: &Path, slot: &str, id: &str) -> Result<Settings, String> {
+    let text = read_capped(path).ok_or("The settings file could not be read.")?;
+    let next = with_theme_slot(&text, slot, id)
+        .map_err(|_| "Fix the settings file first: it could not be updated.")?;
+    let settings = Settings::parse(&next)
+        .map_err(|_| "The settings file could not be updated.")?
+        .settings;
+    let temporary = path.with_extension("toml.tmp");
+    let written = fs::write(&temporary, next).and_then(|()| fs::rename(&temporary, path));
+    if written.is_err() {
+        let _ = fs::remove_file(&temporary);
+        return Err("The settings file could not be written.".to_owned());
+    }
+    Ok(settings)
+}
+
 fn notice(line: Option<usize>, message: &str, kind: NoticeKind) -> Notice {
     let text = match line {
         Some(n) => format!("{FILE_NAME} line {n}: {message}"),
@@ -92,6 +110,23 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    // @R-031
+    #[test]
+    fn r031_enter_applies_to_the_current_slot() {
+        let dir = Dir::new("slot");
+        let (path, _, _) = startup(&dir.0).expect("first run");
+        let settings = write_theme_slot(&path, "dark", "harbor").expect("written");
+        assert_eq!(settings.theme.dark, "harbor");
+        // After a restart the file says the same.
+        let (_, again, _) = startup(&dir.0).expect("second run");
+        assert_eq!(again.theme.dark, "harbor");
+        assert_eq!(again.theme.light, "paper");
+        assert!(!path.with_extension("toml.tmp").exists());
+        fs::write(&path, "[ui\n").expect("break it");
+        assert!(write_theme_slot(&path, "dark", "stone").is_err());
+        assert_eq!(fs::read_to_string(&path).expect("kept"), "[ui\n");
     }
 
     #[test]

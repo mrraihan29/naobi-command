@@ -48,6 +48,8 @@ pub enum Effect {
     /// Runs a module's hotkey handlers once the Launcher is hidden and focus is back, so a command
     /// from the list does what its key does to the window that was in front.
     RunHotkey(HotkeyId),
+    /// Uses this Theme for the current Windows mode (R-031).
+    ApplyTheme(String),
 }
 
 #[cfg(test)]

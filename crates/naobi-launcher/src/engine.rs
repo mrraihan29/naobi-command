@@ -266,7 +266,8 @@ impl Launcher {
                     | ItemKind::CommandLine
                     | ItemKind::Color
             ),
-            right: (h.item.kind == ItemKind::ClipboardEntry).then(|| h.item.subtitle.clone()),
+            right: matches!(h.item.kind, ItemKind::ClipboardEntry | ItemKind::Theme)
+                .then(|| h.item.subtitle.clone()),
         };
         let mut sections = Vec::new();
         if !self.rows.is_empty() {
@@ -345,12 +346,20 @@ impl Launcher {
             .to_owned(),
             preview,
             facts,
+            theme_preview: self.theme_preview(),
             empty: self.empty_view(),
             loading: !pending.is_empty(),
             reduced_motion: false,
             text_scale: 1.0,
             row_height: DEFAULT_ROW_HEIGHT,
         }
+    }
+
+    fn theme_preview(&self) -> Option<String> {
+        let (Mode::Pushed(i) | Mode::Hotkey(i)) = self.mode else {
+            return None;
+        };
+        self.views[i].look(self.selected_hit()?.id())
     }
 
     fn view_bar(&self) -> ViewBar {
@@ -609,10 +618,18 @@ impl Launcher {
         let mut cx = Cx::default();
         let outcome = self.source(hit.src).run(hit.id(), action, &mut cx);
         let failed = matches!(outcome, Outcome::Failed(_));
-        let stay = matches!(outcome, Outcome::Refresh);
+        let stay = matches!(outcome, Outcome::Refresh | Outcome::Stay { .. });
         let mut effects = cx.take();
+        let mut select = None;
         match outcome {
             Outcome::Done | Outcome::Refresh => {}
+            Outcome::Stay {
+                effects: more,
+                select: row,
+            } => {
+                effects.extend(more);
+                select = row;
+            }
             Outcome::Effects(more) => effects.extend(more),
             Outcome::Failed(n) => effects.push(Effect::Notice(n)),
         }
@@ -652,7 +669,8 @@ impl Launcher {
                 // The list changed under the selection: rank again and keep the place.
                 let at = self.selected;
                 self.refresh();
-                self.selected = at.min(self.row_count().saturating_sub(1));
+                let wanted = select.and_then(|id| self.rows.iter().position(|h| *h.id() == id));
+                self.selected = wanted.unwrap_or(at).min(self.row_count().saturating_sub(1));
             }
             None if !failed && !effects.contains(&Effect::Hide) => effects.push(Effect::Hide),
             None => {}
@@ -749,6 +767,7 @@ impl Launcher {
         let view = match preview {
             Preview::Text(t) => Some(PreviewView::Text(t)),
             Preview::Files(f) => Some(PreviewView::Text(f.join("\n"))),
+            Preview::Swatches(s) => Some(PreviewView::Swatches(s)),
             // ponytail: image previews need a PNG decoder and RGBA conversion, not in this engine yet.
             Preview::Image { .. } => None,
             Preview::Rgba { w, h, rgba } => Some(PreviewView::Image {
@@ -801,10 +820,13 @@ struct ActionStyle {
 /// formats, which copy.
 fn action_style(id: &str) -> ActionStyle {
     let (glyph, group, destructive) = match id {
+        "apply" => ("action.apply", 0, false),
         "open" => ("action.open", 0, false),
         "run" => ("action.run", 0, false),
         "paste" => ("action.paste", 0, false),
         "folder" => ("action.folder", 1, false),
+        "duplicate" => ("action.copy", 1, false),
+        "edit" => ("action.edit", 1, false),
         "pin" => ("action.pin", 1, false),
         "delete" => ("action.delete", 2, true),
         _ => ("action.copy", 0, false),
@@ -863,6 +885,7 @@ fn icon_key_of(item: &Item) -> Option<String> {
         }
         // Drawn by the UI, never asked of the icon child (`askable` refuses it).
         ItemKind::Command => Some(format!("g:{}", item.id.0)),
+        ItemKind::Theme => Some("g:themes.open".to_owned()),
         ItemKind::Quicklink => Some("g:quicklink".to_owned()),
         ItemKind::Calculator => Some("g:calc".to_owned()),
         // Never the line: the key must not carry command text.
@@ -908,5 +931,6 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::ClipboardEntry => "Clipboard entry",
         ItemKind::Color => "Color",
         ItemKind::CommandLine => "Command line",
+        ItemKind::Theme => "Theme",
     }
 }

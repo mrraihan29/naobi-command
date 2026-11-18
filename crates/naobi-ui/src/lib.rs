@@ -282,6 +282,9 @@ fn apply(ui: &AppWindow, s: Screen) {
     ui.set_preview_text(text);
     ui.set_preview_image(picture);
     ui.set_preview_facts(ModelRc::new(VecModel::from(model::facts(&s))));
+    ui.set_preview_swatches(ModelRc::new(VecModel::from(model::swatches(
+        s.preview.as_ref(),
+    ))));
 
     let panel = s.action_panel.as_ref();
     ui.set_panel_open(panel.is_some());

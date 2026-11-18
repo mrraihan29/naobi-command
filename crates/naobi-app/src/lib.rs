@@ -48,6 +48,8 @@ struct State {
     catalog: Catalog,
     /// The Theme in use.
     theme: Option<ResolvedTheme>,
+    /// The Theme on screen: the one in use, or the one previewed in the Themes view.
+    drawn: RefCell<Option<ResolvedTheme>>,
     /// The Theme Notices that are raised now.
     theme_notices: Vec<String>,
 }
@@ -64,6 +66,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     notices: NoticeCenter::new(),
     catalog: Catalog::new(),
     theme: None,
+    drawn: RefCell::new(None),
     theme_notices: Vec::new(),
 });
 
@@ -137,6 +140,9 @@ impl Host for AppHost {
     }
     fn load_icons(&mut self, keys: Vec<String>) {
         modules::icons::request(keys);
+    }
+    fn apply_theme(&mut self, id: &str) -> Result<(), String> {
+        apply_theme(id)
     }
     fn post(&mut self, screen: Screen) {
         if screen
@@ -311,12 +317,28 @@ fn post_view(ui: &UiHandle, s: &State) {
     screen.reduced_motion = s.look.reduced_motion;
     // `ui.text_scale` from the settings (1.0, 1.125 or 1.25).
     screen.text_scale = s.settings.as_ref().map_or(1.0, |set| set.ui.text_scale);
-    if let Some(theme) = &s.theme {
+    let preview = screen
+        .theme_preview
+        .as_deref()
+        .and_then(|id| theme_file::find(id, &s.catalog));
+    if let Some(theme) = preview.as_ref().or(s.theme.as_ref()) {
         screen.row_height = theme.density.row_height();
+        let mut drawn = s.drawn.borrow_mut();
+        if drawn.as_ref() != Some(theme) {
+            ui.set_theme(theme);
+            *drawn = Some(theme.clone());
+        }
     }
     screen.notice = s.notices.banner().map(|n| NoticeView {
         message: n.message.clone(),
     });
+    if screen.notice.is_none() {
+        // A previewed Theme says the same as it would once applied (R-033).
+        screen.notice = preview
+            .as_ref()
+            .and_then(theme_file::contrast_message)
+            .map(|message| NoticeView { message });
+    }
     ui.post_screen(screen);
 }
 
@@ -392,9 +414,6 @@ fn refresh_theme(s: &mut State) {
         s.notices.clear(THEME_SUBJECT, gone);
     }
     if s.theme.as_ref() != Some(&active) {
-        if let Some(ui) = &s.ui {
-            ui.set_theme(&active);
-        }
         modules::aot::set_accent(active.palette.accent.to_rgb());
         s.theme = Some(active);
     }
@@ -426,8 +445,8 @@ fn on_theme() {
     }
 }
 
-/// Runs on the index worker once the themes folder settled (R-031): a saved file applies at once.
-fn on_themes_changed(dir: &Path) {
+/// Reads the themes folder again and draws the result.
+fn reload_themes(dir: &Path) {
     let catalog = modules::themes::load(dir);
     let mut s = state();
     s.catalog = catalog;
@@ -435,6 +454,28 @@ fn on_themes_changed(dir: &Path) {
     if let Some(ui) = s.ui.clone() {
         post_view(&ui, &s);
     }
+}
+
+/// Runs on the index worker once the themes folder settled (R-031): a saved file applies at once, and
+/// an open Themes view lists it.
+fn on_themes_changed(dir: &Path) {
+    reload_themes(dir);
+    to_modules(|c, h| c.refresh(h));
+}
+
+/// Puts `id` in the Theme slot of the current Windows mode (R-031).
+fn apply_theme(id: &str) -> Result<(), String> {
+    let dir = naobi_core::paths::settings_dir().ok_or("The settings folder is not known.")?;
+    let slot = match state().look.theme {
+        Theme::Paper => "light",
+        Theme::Stone => "dark",
+    };
+    let settings =
+        settings_runtime::write_theme_slot(&dir.join(settings_runtime::FILE_NAME), slot, id)?;
+    let mut s = state();
+    s.settings = Some(settings);
+    refresh_theme(&mut s);
+    Ok(())
 }
 
 /// Runs on the index worker once the settings folder settled (D-009). A file that does not parse keeps
@@ -637,9 +678,12 @@ pub fn run() -> anyhow::Result<()> {
     }
     let active = {
         let s = state();
-        s.theme
+        let active = s
+            .theme
             .clone()
-            .unwrap_or_else(|| theme_file::builtin(s.look.theme))
+            .unwrap_or_else(|| theme_file::builtin(s.look.theme));
+        *s.drawn.borrow_mut() = Some(active.clone());
+        active
     };
     naobi_ui::run(&active, on_event, on_ready)?;
     Ok(())

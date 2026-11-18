@@ -12,6 +12,7 @@ pub enum ItemKind {
     ClipboardEntry,
     Color,
     CommandLine,
+    Theme,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

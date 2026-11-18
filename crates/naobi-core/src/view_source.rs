@@ -1,6 +1,7 @@
 //! A command source that the launcher hosts as a view (clipboard history, color history).
 use crate::command::CommandSource;
 use crate::ids::{ItemId, ViewId};
+use crate::tokens::Rgba;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Preview {
@@ -17,6 +18,14 @@ pub enum Preview {
         rgba: Vec<u8>,
     },
     Files(Vec<String>),
+    /// A Theme's colors with their token names (R-031).
+    Swatches(Vec<Swatch>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Swatch {
+    pub label: String,
+    pub color: Rgba,
 }
 
 /// One labelled fact shown under a preview. It never holds the entry's content (R-027).
@@ -38,6 +47,10 @@ pub trait ViewSource: CommandSource {
     /// The preview and the facts about it, read together.
     fn pane(&self, id: &ItemId) -> Option<(Preview, Vec<Fact>)> {
         self.preview(id).map(|p| (p, Vec::new()))
+    }
+    /// The Theme to show while this row is selected (R-031).
+    fn look(&self, _id: &ItemId) -> Option<String> {
+        None
     }
     /// False when the view filters and orders its own items (a history is newest first, and its
     /// search looks inside the text), so the engine keeps them as they come.

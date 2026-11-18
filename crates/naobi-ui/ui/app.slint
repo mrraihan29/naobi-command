@@ -60,6 +60,12 @@ export struct FactLine {
     value: string,
 }
 
+// One Theme color with its token name.
+export struct SwatchLine {
+    label: string,
+    color: color,
+}
+
 // DESIGN_SYSTEM.md tokens. The values come from naobi-core::tokens and are set once at startup.
 export global Tokens {
     in-out property <color> surface-window;
@@ -492,6 +498,7 @@ component PreviewPane inherits Rectangle {
     in property <string> text;
     in property <image> picture;
     in property <[FactLine]> facts;
+    in property <[SwatchLine]> swatches;
     property <length> facts-height: root.facts.length == 0 ? 0px : root.facts.length * 20px * Tokens.scale + 19px;
     horizontal-stretch: 1;
     background: Tokens.surface-well;
@@ -528,6 +535,34 @@ component PreviewPane inherits Rectangle {
             wrap: word-wrap;
             font-size: 13px * Tokens.scale;
             color: Tokens.text-muted;
+        }
+        if root.kind == 6 : Rectangle {
+            for s[i] in root.swatches : Rectangle {
+                x: 12px + mod(i, 2) * ((parent.width - 24px) / 2);
+                y: 12px + floor(i / 2) * 22px;
+                width: (parent.width - 36px) / 2;
+                height: 18px;
+                Rectangle {
+                    x: 0;
+                    y: 1px;
+                    width: 16px;
+                    height: 16px;
+                    border-width: 1px;
+                    border-color: Tokens.line-strong;
+                    border-radius: 3px;
+                    background: s.color;
+                }
+                Text {
+                    x: 23px;
+                    width: parent.width - 23px;
+                    height: parent.height;
+                    text: s.label;
+                    font-size: 12px * Tokens.scale;
+                    color: Tokens.text-primary;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
         }
         if root.kind == 5 : Text {
             x: 12px;
@@ -604,11 +639,12 @@ export component AppWindow inherits Window {
     in property <bool> empty-visible;
     in property <string> empty-title;
     in property <string> empty-helper;
-    // 0 no preview, 1 text, 2 image, 3 loading, 4 error, 5 empty.
+    // 0 no preview, 1 text, 2 image, 3 loading, 4 error, 5 empty, 6 Theme colors.
     in property <int> preview-kind;
     in property <string> preview-text;
     in property <image> preview-image;
     in property <[FactLine]> preview-facts;
+    in property <[SwatchLine]> preview-swatches;
     in property <bool> panel-open;
     in-out property <string> panel-filter;
     in property <string> panel-title;
@@ -859,6 +895,7 @@ export component AppWindow inherits Window {
                             text: root.preview-text;
                             picture: root.preview-image;
                             facts: root.preview-facts;
+                            swatches: root.preview-swatches;
                         }
                     }
                 }

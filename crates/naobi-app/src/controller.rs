@@ -43,6 +43,8 @@ pub trait Host {
     fn search_files(&mut self, generation: u64, query: &str);
     /// Starts loading the icons for `keys`; the answer comes back through `Controller::on_icons`.
     fn load_icons(&mut self, keys: Vec<String>);
+    /// Uses this Theme for the current Windows mode. `Err` is the message for the Owner.
+    fn apply_theme(&mut self, id: &str) -> Result<(), String>;
 }
 
 pub struct SystemClock;
@@ -64,6 +66,8 @@ pub struct Controller {
     /// A copy asked to hide: the Launcher shows "Copied" first and closes (with this focus choice)
     /// when `finish_close` runs.
     pending_close: Option<bool>,
+    /// A Theme was applied by the last event: the footer says so.
+    applied: bool,
     /// The generation a file search was last asked for, so a query is asked once.
     asked: Option<u64>,
     icons: IconCache,
@@ -86,6 +90,7 @@ impl Controller {
             router,
             previous: None,
             pending_close: None,
+            applied: false,
             asked: None,
             icons: IconCache::default(),
             icons_asked: HashSet::new(),
@@ -100,6 +105,8 @@ impl Controller {
         let mut s = self.launcher.screen();
         if self.pending_close.is_some() {
             s.footer.confirmation = Some("Copied".to_owned());
+        } else if self.applied {
+            s.footer.confirmation = Some("Applied".to_owned());
         }
         for row in s.sections.iter_mut().flat_map(|sec| sec.rows.iter_mut()) {
             let Some(key) = row.icon_key.clone() else {
@@ -210,6 +217,7 @@ impl Controller {
         let hover = matches!(ev, UiEvent::RowHovered(_));
         let selected = self.launcher.selected();
         let effects = self.launcher.handle(ev);
+        self.applied = false;
         // The pointer moving inside the selected row changes nothing; a redraw would rebuild every
         // row, the one being clicked included.
         if hover && self.launcher.selected() == selected {
@@ -334,6 +342,10 @@ impl Controller {
                 // The paste runs after the Launcher is hidden.
                 Effect::Paste(id) => paste = Some(id),
                 Effect::RunHotkey(id) => hotkeys.push(id),
+                Effect::ApplyTheme(id) => match host.apply_theme(&id) {
+                    Ok(()) => self.applied = true,
+                    Err(message) => host.notice(failure("Theme", &message)),
+                },
                 Effect::CopyEntry(id) => match host.copy_entry(id) {
                     Ok(()) => copied = true,
                     Err(_) => host.notice(failure("Copy", "The clipboard is busy, try again.")),
@@ -448,6 +460,10 @@ mod tests {
         }
         fn load_icons(&mut self, keys: Vec<String>) {
             self.log.push(format!("icons {}", keys.join(",")));
+        }
+        fn apply_theme(&mut self, id: &str) -> Result<(), String> {
+            self.log.push(format!("theme {id}"));
+            Ok(())
         }
     }
 

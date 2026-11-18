@@ -300,6 +300,66 @@ impl Settings {
     }
 }
 
+/// `text` with Theme slot `slot` ("light" or "dark") set to `id`. Only that one line changes, so the
+/// Owner's comments and order stay; a file that does not parse is refused (T-040).
+pub fn with_theme_slot(text: &str, slot: &str, id: &str) -> Result<String, SettingsError> {
+    let refused = |message: String| SettingsError::Syntax {
+        line: None,
+        message,
+    };
+    if !theme_file::is_theme_name(id) || !matches!(slot, "light" | "dark") {
+        return Err(refused("that is not a theme name".to_owned()));
+    }
+    Settings::parse(text)?;
+    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let assignment = format!("{slot} = \"{id}\"");
+    let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
+    let bare = |line: &str| line.split('#').next().unwrap_or("").trim().to_owned();
+    let header = lines.iter().position(|l| bare(l) == "[theme]");
+    match header {
+        Some(start) => {
+            let end = lines[start + 1..]
+                .iter()
+                .position(|l| bare(l).starts_with('['))
+                .map_or(lines.len(), |i| start + 1 + i);
+            let found = (start + 1..end).find(|&i| {
+                bare(&lines[i])
+                    .split('=')
+                    .next()
+                    .is_some_and(|k| k.trim() == slot)
+            });
+            match found {
+                Some(i) => {
+                    let comment = lines[i].find('#').map(|at| lines[i][at..].to_owned());
+                    lines[i] = match comment {
+                        Some(c) => format!("{assignment} {c}"),
+                        None => assignment,
+                    };
+                }
+                None => lines.insert(start + 1, assignment),
+            }
+        }
+        None => {
+            lines.push(String::new());
+            lines.push("[theme]".to_owned());
+            lines.push(assignment);
+        }
+    }
+    let mut out = lines.join(newline);
+    out.push_str(newline);
+    let parsed = Settings::parse(&out)?;
+    let written = if slot == "light" {
+        &parsed.settings.theme.light
+    } else {
+        &parsed.settings.theme.dark
+    };
+    if written == id {
+        Ok(out)
+    } else {
+        Err(refused("the theme slot could not be written".to_owned()))
+    }
+}
+
 fn is_hex_color(s: &str) -> bool {
     s.len() == 7 && s.starts_with('#') && s[1..].bytes().all(|b| b.is_ascii_hexdigit())
 }

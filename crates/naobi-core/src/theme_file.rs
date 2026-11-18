@@ -105,6 +105,11 @@ fn builtin_named(id: &str) -> Option<ResolvedTheme> {
     }
 }
 
+/// The Theme named `id`: a Built-in theme or one in `catalog`.
+pub fn find(id: &str, catalog: &Catalog) -> Option<ResolvedTheme> {
+    builtin_named(id).or_else(|| catalog.find(id).cloned())
+}
+
 /// True for an id a Custom theme file may have. Nothing else ever becomes part of a path (T-037).
 pub fn is_custom_id(id: &str) -> bool {
     !id.is_empty()
@@ -357,6 +362,67 @@ pub fn parse(id: &str, text: &str) -> Result<ThemeParse, Report> {
     })
 }
 
+/// The `[colors]` keys with their tokens, in file order.
+pub fn color_tokens(p: &Palette) -> [(&'static str, Rgba); 14] {
+    [
+        ("window", p.window),
+        ("raised", p.raised),
+        ("selected", p.selected),
+        ("well", p.well),
+        ("text", p.text_primary),
+        ("secondary", p.text_secondary),
+        ("selected_text", p.subtitle_selected),
+        ("muted", p.text_muted),
+        ("accent", p.accent),
+        ("focus", p.focus),
+        ("danger", p.danger),
+        ("success", p.success),
+        ("hair", p.hair),
+        ("strong", p.strong),
+    ]
+}
+
+/// A complete, editable theme file for `theme` under the name `name`.
+pub fn to_toml(theme: &ResolvedTheme, name: &str) -> String {
+    use std::fmt::Write as _;
+    let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
+    let mut out = format!(
+        "name = \"{escaped}\"\nbase = \"{}\"\n\n[colors]\n",
+        base_name(theme.base)
+    );
+    for (key, c) in color_tokens(&theme.palette) {
+        let _ = write!(out, "{key} = \"#{:06X}", c.to_rgb());
+        if c.a != 255 {
+            let _ = write!(out, "{:02X}", c.a);
+        }
+        out.push_str("\"\n");
+    }
+    let s = theme.shape;
+    let density = match theme.density {
+        Density::Compact => "compact",
+        Density::Normal => "normal",
+        Density::Comfortable => "comfortable",
+    };
+    let _ = write!(
+        out,
+        "\n[shape]\nwindow = {}\nrow = {}\nchip = {}\ncontrol = {}\n\n[list]\ndensity = \"{density}\"\n",
+        s.window, s.row, s.chip, s.control
+    );
+    if theme.fonts.interface.is_some() || theme.fonts.mono.is_some() {
+        out.push_str("\n[fonts]\n");
+        for (key, family) in [
+            ("interface", &theme.fonts.interface),
+            ("mono", &theme.fonts.mono),
+        ] {
+            if let Some(family) = family {
+                let family = family.replace('\\', "\\\\").replace('"', "\\\"");
+                let _ = writeln!(out, "{key} = \"{family}\"");
+            }
+        }
+    }
+    out
+}
+
 /// One file of the themes folder, as the caller could read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileContent {
@@ -470,7 +536,7 @@ pub fn resolve(slots: &ThemeSlots, mode: Theme, catalog: &Catalog) -> (ResolvedT
         Theme::Paper => ("light", slots.light.as_str()),
         Theme::Stone => ("dark", slots.dark.as_str()),
     };
-    let found = builtin_named(name).or_else(|| catalog.find(name).cloned());
+    let found = find(name, catalog);
     let mut messages = Vec::new();
     let theme = found.unwrap_or_else(|| {
         if !catalog.broken.iter().any(|id| id == name) {
@@ -677,6 +743,20 @@ mod tests {
         let c = Catalog::build(files);
         assert_eq!(c.themes.len(), MAX_THEMES);
         assert_eq!(c.problems.len(), 1);
+    }
+
+    #[test]
+    fn a_written_theme_reads_back_the_same() {
+        let mut t = builtin(Theme::Stone);
+        t.id = "copy".into();
+        t.name = "My \"copy\"".into();
+        t.builtin = false;
+        t.density = Density::Comfortable;
+        t.shape.row = 7;
+        t.fonts.mono = Some("Cascadia Mono".into());
+        let parsed = parse("copy", &to_toml(&t, &t.name)).expect("parses");
+        assert!(parsed.reports.is_empty(), "{:?}", parsed.reports);
+        assert_eq!(parsed.theme, t);
     }
 
     // @D-043

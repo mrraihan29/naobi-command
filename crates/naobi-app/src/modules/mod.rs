@@ -158,6 +158,7 @@ pub fn register_all(modules: &mut Modules) {
     awake::register(modules);
     picker::register(modules);
     files::register(modules);
+    themes::register(modules);
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 //! Pure mapping from `naobi_core::ui::Screen` to the Slint models. No window is needed, so these
 //! run in `cargo test -p naobi-ui`.
-use crate::generated::{ActionLine, FactLine, Line, TitleRun};
+use crate::generated::{ActionLine, FactLine, Line, SwatchLine, TitleRun};
 use naobi_core::tokens::Rgba;
 use naobi_core::ui::{ActionPanelView, PreviewView, RowView, Screen};
 use slint::{Color, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
@@ -240,6 +240,19 @@ pub fn facts(s: &Screen) -> Vec<FactLine> {
         .collect()
 }
 
+/// A Theme's colors for the preview pane; nothing for any other preview.
+pub fn swatches(p: Option<&PreviewView>) -> Vec<SwatchLine> {
+    let Some(PreviewView::Swatches(list)) = p else {
+        return Vec::new();
+    };
+    list.iter()
+        .map(|s| SwatchLine {
+            label: s.label.as_str().into(),
+            color: color(s.color),
+        })
+        .collect()
+}
+
 /// (kind, text, picture) for the preview pane. Kind 0 is no preview; the others are listed in
 /// `ui/app.slint`. An image whose pixel count does not match its size is shown as an error.
 pub fn preview(p: Option<&PreviewView>) -> (i32, SharedString, Image) {
@@ -257,6 +270,7 @@ pub fn preview(p: Option<&PreviewView>) -> (i32, SharedString, Image) {
         },
         Some(PreviewView::Error(message)) => (4, message.as_str().into(), Image::default()),
         Some(PreviewView::Empty) => (5, blank().0, Image::default()),
+        Some(PreviewView::Swatches(_)) => (6, blank().0, Image::default()),
     }
 }
 

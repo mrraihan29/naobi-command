@@ -38,7 +38,14 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("run.history", "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2", ""),
     ("quicklink", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", ""),
     ("calc", "M5 9h14M5 15h14", ""),
+    (
+        "themes.open",
+        "M12 3a9 9 0 1 0 0 18c2 0 2-2 1-3-1-2 0-3 2-3h2a4 4 0 0 0 4-4c0-5-4-8-9-8zM7.5 12h.01M10 7.5h.01M15 7.5h.01",
+        "",
+    ),
     // Actions in the action panel.
+    ("action.apply", "M5 12l5 5L20 7", ""),
+    ("action.edit", "M4 20h4L19 9l-4-4L4 16zM13 7l4 4", ""),
     ("action.open", "M14 5h5v5M19 5l-8 8M18 14v5H5V6h5", ""),
     ("action.run", "M8 5l10 7-10 7z", ""),
     ("action.paste", "M9 4h6v3H9zM7 6H5v14h14V6h-2M9 13h6M9 17h4", ""),

@@ -59,6 +59,8 @@ pub struct Screen {
     pub preview: Option<PreviewView>,
     /// Facts about the previewed entry (R-027).
     pub facts: Vec<crate::view_source::Fact>,
+    /// The Theme previewed by the selected row (R-031).
+    pub theme_preview: Option<String>,
     pub empty: Option<EmptyView>,
     pub loading: bool,
     pub reduced_motion: bool,
@@ -166,6 +168,7 @@ pub enum PreviewView {
     },
     /// Message text, for example "Cannot read this entry".
     Error(String),
+    Swatches(Vec<crate::view_source::Swatch>),
     Empty,
 }
 
@@ -217,6 +220,7 @@ impl From<ViewModel> for Screen {
             placeholder: "Search apps and commands, or type > to run one...".into(),
             preview: None,
             facts: Vec::new(),
+            theme_preview: None,
             empty: None,
             loading: false,
             reduced_motion: false,

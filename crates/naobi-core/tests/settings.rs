@@ -170,3 +170,28 @@ gap = 8
     assert!(p.reports.is_empty());
     assert_eq!(p.settings, Settings::default());
 }
+
+// @D-043
+#[test]
+fn d043_slot_write_keeps_every_other_line() {
+    let text = "# mine\r\n[ui]\r\ntext_scale = 1.25\r\n\r\n[theme]\r\nlight = \"paper\" # day\r\ndark = \"stone\"\r\n";
+    let out = naobi_core::settings::with_theme_slot(text, "light", "harbor").expect("written");
+    assert_eq!(
+        out,
+        "# mine\r\n[ui]\r\ntext_scale = 1.25\r\n\r\n[theme]\r\nlight = \"harbor\" # day\r\ndark = \"stone\"\r\n"
+    );
+    let added = naobi_core::settings::with_theme_slot("[ui]\ntext_scale = 1.0\n", "dark", "night")
+        .expect("written");
+    let parsed = naobi_core::settings::Settings::parse(&added).expect("valid");
+    assert_eq!(parsed.settings.theme.dark, "night");
+    assert_eq!(parsed.settings.ui.text_scale, 1.0);
+}
+
+// @D-043
+#[test]
+fn d043_slot_write_refuses_a_broken_file() {
+    use naobi_core::settings::with_theme_slot;
+    assert!(with_theme_slot("[ui\n", "light", "harbor").is_err());
+    assert!(with_theme_slot("", "light", r"..\x").is_err());
+    assert!(with_theme_slot("", "other", "harbor").is_err());
+}

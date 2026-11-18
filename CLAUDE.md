@@ -1,6 +1,6 @@
 # Naobi Command
 
-Personal Windows 11 launcher and utility suite (launcher, calculator, clipboard history, window management, color picker, always-on-top, awake) for one owner, replacing Raycast and PowerToys. Stack: Rust, native UI Slint with the software renderer and accessibility on (D-034) (`docs/adr/0001-stack.md`, `docs/adr/0002-ui-seam.md`).
+Personal Windows 11 launcher and utility suite (launcher, calculator, clipboard history, color picker, always-on-top, awake) with editable themes for one owner, replacing Raycast and PowerToys. Stack: Rust, native UI Slint with the software renderer and accessibility on (D-034) (`docs/adr/0001-stack.md`, `docs/adr/0002-ui-seam.md`).
 
 ## Commands
 - Install: `rustup toolchain install stable` (host `x86_64-pc-windows-msvc`, VS 2022 Build Tools); then `cargo fetch`

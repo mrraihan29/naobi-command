@@ -6,6 +6,7 @@ flowchart LR
   browser([Default browser]):::ext
   subgraph tb_fs[Trust boundary: same-user file system]
     settings[(Settings file TOML)]
+    themes[(Theme files TOML)]
     store[(Data store SQLite with DPAPI blobs)]
     logs[(Log files)]
   end
@@ -33,6 +34,10 @@ flowchart LR
   mods -->|"F14 execution state"| winsvc
   ctrl -->|"F15 log lines, no content"| logs
   winsvc -->|"F16 theme, resume, display change"| plat
+  themes -->|"F17 theme values, hot reload"| ctrl
+  ctrl -->|"F18 theme slot line, duplicated theme"| settings
+  ctrl -->|"F18 duplicated theme"| themes
+  ctrl -->|"F19 open a custom theme file"| winsvc
   ctrl --> clip
   ctrl --> mods
   classDef ext stroke-dasharray: 4 2

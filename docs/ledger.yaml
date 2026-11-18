@@ -94,18 +94,18 @@ entries:
 
   - id: R-007
     type: requirement
-    version: 1
+    version: 2
     status: active
     topic: 10
-    answer: "setuju dengan semuanya!"
-    recommendation: "Token dari naobi.dev/DESIGN.md (tema terang 'paper', tema gelap 'stone', ikut tema Windows), font Inter + JetBrains Mono di-embed, bahasa UI Inggris, WCAG 2.2 AA untuk kontras, semua fitur bisa pakai keyboard saja."
-    statement: "The UI applies the Naobi design tokens from naobi.dev DESIGN.md with a light 'paper' theme and a dark 'stone' theme that follow the Windows app theme, embeds Inter and JetBrains Mono, uses English copy, meets WCAG 2.2 AA contrast, and every capability is operable by keyboard alone."
+    answer: "setuju dengan semuanya! Version 2 (2026-11-18, round 2 of the UI/UX upgrade): \"setuju semua!\""
+    recommendation: "Token dari naobi.dev/DESIGN.md (tema terang 'paper', tema gelap 'stone', ikut tema Windows), font Inter + JetBrains Mono di-embed, bahasa UI Inggris, WCAG 2.2 AA untuk kontras, semua fitur bisa pakai keyboard saja. Version 2: kontras di bawah AA boleh pada tema kustom dengan Notice; paper dan stone tetap wajib AA."
+    statement: "The UI applies the Naobi design tokens from naobi.dev DESIGN.md through the built-in light 'paper' and dark 'stone' themes, shows the theme assigned to the current Windows app mode, embeds Inter and JetBrains Mono, uses English copy, and every capability is operable by keyboard alone. Paper and stone meet WCAG 2.2 AA contrast; a custom theme may fall below it under R-033."
     acceptance:
       - "Switching Windows between light and dark mode switches the app theme without restart"
-      - "All text/background token pairs meet WCAG 2.2 AA contrast ratios"
+      - "All text/background token pairs of paper and stone meet WCAG 2.2 AA contrast ratios"
       - "Every MVP capability can be completed without a mouse"
     links:
-      tickets: ["NCMD-11@1", "NCMD-13@1", "NCMD-25@1"]
+      tickets: ["NCMD-11@2", "NCMD-13@2", "NCMD-25@2", "NCMD-50@2", "NCMD-54@2"]
 
   - id: R-008
     type: requirement
@@ -335,18 +335,18 @@ entries:
 
   - id: R-018
     type: requirement
-    version: 2
+    version: 3
     status: active
     topic: 4
-    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
-    recommendation: "Owner accepted: the topmost border follows the Windows theme, oxide #914A3B in light mode and stone-focus #E3BDA9 in dark mode, both at least 3:1 against the Naobi window colors."
-    statement: "Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings and is the Naobi oxide accent #914A3B when Windows is in light mode and stone-focus #E3BDA9 when Windows is in dark mode (each at least 3:1 against its theme window color); no sound is played."
+    answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass. Version 3 (2026-11-18, theme round): \"setuju semua!\""
+    recommendation: "Owner accepted: the topmost border follows the Windows theme, oxide #914A3B in light mode and stone-focus #E3BDA9 in dark mode, both at least 3:1 against the Naobi window colors. Version 3: border_color auto uses the accent of the active theme, which is these two colors with the default theme slots."
+    statement: "Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings; with border_color auto it uses the active theme's accent, which is the Naobi oxide #914A3B with paper and stone-focus #E3BDA9 with stone (each at least 3:1 against its theme window color); no sound is played."
     acceptance:
       - "Toggling twice returns the window to non-topmost"
       - "The border follows the pinned window when it moves and disappears when unpinned"
-      - "The border color is #914A3B in Windows light mode and #E3BDA9 in Windows dark mode and changes with the theme without restart"
+      - "With the default theme slots the border color is #914A3B in Windows light mode and #E3BDA9 in Windows dark mode and changes with the theme without restart"
     links:
-      tickets: ["NCMD-22@2"]
+      tickets: ["NCMD-22@3", "NCMD-51@3"]
 
   - id: R-019
     type: requirement
@@ -643,7 +643,8 @@ entries:
   - id: D-031
     type: decision
     version: 1
-    status: active
+    status: superseded
+    superseded_by: D-044
     topic: 10
     answer: "aku percaya sama apa yang kamu buat! kamu tau standard kita dan prioritas kita! jadi lakukan yang terbaik. aku gak menggunakan bitwarden, pake nya proton pass"
     recommendation: "Mockup direction approved: docs/design/mockups/launcher-mockups.html covers root, results with calculator, action panel, clipboard history and window management in paper and stone; the remaining screens follow the same pattern and are specified per ticket in Plan."
@@ -728,3 +729,214 @@ entries:
     statement: "Window snapping (R-016, D-022) is removed: the naobi-winmgr crate, its Launcher commands, the Ctrl+Alt hotkeys (snap_left, snap_right, snap_up, snap_down, maximize, center, restore) and the [window] gap setting no longer exist. A settings file written before this change still loads: the retired hotkey ids and the [window] section are read and ignored. The Rect type Always on Top needs moved to naobi-aot. The MVP is six modules: launcher, calculator, clipboard history, color picker, always-on-top and awake."
     links:
       decisions: ["D-014@2"]
+
+  - id: D-040
+    type: decision
+    version: 2
+    status: active
+    topic: 3
+    answer: "setuju dengan kamu semu! Version 2 (round 2): \"setuju semua!\""
+    recommendation: "Cakupan upgrade: Launcher, hasil pencarian, panel aksi, Clipboard, Color history, serta state kosong, error, dan loading. Jendela Settings, Favorites, compact mode, overlay color picker, dan tray tidak ikut. Round 2 menambah sistem tema dan view Themes."
+    statement: "The UI/UX upgrade covers the Launcher window: root and result lists, the action panel, the clipboard history, Color history and Themes views, and the empty, error and loading states, plus the theme system of R-030 to R-033. A separate Settings window, Favorites, compact mode and the tray are out of its scope; the color picker overlay and the topmost border change only by following the active theme's colors."
+
+  - id: D-041
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju dengan kamu semu!"
+    recommendation: "Arah mockup round 1 benar: tetap memakai token paper dan stone, Inter, dan JetBrains Mono, tanpa acrylic karena renderer software tidak mendukung blur. Ukuran 750 x 475 dan header 66 px tetap."
+    statement: "The upgrade follows the direction of the round 1 mockup (docs/research/ui-ux-teardown.md is its evidence): the default look keeps the paper and stone tokens, Inter and JetBrains Mono, uses no blur or acrylic (D-034), and keeps the 750 x 475 window with the 66 px search header (D-021). The final mockups are approved at Gate 1."
+    links:
+      decisions: ["D-021@1", "D-034@2"]
+
+  - id: D-042
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju dengan kamu semu!"
+    recommendation: "Header section 28 px dan baris tetap 40 px."
+    statement: "In the Launcher lists a section header is 28 logical px tall and a result row stays 40 logical px tall, each multiplied by ui.text_scale."
+    links:
+      decisions: ["D-021@1"]
+      tickets: ["NCMD-44@1"]
+
+  - id: R-025
+    type: requirement
+    version: 2
+    status: active
+    topic: 10
+    answer: "setuju dengan kamu semu! Version 2 (Gate 1, 2026-11-18): \"setuju semua, lanjut ke fase plan\""
+    recommendation: "Jenis item rata kanan, huruf yang cocok ditebalkan, baris aplikasi tanpa path. File tetap menampilkan folder dalam font mono. Version 2: syarat Copy path dihapus karena katalog aplikasi hanya menyimpan ID shell:AppsFolder."
+    statement: "A result row shows its kind right-aligned and shows the title letters matched by the query in a heavier weight; an application row shows no path, and a file row shows its folder in JetBrains Mono."
+    acceptance:
+      - "The kind label and any hint chip of a row end at the same right edge, whatever the title and subtitle length"
+      - "For a query that matches a title, exactly the matched title letters are drawn in the heavier weight; with an empty query no letter is"
+      - "An application row has no path text"
+      - "A file row shows its folder in JetBrains Mono"
+    links:
+      tickets: ["NCMD-45@2"]
+
+  - id: R-026
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju dengan kamu semu!"
+    recommendation: "Nama item di atas, ikon 16 px, aksi dikelompokkan, aksi berbahaya terpisah di bawah, dan kolom filter pindah ke bawah dekat footer."
+    statement: "The action panel shows the selected item's title at its top, a 16 px icon on each action, actions in groups divided by hairlines, destructive actions in a separate last group in the danger style with a text label, and the filter field at its bottom next to the footer."
+    acceptance:
+      - "The panel's first line is the selected item's title"
+      - "Every action row has a 16 px icon, and groups are divided by a 1 px hairline"
+      - "A destructive action is listed after all other groups and is drawn with the danger token"
+      - "The filter field is the panel's last element, keeps keyboard focus while the panel is open, and Up and Down still move the selected action"
+    links:
+      tickets: ["NCMD-48@1"]
+
+  - id: R-027
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju dengan kamu semu!"
+    recommendation: "Tambah jenis, ukuran atau panjang, dan waktu salin, hanya dari data yang sudah tersimpan. Tidak ada data baru dan tidak ada perubahan skema."
+    statement: "The clipboard preview shows metadata under the content: the entry's type, its size or length, and when it was copied, taken only from data already stored, with no schema change."
+    acceptance:
+      - "A text entry shows type Text, its length in characters and its copy time"
+      - "An image entry shows type Image, its pixel size and its copy time"
+      - "A file-list entry shows type Files, its file count and its copy time"
+      - "The clipboard schema version does not change"
+    links:
+      tickets: ["NCMD-49@1"]
+
+  - id: R-028
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju dengan kamu semu!"
+    recommendation: "Penanda view dengan tombol kembali di header, nama view di footer, dan urutan footer label lalu tombol. Backspace yang ditahan tidak lagi keluar dari view. Alt+1 sampai Alt+9 menjalankan hasil ke-N, dengan angka yang muncul saat Alt ditahan."
+    statement: "A pushed view shows its name with a back control in the search header, the footer names the current view and lists actions as label then key caps, a held Backspace never leaves a view, and Alt+1 to Alt+9 run the first to ninth visible result, with number cues shown while Alt is held."
+    acceptance:
+      - "In a pushed view the header shows the view name and a back control, and activating that control returns to the root"
+      - "The footer's left text is the current view's name, and each action reads label first, then its key caps"
+      - "Holding Backspace in a pushed view clears the query and stays in the view; a new Backspace press on the empty query leaves it"
+      - "Alt+N runs the Nth visible result for N from 1 to 9, and does nothing when there is no such result"
+      - "Number cues appear only while Alt is held"
+    links:
+      tickets: ["NCMD-46@1", "NCMD-47@1"]
+
+  - id: R-029
+    type: requirement
+    version: 1
+    status: active
+    topic: 5
+    answer: "setuju dengan kamu semu!"
+    recommendation: "Budget R-006 tetap: ketikan ke hasil p95 maksimal 25 ms, hotkey ke tampil p95 maksimal 50 ms, idle maksimal 40 MB. Buka, tutup, dan perpindahan seleksi tetap tanpa animasi, kontras tetap WCAG 2.2 AA, dan tidak ada jendela atau proses baru."
+    statement: "The UI/UX upgrade keeps every R-006 budget, adds no animation to showing or hiding the Launcher or to moving the selection, keeps the built-in themes at WCAG 2.2 AA, and adds no window and no process."
+    acceptance:
+      - "naobi-perf after the upgrade passes keystroke-to-results p95 <= 25 ms, hotkey-to-visible p95 <= 50 ms and idle working set <= 40 MB"
+      - "Show, hide and selection changes reach the screen with no transition frames"
+      - "r007_token_pairs_meet_wcag_aa passes for paper and stone"
+      - "The running app has the same number of processes and top-level windows as before the upgrade"
+    links:
+      tickets: ["NCMD-54@1"]
+
+  - id: R-030
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju semua!"
+    recommendation: "Semua 14 warna, radius sudut, kepadatan daftar (rapat 36, normal 40, lega 44 px), dan font dari font yang terpasang di Windows. Tema berlaku di Launcher, overlay color picker, dan border always-on-top otomatis. Font kustom hanya dipertahankan kalau lolos batas idle 40 MB."
+    statement: "A theme defines all 14 palette colors, the corner radii, the list density (compact 36, normal 40 or comfortable 44 logical px rows) and the interface and monospace font families, which may name fonts installed on Windows. The active theme colors the Launcher, the color picker overlay and the automatic topmost border. Installed-font support ships only if R-006's idle budget holds with it."
+    acceptance:
+      - "Changing any one of the 14 colors in a theme changes that color on screen"
+      - "Changing a radius in a theme changes the matching corners in the Launcher"
+      - "Density compact, normal and comfortable give 36, 40 and 44 px rows at text scale 1.0, and selection stays visible while moving through the list in each"
+      - "A theme naming an installed font draws the Launcher in it; a font that is not installed falls back to the embedded font and raises a Notice"
+      - "The color picker overlay and a topmost border set to auto use the active theme's colors"
+      - "naobi-perf idle working set stays <= 40 MB with a theme that names an installed font"
+    links:
+      tickets: ["NCMD-50@1", "NCMD-51@1", "NCMD-53@1"]
+
+  - id: R-031
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "setuju semua!"
+    recommendation: "View Themes di dalam Launcher, tanpa jendela baru. Memindahkan seleksi langsung memberi pratinjau, Enter memakai tema itu, panel aksi punya Duplicate serta Edit file. Tiap tema satu file TOML, perubahan saat disimpan berlaku dalam sekitar 1 detik tanpa restart."
+    statement: "A Themes view in the Launcher lists every theme. Moving the selection previews the selected theme, Enter applies it and Esc leaves with the applied theme restored; the action panel offers Duplicate and Edit file. Each custom theme is one TOML file, and a saved change applies within 1 s without a restart."
+    acceptance:
+      - "Typing 'themes' in the root search offers the Themes view, and it opens without a new window"
+      - "Moving the selection redraws the Launcher in the selected theme; Esc restores the applied theme"
+      - "Enter applies the selected theme to the current Windows mode's slot, and it is still applied after a restart"
+      - "Duplicate creates a new custom theme file from the selected theme and selects it"
+      - "Edit file opens a custom theme's file in the default editor"
+      - "Saving a valid change to the applied theme's file changes the Launcher within 1 s"
+    links:
+      tickets: ["NCMD-52@1"]
+
+  - id: R-032
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju semua!"
+    recommendation: "Dua slot, light dan dark, masing-masing menunjuk satu tema, aplikasi tetap mengikuti mode Windows. Bawaan paper dan stone, keduanya terkunci, tema kustom dibuat dengan Duplicate. Satu tema terus: isi kedua slot dengan tema yang sama."
+    statement: "The settings hold a light and a dark theme slot, defaulting to paper and stone; the app shows the slot of the current Windows app mode. Paper and stone are read-only, and both slots may name the same theme."
+    acceptance:
+      - "With default settings the app looks as it does with paper in light mode and stone in dark mode"
+      - "Switching the Windows mode switches between the two slots without restart"
+      - "With the same theme in both slots, switching the Windows mode does not change the Launcher's colors"
+      - "Paper and stone offer no Edit file action and have no file a save could change"
+    links:
+      tickets: ["NCMD-50@1", "NCMD-52@1"]
+
+  - id: R-033
+    type: requirement
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju semua!"
+    recommendation: "Nilai tidak valid memakai nilai tema dasarnya dan Notice menyebut baris yang salah. Kontras di bawah WCAG AA tetap boleh pada tema kustom dengan Notice yang menyebut pasangan warna yang gagal. Paper dan stone tetap wajib AA."
+    statement: "A custom theme never stops the app: an invalid value takes its base theme's value and a Notice names the file and line; a theme that cannot be read at all leaves the built-in theme of that mode on screen with a Notice. A custom theme whose text pair falls below WCAG 2.2 AA still applies, and a Notice names the failing pair."
+    acceptance:
+      - "An invalid color in a custom theme uses the base theme's color, and a Notice names the theme file and line"
+      - "A theme file with broken TOML leaves the Launcher usable in the built-in theme of that mode, with a Notice"
+      - "A theme slot naming a missing theme uses the built-in theme of that mode, with a Notice"
+      - "A low-contrast custom theme applies, and a Notice names the failing pair and its ratio"
+      - "A theme file over the size limit is refused with a Notice and is not parsed"
+    links:
+      tickets: ["NCMD-50@1"]
+
+  - id: D-043
+    type: decision
+    version: 1
+    status: active
+    topic: 8
+    answer: "setuju semua, lanjut ke fase plan"
+    recommendation: "Keep themes as plain data: one small TOML file per custom theme, resolved over a read-only built-in base, with no theme code, no font files, no new dependency and no in-app color editor."
+    statement: "A custom theme is %APPDATA%\\NaobiCommand\\themes\\<id>.toml, where <id> matches [a-z0-9-]{1,40}, is not paper or stone, and the file is at most 64 KiB; at most 100 themes are read. A theme names a base (paper or stone) and overrides any of colors, shape, list density and installed font family names. naobi-core parses and resolves themes as pure data; the index worker reloads them on a folder change; the settings file keeps the slots in [theme], and applying a theme rewrites only that slot's line, never a settings file that does not parse. The window radius is 0, 4 or 8 px because Windows draws it (D-034, ADR-0007)."
+    links:
+      decisions: ["D-009@1", "D-034@2"]
+
+  - id: D-044
+    type: decision
+    version: 1
+    status: active
+    topic: 10
+    answer: "setuju semua, lanjut ke fase plan"
+    recommendation: "Approve Gate 1 of the UI/UX upgrade: the design report additions, diagrams, design system, ADR-0007 and the eight screens of docs/design/mockups/ui-upgrade.html."
+    statement: "Gate 1 of the UI/UX upgrade is approved by the Owner: docs/design/REPORT.md, docs/diagrams, docs/design/DESIGN_SYSTEM.md, docs/adr/0007-theme-files.md and docs/design/mockups/ui-upgrade.html. That mockup is the visual reference for R-025 to R-033; its icons are placeholders for the app's own glyphs."
+
+  - id: D-045
+    type: decision
+    version: 1
+    status: active
+    topic: 3
+    answer: "setuju semua"
+    recommendation: "Approve Gate 2 of the UI/UX upgrade: 11 tickets in the proposed order and blocking edges, with no merge or split."
+    statement: "Gate 2 of the UI/UX upgrade is approved by the Owner: one epic with 11 tickets, worked in order 1 to 11 without sub agents: line geometry and section headers; result rows; view marker and safe Backspace; Alt number keys; action panel; clipboard facts; custom theme colors and slots; radii, density, picker and border; Themes view; installed fonts behind the idle budget; whole-upgrade verification."

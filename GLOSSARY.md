@@ -176,6 +176,28 @@ _Avoid_: config, preferences, options
 The local SQLite file in `%LOCALAPPDATA%\NaobiCommand` that holds clipboard entries, frecency and color history.
 _Avoid_: database server, cache
 
+### Themes
+
 **Theme**:
-`paper` (light) or `stone` (dark); follows the Windows app theme.
+A named set of colors, corner radii, list density and font families that the app draws with.
 _Avoid_: skin, mode, dark mode (dark mode names the system command)
+
+**Built-in theme**:
+`paper` (light) or `stone` (dark); read-only, shipped in the app, and always meets WCAG 2.2 AA.
+_Avoid_: default skin, system theme
+
+**Custom theme**:
+A Theme the Owner keeps as one TOML file in the themes folder; it starts from a Base theme.
+_Avoid_: user theme, profile
+
+**Base theme**:
+The Built-in theme that supplies every value a Custom theme does not set or sets wrongly.
+_Avoid_: parent, template
+
+**Theme slot**:
+The `light` or `dark` setting that names the Theme used in that Windows app mode.
+_Avoid_: active theme file, variant
+
+**Density**:
+The result row height of a Theme: compact (36 px), normal (40 px) or comfortable (44 px).
+_Avoid_: spacing mode, size

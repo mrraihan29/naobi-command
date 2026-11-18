@@ -4,7 +4,9 @@
 
 > **Window snapping was removed on 2026-11-14 (D-039).** The naobi-winmgr crate, R-016, D-022 and the window-management text below are historical; the MVP is six modules.
 
-Status: draft for Gate 1 · Plane: NCMD-2 · Date: 2026-10-22 · Ledger: 60 entries (R-001..R-023, D-001..D-037)
+> **UI/UX upgrade, 2026-11-18.** R-025 to R-033 and D-040 to D-043 add a refined Launcher and editable themes. Their design is in sections 2.1, 3.8, 4.4, 5, 6.2, 7, 9.6 and 11.7, and the Owner approved it at Gate 1 (D-044). The research is `docs/research/ui-ux-teardown.md`.
+
+Status: approved at Gate 1, including the UI/UX upgrade (D-044); upgrade plan approved at Gate 2 (D-045) · Plane: NCMD-2, upgrade epic NCMD-43 · Date: 2026-11-18 · Ledger: 78 entries (R-001..R-033, D-001..D-045)
 
 ## 0. Executive summary
 
@@ -148,11 +150,11 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 - Restore returns the window to its pre-command rectangle
 - Next display moves the window keeping its relative position, correct on mixed-DPI monitors
 
-**R-018** (v2): Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings and is the Naobi oxide accent #914A3B when Windows is in light mode and stone-focus #E3BDA9 when Windows is in dark mode (each at least 3:1 against its theme window color); no sound is played.
+**R-018** (v3): Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings; with border_color auto it uses the active theme's accent, which is the Naobi oxide #914A3B with paper and stone-focus #E3BDA9 with stone (each at least 3:1 against its theme window color); no sound is played.
 
 - Toggling twice returns the window to non-topmost
 - The border follows the pinned window when it moves and disappears when unpinned
-- The border color is #914A3B in Windows light mode and #E3BDA9 in Windows dark mode and changes with the theme without restart
+- With the default theme slots the border color is #914A3B in Windows light mode and #E3BDA9 in Windows dark mode and changes with the theme without restart
 
 #### Color picker
 
@@ -168,6 +170,25 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 - During Timed mode, powercfg /requests lists the app; after expiry it does not
 - The tray icon reflects Off, Indefinite or Timed
 
+#### UI/UX upgrade and themes
+
+**R-025** (v2): A result row shows its kind right-aligned and shows the title letters matched by the query in a heavier weight; an application row shows no path, and a file row shows its folder in JetBrains Mono.
+
+**R-026** (v1): The action panel shows the selected item's title at its top, a 16 px icon on each action, actions in groups divided by hairlines, destructive actions in a separate last group in the danger style with a text label, and the filter field at its bottom next to the footer.
+
+**R-027** (v1): The clipboard preview shows metadata under the content: the entry's type, its size or length, and when it was copied, taken only from data already stored, with no schema change.
+
+**R-028** (v1): A pushed view shows its name with a back control in the search header, the footer names the current view and lists actions as label then key caps, a held Backspace never leaves a view, and Alt+1 to Alt+9 run the first to ninth visible result, with number cues shown while Alt is held.
+
+**R-030** (v1): A theme defines all 14 palette colors, the corner radii, the list density (compact 36, normal 40 or comfortable 44 logical px rows) and the interface and monospace font families, which may name fonts installed on Windows. The active theme colors the Launcher, the color picker overlay and the automatic topmost border. Installed-font support ships only if R-006's idle budget holds with it.
+
+**R-031** (v1): A Themes view in the Launcher lists every theme. Moving the selection previews the selected theme, Enter applies it and Esc leaves with the applied theme restored; the action panel offers Duplicate and Edit file. Each custom theme is one TOML file, and a saved change applies within 1 s without a restart.
+
+**R-032** (v1): The settings hold a light and a dark theme slot, defaulting to paper and stone; the app shows the slot of the current Windows app mode. Paper and stone are read-only, and both slots may name the same theme.
+
+**R-033** (v1): A custom theme never stops the app: an invalid value takes its base theme's value and a Notice names the file and line; a theme that cannot be read at all leaves the built-in theme of that mode on screen with a Notice. A custom theme whose text pair falls below WCAG 2.2 AA still applies, and a Notice names the failing pair.
+
+The acceptance criteria of these entries are in `docs/ledger.yaml`.
 
 ### 2.2 Non-functional requirements
 
@@ -179,11 +200,18 @@ Copied from `docs/ledger.yaml`; `(critical)` marks the critical user flows of D-
 - Process start to tray-ready <= 300 ms and launcher window ready <= 1.5 s after process start; a hotkey pressed before the window is ready opens the launcher as soon as it is ready; release exe size <= 20 MB
 - A baseline report records the same metrics for the installed PowerToys
 
-**R-007** (v1): The UI applies the Naobi design tokens from naobi.dev DESIGN.md with a light 'paper' theme and a dark 'stone' theme that follow the Windows app theme, embeds Inter and JetBrains Mono, uses English copy, meets WCAG 2.2 AA contrast, and every capability is operable by keyboard alone.
+**R-007** (v2): The UI applies the Naobi design tokens from naobi.dev DESIGN.md through the built-in light 'paper' and dark 'stone' themes, shows the theme assigned to the current Windows app mode, embeds Inter and JetBrains Mono, uses English copy, and every capability is operable by keyboard alone. Paper and stone meet WCAG 2.2 AA contrast; a custom theme may fall below it under R-033.
 
 - Switching Windows between light and dark mode switches the app theme without restart
-- All text/background token pairs meet WCAG 2.2 AA contrast ratios
+- All text/background token pairs of paper and stone meet WCAG 2.2 AA contrast ratios
 - Every MVP capability can be completed without a mouse
+
+**R-029** (v1): The UI/UX upgrade keeps every R-006 budget, adds no animation to showing or hiding the Launcher or to moving the selection, keeps the built-in themes at WCAG 2.2 AA, and adds no window and no process.
+
+- naobi-perf after the upgrade passes keystroke-to-results p95 <= 25 ms, hotkey-to-visible p95 <= 50 ms and idle working set <= 40 MB
+- Show, hide and selection changes reach the screen with no transition frames
+- r007_token_pairs_meet_wcag_aa passes for paper and stone
+- The running app has the same number of processes and top-level windows as before the upgrade
 
 **R-010** (v2): The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model.
 
@@ -387,8 +415,27 @@ Memory allocation of the 40 MB, from the spike with the software renderer (untri
 | 0004 | Hotkeys use `RegisterHotKey` only | accepted | D-012 |
 | 0005 | Pre-warmed cloaked window, single instance | accepted | D-013 |
 | 0006 | Clipboard store: SQLite with per-blob DPAPI | accepted | D-014, D-015 |
+| 0007 | Themes are small data files resolved over a read-only built-in theme | accepted | D-043, D-044 |
 
 Design-it-twice alternatives were not requested by the Owner. The alternatives that mattered (Slint versus GPUI) were resolved by D-034 (D-002 superseded).
+
+### 3.8 UI/UX upgrade and theme system
+
+The upgrade keeps one process, one window and the existing data flow: the engine still produces a `Screen`, and `naobi-ui` still draws it (ADR-0002). Themes are plain data (ADR-0007).
+
+| Crate | Change |
+|---|---|
+| `naobi-core` | `tokens`: the contrast calculation moves here from the test, as `contrast_failures(&Palette)`. New `theme_file`: `ThemeId`, `Density`, `Shape`, `Fonts`, `ResolvedTheme`, `parse`, `resolve`. `settings`: `[theme]` slots and `with_theme_slot(text, slot, id)`. `ui`: view marker, matched title letters, grouped actions, preview facts and swatches, theme preview. `item::Action`: glyph, group, destructive flag. `command::Outcome::Stay` keeps the Launcher open with effects and an optional row to select |
+| `naobi-launcher` | The ranker returns the matched title letters for shown rows. The engine fills the view marker, the panel title and the footer's view name, and passes back the selected theme for preview |
+| `naobi-clipboard` | `preview` returns the content with its facts from one decrypted read |
+| `naobi-ui` | `app.slint` takes theme tokens as properties; rows, panel, footer and panes follow the design system. `model.rs` computes line offsets for scrolling and Alt numbers, and maps match data |
+| `naobi-win32` | An installed-font check. The picker overlay takes a `Palette` instead of a `Theme` |
+| `naobi-aot` | `border_color("auto", ...)` takes the active accent |
+| `naobi-app` | New `modules/themes.rs`: catalog, Themes view, root command, Duplicate, Edit file. The index worker watches the themes folder. The controller applies the slot and posts the resolved theme |
+
+New or changed seams, all in-process: `theme_file::parse(id, text) -> ThemeParse`; `theme_file::resolve(slots, mode, catalog) -> (ResolvedTheme, Vec<Report>)`; `settings::with_theme_slot(text, slot, id) -> Result<String, SettingsError>`; `tokens::contrast_failures(&Palette)`; `Launcher::handle(UiEvent) -> Vec<Effect>` with `Effect::ApplyTheme`; `naobi_ui::model` line geometry, tested without a window. No new dependency: `toml` already provides spans for line numbers.
+
+Performance: theme parsing runs on the index worker, never on a keystroke. Previewing or applying a theme sets a small group of Slint globals and repaints once. Match letters are computed only for the rows that are shown, at most 50. A Theme that keeps the embedded fonts adds no font memory.
 
 ## 4. Data
 
@@ -447,6 +494,7 @@ The file is `%LOCALAPPDATA%\NaobiCommand\naobi.db` (ADR-0006, D-014). Settings a
 | Run history | `RUN_HISTORY` (schema V2) | Command line and resolved program path encrypted with DPAPI; last run time in plaintext | The Owner's personal data, possibly secret (a token or password typed in a line) | 100 lines and 30 days, whichever bites first; delete one (R-024, D-038) |
 | Metadata | `META` | schema version | None | Permanent |
 | Settings | `settings.toml` | Hotkeys, quicklinks, gap, ignore list, retention (can lower only), UI scale | Low; contains URLs the Owner chose | Owner-managed |
+| Theme files | `themes\<id>.toml` under the settings folder | Name, base, colors, radii, density, font family names | Not personal | Owner-managed |
 | Logs | `logs\*.log` | Event ids, sizes, counts, error codes. Never content, query text or file names (D-020) | Low | 5 files of 1 MB |
 | In memory only | Process heap | Item index (10,000 items), icon cache, decrypted clipboard text index (dropped 60 s after the view closes), decrypted run history while a '>' query is shown (dropped on any other query), restore rectangles, topmost set, Awake mode, screen snapshot during a pick | Clipboard text is sensitive while in memory | Process lifetime or shorter |
 
@@ -469,6 +517,14 @@ N/A under UU 27/2022 (PDP Law): the Owner processes only their own data on their
 
 An invalid file keeps the last valid settings and raises a Notice with the line number (D-009). Files over 256 KiB are rejected.
 
+The upgrade adds one section, and applying a theme rewrites only the matching line:
+
+```toml
+[theme]     light = "paper"  dark = "stone"       # a built-in name or a Custom theme id
+```
+
+Theme files are described in `DESIGN_SYSTEM.md` (section Themes) and ADR-0007. No database table changes.
+
 ## 5. Flows
 
 ### 5.1 Data flow diagram (level 1)
@@ -485,6 +541,7 @@ flowchart LR
   browser([Default browser]):::ext
   subgraph tb_fs[Trust boundary: same-user file system]
     settings[(Settings file TOML)]
+    themes[(Theme files TOML)]
     store[(Data store SQLite with DPAPI blobs)]
     logs[(Log files)]
   end
@@ -512,6 +569,10 @@ flowchart LR
   mods -->|"F14 execution state"| winsvc
   ctrl -->|"F15 log lines, no content"| logs
   winsvc -->|"F16 theme, resume, display change"| plat
+  themes -->|"F17 theme values, hot reload"| ctrl
+  ctrl -->|"F18 theme slot line, duplicated theme"| settings
+  ctrl -->|"F18 duplicated theme"| themes
+  ctrl -->|"F19 open a custom theme file"| winsvc
   ctrl --> clip
   ctrl --> mods
   classDef ext stroke-dasharray: 4 2
@@ -626,6 +687,42 @@ sequenceDiagram
   end
 ```
 
+Applying and editing a theme (R-030 to R-033):
+
+<!-- source: docs/diagrams/seq-theme-apply.mmd -->
+```mermaid
+sequenceDiagram
+  actor O as Owner
+  participant U as UI shell
+  participant L as Launcher engine
+  participant T as Themes view
+  participant A as App controller
+  participant F as Theme files and settings file
+  participant W as Index worker
+  O->>U: Up or Down in the Themes view
+  U->>L: UiEvent Key
+  L->>T: look of the selected row
+  T-->>L: theme id
+  L-->>A: Screen with theme preview
+  A->>U: set theme (not saved)
+  O->>U: Enter
+  U->>L: UiEvent Key Enter
+  L->>T: run apply
+  T-->>L: Stay with Effect ApplyTheme
+  L-->>A: Effect ApplyTheme
+  alt settings file parses
+    A->>F: replace one slot line, atomic write
+    A->>U: footer shows Applied
+  else settings file is broken
+    A->>U: Notice, file left unchanged
+  end
+  O->>F: saves a theme file in an editor
+  F-->>W: folder change
+  W->>F: read at most 100 files of 64 KiB
+  W->>A: new catalog and problem list
+  A->>U: set theme when the active one changed, Notice for problems
+```
+
 ### 5.3 State diagrams
 
 Launcher window lifecycle (R-022, R-023):
@@ -657,15 +754,22 @@ stateDiagram-v2
   RootQuery --> ActionPanel: Ctrl+K
   ActionPanel --> RootQuery: Esc
   RootQuery --> ClipboardView: Enter on view item
+  RootQuery --> ThemesView: Enter on Themes
+  ThemesView --> ThemesView: selection previews a theme
+  ThemesView --> ThemesView: Enter applies the theme to the current mode's slot
+  ThemesView --> ThemesPanel: Ctrl+K
+  ThemesPanel --> ThemesView: Esc, Duplicate
+  ThemesPanel --> Hidden: Edit file
+  ThemesView --> RootEmpty: Esc on empty query, back control or Backspace press restores the applied theme
   ClipboardHotkeyView --> ClipboardHotkeyView: Esc clears a non-empty query
   ClipboardHotkeyView --> Hidden: Esc on empty query hides (opened by its own hotkey)
   ClipboardHotkeyView --> Hidden: Enter pastes
-  ClipboardView --> ClipboardView: Esc clears a non-empty query
-  ClipboardView --> RootEmpty: Esc on empty query pops the view
+  ClipboardView --> ClipboardView: Esc clears a non-empty query, held Backspace stays
+  ClipboardView --> RootEmpty: Esc on empty query, back control or Backspace press pops the view
   RootQuery --> Armed: Enter on restart, shut down, sign out, empty bin
   Armed --> RootQuery: other key, selection change, 5 s timeout
   Armed --> Hidden: second Enter runs the command
-  RootQuery --> Hidden: Enter runs primary action
+  RootQuery --> Hidden: Enter or Alt+1 to 9 runs a primary action
   ClipboardView --> Hidden: Enter pastes
 ```
 
@@ -698,6 +802,8 @@ Entities with a lifecycle that are not drawn: a clipboard entry (created, option
 - **Topmost.** `SetWindowPos(HWND_TOPMOST)`; the border is a layered topmost tool window drawn with GDI. While at least one window is topmost, one `SetWinEventHook` (`WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS`) per pinned process, scoped by `idProcess` and filtered to `OBJID_WINDOW`, repositions the border on `EVENT_OBJECT_LOCATIONCHANGE`; an unscoped hook would fire for every caret and cursor move on the system. The platform thread (P1) owns this hook: it already runs the message loop that an out-of-context hook needs, and the callback only repositions the border. This is the one stated exception to "no hooks" (sections 3.5 and T-021); the alternative, the index worker, would add a second loop. With no topmost window there is no hook. `naobi-perf idle` is run once with one pinned window.
 - **Awake.** The platform thread holds a power request (`PowerCreateRequest`, `PowerSetRequest` with system required and, if chosen, display required) with a reason string, so `powercfg /requests` names the app (R-019); re-applied on `PBT_APMRESUMEAUTOMATIC`; cleared on Off, expiry and exit.
 - **Color picker.** Frozen GDI snapshot overlay (D-023); no mouse hook.
+- **Themes.** The folder is created at start and watched by the index worker with the same debounce as settings. One `.toml` file with a valid id is one Custom theme; other names are ignored with one Notice. A file over 64 KiB is refused before parsing, and at most 100 files are read in name order. Applying reads `settings.toml`, refuses if it does not parse, replaces one line in `[theme]` (or adds it), parses the result again and writes it through a temporary file in the same folder. Duplicate writes `<id>-copy.toml` (then `-copy-2` and so on) without overwriting. Edit file opens only a validated Custom theme path with the shell `open` verb.
+- **Line geometry.** Section headers now differ from rows in height, so `naobi_ui::model` computes each line's top and height, and Slint scrolls to those values. Alt+N uses the same table with the list's scroll offset, so the number on screen and the row it runs always agree.
 
 ## 6. Security
 
@@ -768,6 +874,18 @@ Threat counts: Spoofing 4, Tampering 7, Repudiation 2, Information disclosure 11
 
 Categories not applied to an element, with the reason: Repudiation on the settings file, the UI shell and the color picker (no action of record, one user); Spoofing on the data store (a file, not a principal); Elevation of privilege on the log (no code path); Information disclosure on the topmost border (no data).
 
+Planned threats of the UI/UX upgrade. They are not in the checked table above yet because their tests do not exist; each row moves there when its ticket adds the test, and the total is raised then.
+
+| Threat id | STRIDE | Element | Threat | Mitigation | ASVS 5.0 chapter | Planned test | Ticket |
+|---|---|---|---|---|---|---|---|
+| T-036 | Tampering | F17 theme file | Another process of the Owner writes a hostile theme | A theme holds only typed colors, numbers, one density word and family names; no path, URL or command; bad values take the base value | V5 File Handling; V13 Configuration | `r033_invalid_values_use_base_and_name_the_line` | Plan |
+| T-037 | Tampering | F17, F18 slot and id | A slot or file name such as `..\..\x` reaches outside the themes folder | `ThemeId` allows only `[a-z0-9-]{1,40}` and is checked before any path is joined | V1 Encoding and Sanitization; V5 File Handling | `d043_theme_id_rejects_paths_and_reserved_names` | Plan |
+| T-038 | Denial of service | F17 | Huge or very many theme files stall the worker or fill memory | 64 KiB cap read with a limit, 100 files at most, parsed on the index worker | V5 File Handling | `r033_oversized_theme_is_refused_before_parsing` | Plan |
+| T-039 | Spoofing | P5 UI shell, custom colors | A theme hides an armed command, danger action or Notice by low contrast | Armed and destructive rows keep their text; contrast failures raise a Notice that also reaches the tray and the Windows balloon, which do not use theme colors | V2 Validation and Business Logic | `r033_low_contrast_applies_with_a_named_notice` | Plan |
+| T-040 | Tampering | F18 settings rewrite | Applying a theme damages the Owner's settings file | Only one slot line changes; a file that does not parse is refused; the result is parsed before an atomic replace | V13 Configuration | `d043_slot_write_keeps_every_other_line`, `d043_slot_write_refuses_a_broken_file` | Plan |
+| T-041 | Information disclosure | F15 logs | Theme ids or font names reach the log as file names | Logs carry theme counts and error kinds only (D-020) | V16 Security Logging and Error Handling | `d020_theme_reload_logs_no_names` | Plan |
+| T-042 | Elevation of privilege | F19 Edit file | The action is abused to open an arbitrary target | It opens only a validated Custom theme path inside the folder, with the `open` verb and no arguments; built-in themes have no such action | V15 Secure Coding and Architecture | `r032_builtin_theme_has_no_edit_action`, `r031_edit_file_opens_only_the_theme_path` | Plan |
+
 ### 6.3 Accepted risks
 
 | Ledger id | Risk | Why accepted |
@@ -791,7 +909,9 @@ Surfaces owned by Windows (tray menu, balloon notification) keep OS styling; the
 
 Mockups: the direction is approved by the Owner (D-031): `docs/design/mockups/launcher-mockups.html` covers the root, results with calculator, action panel, clipboard history and window management screens in `paper` and `stone`. The color picker overlay, the tray menu and the error, loading and empty states follow the same pattern and are specified per ticket in Plan from the state lists in `docs/design/mockups/README.md`.
 
-Keyboard grammar (R-012, R-007): Enter primary, Ctrl+Enter secondary, Ctrl+K action panel, Esc ladder (a view opened by its own hotkey hides on Esc). Keys beyond the ledger (Backspace on empty pops, Ctrl+. pins, Ctrl+X deletes while the query is empty) are accepted and listed in the design system; the topmost border follows the Windows theme (oxide in light mode, the pale earth tone in dark mode, R-018 v2).
+Keyboard grammar (R-012, R-007): Enter primary, Ctrl+Enter secondary, Ctrl+K action panel, Esc ladder (a view opened by its own hotkey hides on Esc). Keys beyond the ledger (Backspace on empty pops, Ctrl+. pins, Ctrl+X deletes while the query is empty) are accepted and listed in the design system; the topmost border uses the active theme's accent (oxide with paper, the pale earth tone with stone, R-018 v3).
+
+**UI/UX upgrade (R-025 to R-033).** `docs/design/mockups/ui-upgrade.html` shows eight states and is the approved visual reference (D-044). Rows gain a right-aligned kind and matched letters; the root list stays flat, with a header only where a section means something, such as Files. The action panel gains a title, glyphs, groups, a destructive group and a bottom filter. Pushed views show a back control; the footer names the view. The clipboard pane gains facts. The Themes view previews any Theme live, and Custom themes are edited as files. The design system holds the exact tokens, states and keys.
 
 ## 8. Code standards
 
@@ -865,6 +985,22 @@ Appendix A lists one planned test or check per active `R-` entry. The R- ids app
 
 R-002 14-day usage log; R-007 keyboard-only pass of every capability (a Narrator pass when accessibility support is switched on, D-032); R-019 first acceptance (`powercfg /requests` needs an elevated shell, RK-09); R-011 with a real elevated Notepad; R-008 with PowerToys Run enabled to produce the conflict and with Do Not Disturb on to see the banner on tray Open.
 
+### 9.6 UI/UX upgrade
+
+| R- | Planned tests | Tier and seam |
+|---|---|---|
+| R-025 | `r025_matched_title_letters_are_marked`, `r025_kind_and_hint_end_at_the_right_edge`, `r025_file_row_shows_its_folder_in_mono` | 1: engine `Screen`; headless Slint frame |
+| R-026 | `r026_panel_has_title_groups_and_glyphs`, `r026_destructive_actions_come_last`, `r026_filter_is_last_and_keeps_focus` | 1: engine; headless Slint |
+| R-027 | `r027_preview_facts_for_text_image_and_files`, `r027_schema_version_unchanged` | 1: `ClipboardView` |
+| R-028 | `r028_pushed_view_has_name_and_back`, `r028_held_backspace_stays_in_the_view`, `r028_alt_number_runs_the_nth_visible_row`, `r028_alt_cues_only_while_alt_is_held` | 1: engine, `model`, headless key events; 2: real Alt handling |
+| R-029 | `naobi-perf all`, `r029_show_and_selection_have_no_transition`, `r029_no_new_window_or_process` | 3 and 2 |
+| R-030 | `r030_theme_overrides_every_token`, `r030_density_sets_row_height_and_scroll_math`, `r030_missing_font_falls_back_with_notice`, `r030_picker_and_border_use_the_active_theme` | 1: `theme_file`, `model`, picker and border colors; 3: idle with an installed font |
+| R-031 | `r031_selection_previews_and_esc_restores`, `r031_enter_applies_to_the_current_slot`, `r031_duplicate_creates_and_selects_a_theme`, `r031_edit_file_opens_only_the_theme_path`, `r031_saved_theme_applies_within_one_second` | 1: engine, Themes view with a temp folder; index worker |
+| R-032 | `r032_default_slots_match_today`, `r032_mode_change_switches_slot`, `r032_same_theme_in_both_slots_does_not_change`, `r032_builtin_theme_has_no_edit_action` | 1 |
+| R-033 | `r033_invalid_values_use_base_and_name_the_line`, `r033_broken_theme_uses_builtin_with_notice`, `r033_missing_slot_theme_uses_builtin`, `r033_low_contrast_applies_with_a_named_notice`, `r033_oversized_theme_is_refused_before_parsing` | 1 |
+
+The headless Slint test that writes `NAOBI_UI_CHECK_DIR` frames is extended to every mockup state, so each visual ticket leaves before-and-after images. By hand at Gate 3: a keyboard-only pass, the real Alt and Backspace behaviour, and saving a theme in an external editor.
+
 ## 10. Deployment and operations
 
 Delivery is a portable release exe plus optional autostart through `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (D-007). There is no server, no Coolify or VPS, no backup, no hosted environment: `STANDARD.md` §9 (Coolify, B2, staging, uptime monitor) is N/A for this product.
@@ -922,6 +1058,11 @@ GPUI is rejected for no UI Automation tree, a custom text input to write, and hi
 | RK-13 | A pre-warmed window may cost idle CPU through framework timers | Spike idle CPU is 0.00% once the leftover repeating timer was removed; keep the window event-driven, no repeating timers; `naobi-perf idle` |
 | RK-14 | The minimum Windows 11 build is an assumption (22H2) | The Owner's PC is the reference; the target is Windows 11 only |
 | RK-15 | Keystroke-to-results p95 <= 16 ms is not proven with the software renderer: the spike's screen probe gave an upper bound of 26.7 ms (probe overhead about 7 ms, vsync 7 ms at 143 Hz), while the femtovg notifier measured 10.4 ms. Software rendering of a 940 x 594 px surface may be slower on weaker hardware | Open item for Plan: the production `naobi-perf` instruments the software renderer's present path, and the first Build slice (search box plus 10,000-item list) measures it before any other module is built. Fallback if it fails: an Owner decision at that point; there is no automatic renderer switch. **Outcome (NCMD-27, D-037): resolved.** Measured on the production build, 10,000 items, 200 valid runs: p95_est 19.3 ms against the R-006 v5 bar of 25 ms (PASS); the true on-screen p95 lies between 19.3 ms and p95_upper 26.3 ms. The v4 bar of 16 ms was missed, so the Owner changed the bar (D-037); the Slint software renderer stays. Details and conditions: [docs/research/rk15-result.md](../research/rk15-result.md) |
+
+| RK-16 | Slint's styled text may not draw per-letter weight with the software renderer | The first visual ticket tries it in a headless frame; the fallback is a row of plain text runs, with the plain title when it would need eliding |
+| RK-17 | `ListView` virtualization may estimate positions poorly when headers and rows differ in height | `model` supplies exact offsets; a headless test scrolls to the last row in each Density. If it drifts, the Files header stays a separate list line drawn at row height with a 28 px label |
+| RK-18 | Alt alone may activate the window's system menu or lose its key-up when focus changes | Tier 2 test on the real window; cues clear on hide and focus loss. Alt+digit still works if cues must be dropped |
+| RK-19 | An installed font can raise idle memory past R-006 | Embedded fonts stay the default; measure with `naobi-perf idle`; drop the `[fonts]` table if the budget fails (R-030) |
 
 ### 11.3 Out of scope (non-goals)
 
@@ -1005,6 +1146,16 @@ Carried to Plan; none blocks Gate 1. Ids refer to `REVIEW_REPORT-design-r2.md`.
 | M10 | RK-09 repeats "the literal acceptance" |
 | M11 | D-020 asks for size-based log rotation (5 files of 1 MB) but `tracing-appender` rotates by time. Pick a crate or write a few lines of size rotation |
 
+### 11.7 UI/UX upgrade: decisions for Gate 1
+
+All three were approved by the Owner on 2026-11-18 ("setuju semua, lanjut ke fase plan").
+
+| # | Item | Outcome |
+|---|---|---|
+| 1 | The app catalog holds only a `shell:AppsFolder` id: application rows already have no path, there is no Copy path action, and packaged apps have no single file path | R-025 v2 drops the Copy path clause. Files keep Open Containing Folder |
+| 2 | Theme file format and limits | D-043 confirmed |
+| 3 | `docs/design/mockups/ui-upgrade.html` replaces the earlier visual reference | D-044; D-031 is superseded |
+
 ## Appendix A. Decision ledger and traceability matrix
 
 Section column: chapter of this report or diagram. Test column: the planned seam test or check. Ticket stays empty until Plan.
@@ -1017,7 +1168,7 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | R-004 | The MVP contains seven modules: launcher (apps, files, system commands, web-search quicklinks), inline calculator with unit conversion, clipboard history, window management (snap to zones), color picker, always-on-top, and awake. Snippets, OCR text extractor, keyboard remapper and the remaining PowerToys utilities are phase 2. | D-005, D-024 | §3.3, §3.4 | `r004_every_module_reachable_and_no_phase2_command` (tier 1, catalog) | |
 | R-005 | Out of scope for the MVP: Raycast extension compatibility, any third-party plugin system, and AI features; all modules are built into the Rust binary. | D-001, D-010 | §3.4, §6.2 T-016 | `r005_no_dynamic_loading_no_ai_calls` (tier 1 catalog test plus `cargo deny` bans) | |
 | R-006 | Performance budgets: hotkey-to-visible p95 <= 50 ms; keystroke-to-results p95 <= 16 ms over a 10,000-item index, from the key event received by the window procedure to the presentation of the frame that contains the new results; idle working set <= 40 MB total, measured without working-set trimming; idle CPU < 0.5% averaged over 60 s; process start to tray-ready (tray icon shown, hotkeys registered) <= 300 ms, pre-warmed launcher window ready <= 1.5 s after process start, and a hotkey pressed before the window is ready is served as soon as it is; release exe <= 20 MB. The installed PowerToys is measured as the baseline. | D-034, D-013, D-021, D-025 | §3.6, §9.2 | `naobi-perf` verdicts (tray-ready <= 300 ms and window-ready <= 1.5 s are separate); `r006_percentile_function` (tier 1); `r006_hotkey_before_window_ready_is_served` (tier 2) | |
-| R-007 | The UI applies the Naobi design tokens from naobi.dev DESIGN.md with a light 'paper' theme and a dark 'stone' theme that follow the Windows app theme, embeds Inter and JetBrains Mono, uses English copy, meets WCAG 2.2 AA contrast, and every capability is operable by keyboard alone. | D-030, D-032, D-034 | §7; DESIGN_SYSTEM.md | `r007_token_pairs_meet_wcag_aa`, `r007_theme_switch_without_restart` (tier 1 with fake theme source); manual keyboard-only pass (Narrator when accessibility support is switched on, D-032) | |
+| R-007 | The UI applies the Naobi design tokens from naobi.dev DESIGN.md through the built-in light 'paper' and dark 'stone' themes, shows the theme assigned to the current Windows app mode, embeds Inter and JetBrains Mono, uses English copy, and every capability is operable by keyboard alone. Paper and stone meet WCAG 2.2 AA contrast; a custom theme may fall below it under R-033. | D-030, D-032, D-034 | §7; DESIGN_SYSTEM.md | `r007_token_pairs_meet_wcag_aa`, `r007_theme_switch_without_restart` (tier 1 with fake theme source); manual keyboard-only pass (Narrator when accessibility support is switched on, D-032) | |
 | R-008 | As the owner, I press Ctrl+Space anywhere to open the launcher so that every capability starts from one hotkey; if the hotkey is already registered, the app reports the conflict instead of failing silently. | D-012, D-018, D-029 | seq-hotkey-to-launch; ADR-0004 | `r008_ctrl_space_opens_launcher`, `r008_conflict_notice_names_hotkey` (tier 2, also checks the sticky banner and tray tooltip) | |
 | R-009 | All data stays local: settings as TOML in %APPDATA%\NaobiCommand, clipboard history in SQLite with entry contents encrypted by Windows DPAPI (current user), retained for at most 30 days or 1,000 entries; clipboard updates flagged with ExcludeClipboardContentFromMonitorProcessing or CanIncludeInClipboardHistory=0 are never stored; a 'Clear clipboard history' command deletes all entries. UU 27/2022 does not apply because the owner processes only their own data on their own device. | D-014, D-015 | §4; erd; ADR-0006 | `r009_content_not_plaintext_in_db_file` (tier 2: real DPAPI cipher, scans naobi.db and naobi.db-wal), `r009_retention_purges_old_and_excess`, `r009_exclusion_flag_not_stored`, `r009_clear_history_leaves_zero` | |
 | R-010 | The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model. | D-011, D-024, D-033, D-038 | §6; dfd | `r010_main_token_not_elevated` (tier 2), `naobi-perf network-silence` (verdict id `r010_no_socket_during_session`, tier 3), `r010_file_row_icon_does_not_touch_unc` (tier 2), `r010_stride_rows_have_mitigation_test_or_risk` (tier 1, parses REPORT.md) | |
@@ -1028,13 +1179,22 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | R-015 | (critical) As the owner, I press Alt+Shift+V to open clipboard history holding text, images up to 10 MB and file lists; I can search text, pin entries, press Enter to paste into the previously focused app or Ctrl+Enter to copy only; copies from apps on the ignore list (default the Proton Pass desktop app, planned exe name 'Proton Pass.exe', confirmed at build) are never stored. | D-013, D-014, D-015, D-019 | seq-clipboard-paste | `r015_text_copy_search_paste_selects_entry`, `r015_image_over_10mb_rejected`, `r015_pinned_entry_survives_retention_purge`, `r015_ignored_app_not_stored` (Proton Pass.exe), `r015_paste_aborts_if_foreground_changed`, `r015_previous_clipboard_restored_after_paste`, `r015_restore_skipped_if_another_copy_happened`, `r015_restore_skipped_when_snapshot_was_excluded`, `r015_copy_open_enter_pastes_into_previous_app` (tier 2), `r015_ignored_app_not_stored_real_process` (tier 2), `d013_hide_returns_focus_to_previous_window` (tier 2) | |
 | R-016 | (critical) Window management offers keyboard commands for halves, thirds, quarters, center, maximize, almost-maximize, move to next display and restore, with a configurable gap; default hotkeys are Ctrl+Alt+Arrow for halves, Ctrl+Alt+Enter maximize, Ctrl+Alt+C center and Ctrl+Alt+Backspace restore. Drag-to-zone overlays are phase 2. | D-022 | seq-window-snap | `r016_left_half_with_gap`, `r016_restore_returns_pre_command_rectangle`, `r016_next_display_keeps_relative_position_mixed_dpi`, `r016_ctrl_alt_left_snaps_foreground_window` (tier 2) | |
 | R-017 | Win+Shift+C starts the color picker with a magnifier; a click copies the color as HEX; HEX, RGB, HSL and OKLCH formats are available from the launcher; the last 20 picked colors are kept. | D-023 | §5.4 Color picker | `r017_pick_known_pixel_copies_hex` (tier 2, helper window of a known color), `r017_history_drops_oldest_at_21` (tier 1) | |
-| R-018 | Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings and is the Naobi oxide accent #914A3B when Windows is in light mode and stone-focus #E3BDA9 when Windows is in dark mode (each at least 3:1 against its theme window color); no sound is played. | D-022, D-030 | §5.4 Topmost; DESIGN_SYSTEM.md | `r018_toggle_twice_returns_non_topmost`, `r018_border_follows_window_and_disappears` (tier 2), `r018_border_color_follows_windows_theme` (tier 1) | |
+| R-018 | Win+Ctrl+T toggles always-on-top for the foreground window; a pinned window gets a 2 px border that can be disabled in settings; with border_color auto it uses the active theme's accent, which is the Naobi oxide #914A3B with paper and stone-focus #E3BDA9 with stone (each at least 3:1 against its theme window color); no sound is played. | D-022, D-030, D-043 | §5.4 Topmost; DESIGN_SYSTEM.md | `r018_toggle_twice_returns_non_topmost`, `r018_border_follows_window_and_disappears` (tier 2), `r018_border_color_follows_windows_theme` (tier 1) | |
 | R-019 | Awake keeps the PC from sleeping in Indefinite or Timed mode (30 min, 1 h, 2 h or a custom duration), optionally keeping the display on; it is controlled by launcher commands such as 'awake 1h' and its state shows in the tray icon. The owner's PC uses S3 sleep (no Modern Standby). | D-024 | state-awake; §3.5 | `r019_timed_mode_sets_and_clears_power_request` (tier 1 fake; tier 2 real request state), `r019_tray_icon_reflects_mode` (tier 1); manual `powercfg /requests` in an elevated shell | |
 | R-020 | System commands are lock, sleep, hibernate, restart, shut down, sign out, empty recycle bin, toggle dark mode and open Windows settings; restart, shut down, sign out and empty recycle bin require a second Enter to confirm. | D-024 | state-launcher-view | `r020_single_enter_arms_second_executes` (tier 1), `r020_toggle_dark_mode_flips_app_theme` (tier 1 fake registry; manual) | |
 | R-021 | Quicklinks are defined in the settings TOML as URL templates with a {query} placeholder and an alias; the defaults are Google, GitHub, YouTube and naobi.dev; typing '<alias> <text>' opens the URL with the text URL-encoded in the default browser. | D-024, D-009 | §4.4 | `r021_gh_react_native_opens_url_with_percent20`, `r021_query_is_percent_encoded`, `r021_non_http_scheme_rejected` (tier 1) | |
 | R-022 | The app shows only a tray icon (no taskbar button) with the menu Open, Pause hotkeys, Awake status, Settings and Quit. | D-018 | state-launcher-window; §3.5, §5.4 | `r022_launcher_not_in_taskbar_or_alt_tab`, `r022_pause_hotkeys_unregisters_all` (tier 2) | |
 | R-023 | Only one instance runs; a second launch shows the first instance's launcher and exits. The launcher window is created hidden at startup and hidden by DWM cloaking, never destroyed, so showing it does not create a window. | D-013 | state-launcher-window; ADR-0005 | `r023_second_instance_shows_first_and_exits`, `r023_hwnd_stable_across_100_cycles`, `d013_hide_returns_focus_to_previous_window` (tier 2) | |
 | R-024 | Typing '>' and a command line in the Launcher root search shows a run row; Enter runs the line in a new PowerShell 7 (pwsh) console window that stays open, or in Windows PowerShell 5.1 when pwsh is not found, or starts the program directly without a console when the first token resolves through PATH or App Paths to a GUI-subsystem exe; '>' alone lists the run history newest first and '>text' lists the run history command lines that contain text below the run row; the run history keeps at most 100 command lines for at most 30 days, each stored as a DPAPI current-user blob and never logged; there is no run-as-administrator action and no second Enter. | D-038, D-014, D-020, D-024 | §4.2, §6.2 (T-033 to T-035) | `r024_console_gets_line_unchanged`, `r024_encoded_command_is_utf16le_base64`, `r024_lookup_skips_unc_path_dirs`, `r024_history_stores_only_cipher_blobs`, `r024_run_flow_opens_console_and_leaves_no_plaintext` | |
+| R-025 | Result rows show kind, matched letters and useful subtitles. | D-041, D-042 | §2.1, §3.8, §7, §11.7 | §9.6 | |
+| R-026 | The action panel has a title, glyphs, groups, a destructive group and a bottom filter. | D-041 | §3.8, §7 | §9.6 | |
+| R-027 | The clipboard preview shows stored facts with no schema change. | D-040 | §3.8, §7 | §9.6 | |
+| R-028 | Views are named, held Backspace stays, and Alt+1 to 9 run visible results. | D-040 | §5.3, §5.4, §7 | §9.6 | |
+| R-029 | The upgrade keeps the budgets, adds no show or selection motion, and adds no window or process. | D-034 | §3.8, §9.6 | §9.6 | |
+| R-030 | A theme defines colors, radii, density and fonts and reaches the picker and automatic border. | D-043 | §3.8, §7; ADR-0007 | §9.6 | |
+| R-031 | The Themes view previews, applies, duplicates and opens themes; saved files apply within 1 s. | D-043 | §5.2, §5.3, §5.4 | §9.6 | |
+| R-032 | Light and dark slots name themes; paper and stone are read-only. | D-043 | §4.4, §7 | §9.6 | |
+| R-033 | Bad or low-contrast themes never stop the app and always raise a Notice. | D-043 | §6.2 T-036 to T-039 | §9.6 | |
 
 ### Decisions
 
@@ -1070,8 +1230,14 @@ Section column: chapter of this report or diagram. Test column: the planned seam
 | D-028 | active (Owner answered) | 7 | Accepted risk: unsigned exe |
 | D-029 | active (Owner answered) | 7 | Accepted risk: hotkey held by another process |
 | D-030 | active (autonomous default, to confirm) | 10 | Desktop token adaptation and contrast fix |
-| D-031 | active (Owner answered) | 10 | Mockup direction approved |
+| D-031 | superseded by D-044 (Owner answered) | 10 | Mockup direction approved |
 | D-032 | active (Owner answered) | 10 | Screen reader as a weighted D-002 criterion |
 | D-033 | active (Owner answered) | 7 | ASVS Level 1 confirmed |
 | D-034 | active (Owner answered) | 8 | UI framework: Slint, software renderer, accessibility on |
 | D-038 | active (Owner answered) | 7 | Run a command line typed after '>' |
+| D-039 | active (Owner answered) | 4 | Window snapping removed |
+| D-040 | active (Owner answered) | 3 | Scope of the UI/UX upgrade |
+| D-041 | active (Owner answered) | 10 | Visual direction of the upgrade |
+| D-042 | active (Owner answered) | 10 | Section header 28 px, row 40 px |
+| D-043 | active (Owner answered) | 8 | Theme files, limits and slot writes |
+| D-044 | active (Owner answered) | 10 | Gate 1 of the UI/UX upgrade and its mockups approved |

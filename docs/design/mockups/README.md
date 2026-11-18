@@ -1,6 +1,8 @@
 # Mockups
 
-Status: the direction is approved by the Owner (D-031). `launcher-mockups.html` covers screens 1 to 5 below in paper and stone (root, results with calculator, action panel, clipboard history, window management). Screens 6 to 8 (color picker overlay, awake and tray menu, empty/error/loading states) follow the same pattern and are specified per ticket in Plan; the state lists below are the input for those tickets. Each screen is drawn in both themes, `paper` and `stone`, at 100% scale, 750 x 475 logical px unless noted. Tokens: `docs/design/DESIGN_SYSTEM.md`. Do not add colors, fonts or shapes that are not in it.
+`ui-upgrade.html` holds the eight screens of the UI/UX upgrade (R-025 to R-033) at real size: root, results with matched letters, action panel, clipboard facts, the Themes view, a Custom theme with a contrast Notice, Alt number cues, and compact density. The Owner approved it at Gate 1 (D-044), so it replaces `launcher-mockups.html` as the visual reference; the window-management screen there is obsolete (D-039). Icons in the mockup are placeholders for the app's own glyphs, and row text is sample data.
+
+Status of the earlier set: the direction is approved by the Owner (D-031). `launcher-mockups.html` covers screens 1 to 5 below in paper and stone (root, results with calculator, action panel, clipboard history, window management). Screens 6 to 8 (color picker overlay, awake and tray menu, empty/error/loading states) follow the same pattern and are specified per ticket in Plan; the state lists below are the input for those tickets. Each screen is drawn in both themes, `paper` and `stone`, at 100% scale, 750 x 475 logical px unless noted. Tokens: `docs/design/DESIGN_SYSTEM.md`. Do not add colors, fonts or shapes that are not in it.
 
 | # | Screen | Required states |
 |---|---|---|

@@ -1,0 +1,30 @@
+sequenceDiagram
+  actor O as Owner
+  participant U as UI shell
+  participant L as Launcher engine
+  participant T as Themes view
+  participant A as App controller
+  participant F as Theme files and settings file
+  participant W as Index worker
+  O->>U: Up or Down in the Themes view
+  U->>L: UiEvent Key
+  L->>T: look of the selected row
+  T-->>L: theme id
+  L-->>A: Screen with theme preview
+  A->>U: set theme (not saved)
+  O->>U: Enter
+  U->>L: UiEvent Key Enter
+  L->>T: run apply
+  T-->>L: Stay with Effect ApplyTheme
+  L-->>A: Effect ApplyTheme
+  alt settings file parses
+    A->>F: replace one slot line, atomic write
+    A->>U: footer shows Applied
+  else settings file is broken
+    A->>U: Notice, file left unchanged
+  end
+  O->>F: saves a theme file in an editor
+  F-->>W: folder change
+  W->>F: read at most 100 files of 64 KiB
+  W->>A: new catalog and problem list
+  A->>U: set theme when the active one changed, Notice for problems

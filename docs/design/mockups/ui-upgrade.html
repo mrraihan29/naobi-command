@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Naobi UI upgrade</title>
+<!-- Gate 1 mockups for R-025 to R-033. Real size: 750 x 475 logical px. Icons are placeholders for the app's own glyphs. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" integrity="sha384-hs5SINUk7GPohxRis+rS7grpSWEbtOIJ3sRoseBKg3CDPIKpG55RfSenbvA6ALOt" crossorigin="anonymous">
+<style>
+:root{--page:#ece8de;--ink:#171714;--dim:#6d6a63}
+@media (prefers-color-scheme:dark){:root{--page:#1d1a17;--ink:#f3f0e8;--dim:#b8b3a9}}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 16px 48px;background:var(--page);color:var(--ink);font:14px/20px Inter,'Segoe UI',sans-serif}
+h1{font-size:20px;line-height:28px;font-weight:500;margin:0 auto 4px;max-width:1524px}
+.lead{margin:0 auto 24px;max-width:1524px;color:var(--dim)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,750px),750px));gap:28px 24px;justify-content:center}
+figure{margin:0;min-width:0}figcaption{font-size:13px;color:var(--dim);margin:0 0 8px}
+.scroll{overflow-x:auto;padding-bottom:2px}
+.nc{position:relative;width:750px;height:475px;display:flex;flex-direction:column;overflow:hidden;background:var(--win);color:var(--t1);border:1px solid var(--ln);border-radius:var(--rw);font:13px/20px var(--ui)}
+.hd{height:66px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--ln);font-size:16px;line-height:24px}
+.ph{color:var(--mu)}.caret{width:1px;height:20px;background:var(--t1);margin-left:-9px}
+.back{height:28px;display:inline-flex;align-items:center;gap:3px;padding:0 9px 0 5px;border:1px solid var(--ls);border-radius:var(--rc);font-size:12px;font-weight:500;color:var(--t2)}
+.back i{font-size:15px}.view{height:28px;display:inline-flex;align-items:center;padding:0 9px;border:1px solid var(--ls);border-radius:var(--rc);font-size:12px;font-weight:500;color:var(--t2)}
+.body{min-height:0;flex:1;display:flex}.ls{min-width:0;flex:1;overflow:hidden}.ls.side{flex:0 0 300px}
+.sec{height:28px;display:flex;align-items:flex-end;padding:0 16px 4px;color:var(--mu);font-size:13px;font-weight:500;letter-spacing:.025em}
+.row{height:var(--row);display:flex;align-items:center;gap:12px;padding:0 14px 0 10px;border-left:2px solid transparent;border-radius:var(--rr)}
+.row.on{background:var(--sel);border-left-color:var(--ac)}
+.ic{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--t1);font-size:20px}
+.ti-s{width:22px;height:22px;flex:none;border-radius:4px;border:1px solid var(--ls)}
+.tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tt b{font-weight:600}
+.sub{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mu);font:12px/16px var(--mono)}
+.on .sub,.on .kd{color:var(--ss)}
+.kd{margin-left:auto;flex:none;color:var(--mu);font-size:12px;line-height:16px;white-space:nowrap}
+.k{display:inline-flex;align-items:center;height:20px;min-width:20px;justify-content:center;padding:0 5px;border:1px solid var(--ls);border-radius:var(--rc);font-size:12px;line-height:16px;font-weight:500;color:var(--mu)}
+.on .k{color:var(--ss)}.ks{display:inline-flex;gap:3px;margin-left:6px}
+.ft{height:42px;flex:none;display:flex;align-items:center;gap:14px;padding:0 12px 0 16px;background:var(--rs);border-top:1px solid var(--ln);color:var(--mu);font-size:12px;font-weight:500;letter-spacing:.025em}
+.ft span.a{display:inline-flex;align-items:center}.sp{flex:1}
+.pane{min-width:0;flex:1;display:flex;flex-direction:column;margin:8px 8px 8px 0;background:var(--well);border-radius:var(--rm);overflow:hidden}
+.pv{flex:1;min-height:0;padding:12px;font:13px/20px var(--mono);white-space:pre-wrap;overflow:hidden}
+.fx{flex:none;display:grid;grid-template-columns:82px minmax(0,1fr);gap:0 8px;padding:9px 12px 10px;border-top:1px solid var(--ln);font-size:12px;line-height:20px}.fx span:nth-child(odd){color:var(--mu)}
+.sw{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:12px}.c{display:flex;align-items:center;gap:7px;min-width:0;font-size:12px;line-height:18px}.d{width:16px;height:16px;flex:none;border-radius:3px;border:1px solid var(--ls)}.c span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.c em{margin-left:auto;font:11px/16px var(--mono);font-style:normal;color:var(--mu)}
+.notice{height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px;background:var(--rs);border-bottom:1px solid var(--ls)}.notice i{font-size:16px;color:var(--dg)}
+.panel{position:absolute;right:12px;bottom:48px;width:340px;background:var(--rs);border:1px solid var(--ln);border-radius:var(--rm);overflow:hidden}
+.pt{height:30px;display:flex;align-items:center;padding:4px 12px 0;font-size:12px;font-weight:500;color:var(--mu)}
+.ac{height:32px;display:flex;align-items:center;gap:10px;padding:0 10px 0 10px;border-left:2px solid transparent}.ac i{font-size:16px;width:16px;text-align:center}.ac.on{background:var(--sel);border-left-color:var(--ac)}.ac.off{color:var(--mu)}.ac.dg,.ac.dg i{color:var(--dg)}
+.gp{height:1px;background:var(--ln);margin:4px 0}.fl{height:38px;display:flex;align-items:center;padding:0 12px;border-top:1px solid var(--ln);box-shadow:inset 0 0 0 2px var(--fo);color:var(--mu)}
+.cue{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ac);border-radius:var(--rc);color:var(--t1);font-size:12px;font-weight:600}
+</style>
+</head>
+<body>
+<h1>Naobi Command: UI/UX upgrade mockups</h1>
+<p class="lead">Eight states at real size, 750 x 475. Row content is sample data; the icons stand in for the app's own glyphs.</p>
+<div class="grid" id="g"></div>
+<script>
+const P={paper:{win:'#FAF8F2',rs:'#F3F0E8',sel:'#E8E6E0',t1:'#171714',t2:'#393732',ss:'#393732',mu:'#6D6A63',ac:'#914A3B',ln:'#D9D3C7',ls:'#C7C1B6',fo:'#275D9A',well:'#F3F0E8',dg:'#A63E32',ok:'#4E6A51'},
+stone:{win:'#2A2622',rs:'#36312C',sel:'#3A3632',t1:'#F3F0E8',t2:'#F3F0E8',ss:'rgba(243,240,232,.58)',mu:'rgba(243,240,232,.58)',ac:'#E3BDA9',ln:'#4A433A',ls:'#5A5249',fo:'#E3BDA9',well:'#0D0B09',dg:'#F3F0E8',ok:'#F3F0E8'},
+harbor:{win:'#10242B',rs:'#17323B',sel:'#1E414C',t1:'#E8F4F2',t2:'#C8DDDA',ss:'#7F9E9C',mu:'#9DB9B7',ac:'#7ED7C1',ln:'#2B4D57',ls:'#3C6470',fo:'#FFD27A',well:'#0A1A20',dg:'#FFB4A2',ok:'#A8E6A1'}};
+const shape={rw:'8px',rr:'2px',rc:'2px',rm:'4px',row:'40px',ui:"Inter,'Segoe UI',sans-serif",mono:"'JetBrains Mono',Consolas,monospace"};
+const vars=(p,s={})=>Object.entries({...p,...shape,...s}).map(([k,v])=>`--${k}:${v}`).join(';');
+const caps=k=>`<span class="ks">${k.split(' ').map(x=>`<span class="k">${x}</span>`).join('')}</span>`;
+const act=(l,k)=>`<span class="a">${l}${caps(k)}</span>`;
+const foot=(v,...a)=>`<div class="ft"><span>${v}</span><span class="sp"></span>${a.map(x=>act(x[0],x[1])).join('')}</div>`;
+const row=(i,t,sub,kind,on,right)=>`<div class="row${on?' on':''}"><span class="ic"><i class="ti ti-${i}" aria-hidden="true"></i></span><span class="tt">${t}</span>${sub?`<span class="sub">${sub}</span>`:''}<span class="kd">${right||kind||''}</span></div>`;
+const head=(q,ph,pre='')=>`<div class="hd">${pre}${q?`<span>${q}</span><span class="caret"></span>`:`<span class="ph">${ph}</span>`}</div>`;
+const back=v=>`<span class="back"><i class="ti ti-chevron-left" aria-hidden="true"></i>${v}</span>`;
+const ls=(x,side)=>`<div class="ls${side?' side':''}">${x}</div>`;
+const a=(i,l,k,cl='',reason='')=>`<div class="ac ${cl}"><i class="ti ti-${i}" aria-hidden="true"></i><span>${l}</span><span class="kd">${reason||(k?caps(k):'')}</span></div>`;
+const fact=x=>`<div class="fx">${x.map(([k,v])=>`<span>${k}</span><span>${v}</span>`).join('')}</div>`;
+const swatches=p=>[['window',p.win],['raised',p.rs],['selected',p.sel],['well',p.well],['text',p.t1],['secondary',p.t2],['selected text',p.ss],['muted',p.mu],['accent',p.ac],['focus',p.fo],['danger',p.dg],['success',p.ok],['hair',p.ln],['strong',p.ls]].map(([n,c])=>`<div class="c"><i class="d" style="background:${c}"></i><span>${n}</span></div>`).join('');
+const S=[
+['1. Root, empty query, stone','stone',{},()=>head('','Search apps and commands, or type > to run one...')+`<div class="body">${ls(row('brand-vscode','Visual Studio Code','','Application',1)+row('terminal-2','Windows Terminal','','Application')+row('clipboard','Clipboard history','','Command')+row('color-picker','Pick color','','Command')+row('palette','Themes','','Command')+row('world','GitHub','gh','Quicklink')+row('moon','Toggle dark mode','','Command')+row('calculator','Calculator','','Command'))}</div>`+foot('Launcher',['Open','Enter'],['Actions','Ctrl K'])],
+['2. Results with matched letters and Files, paper','paper',{},()=>head('code','')+`<div class="body">${ls(row('brand-vscode','Visual Studio <b>Code</b>','','Application',1)+row('terminal','<b>Code</b> CLI','','Application')+row('calculator','42','6 x 7 = 42','Calculator')+`<div class="sec">Files</div>`+row('file-code','<b>code</b>-review.md','C:\\Users\\Raihan\\Documents','File')+row('file-spreadsheet','<b>code</b>-budget.xlsx','D:\\Docs\\finance','File'))}</div>`+foot('Launcher',['Open','Enter'],['Actions','Ctrl K'])],
+['3. Action panel, filter at the bottom, stone','stone',{},()=>head('','Search clipboard history',`<span class="view">Clipboard</span>`)+`<div class="body">${ls(row('align-left','git commit -m "Add views"','','1 min ago',1)+row('photo','Image 1920 x 1080','','3 min ago')+row('files','3 files','','5 min ago'),1)}<div class="pane"><div class="pv">git commit -m "Add views"</div>${fact([['Type','Text'],['Length','25 characters'],['Copied','1 minute ago']])}</div></div><div class="panel"><div class="pt">git commit -m "Add views"</div>${a('clipboard-text','Paste','Enter','on')}${a('copy','Copy','Ctrl Enter')}<div class="gp"></div>${a('pin','Pin','Ctrl .')}<div class="gp"></div>${a('trash','Delete','Ctrl X','dg')}<div class="fl">Filter actions</div></div>`+foot('Clipboard',['Paste','Enter'],['Copy','Ctrl Enter'],['Actions','Ctrl K'])],
+['4. Clipboard view with facts, paper','paper',{},()=>head('','Search clipboard history',`<span class="view">Clipboard</span>`)+`<div class="body">${ls(row('align-left','git commit -m "Add views"','','1 min ago',1)+row('photo','Image 1920 x 1080','','3 min ago','',`<span style="color:var(--ac)">Pinned</span> · 3 min`)+row('files','3 files','','5 min ago')+row('link','https://naobi.dev/learn','','1 h ago'),1)}<div class="pane"><div class="pv">git commit -m "Add views"</div>${fact([['Type','Text'],['Length','25 characters'],['Copied','1 minute ago']])}</div></div>`+foot('Clipboard',['Paste','Enter'],['Copy','Ctrl Enter'],['Actions','Ctrl K'])],
+['5. Themes view, preview follows the selection, stone','stone',{},()=>head('','Search themes',back('Themes'))+`<div class="body">${ls(row('palette','Paper','','Built-in','', 'Light')+row('palette','Stone','','Built-in',1,'Dark')+row('palette','Harbor','','Custom'),1)}<div class="pane"><div class="sw">${swatches(P.stone)}</div><div class="sp" style="flex:1"></div>${fact([['Base','Stone'],['Density','Normal'],['Fonts','Inter, JetBrains Mono'],['Contrast','Passes WCAG AA']])}</div></div>`+foot('Themes',['Use theme','Enter'],['Actions','Ctrl K'])],
+['6. A Custom theme in preview, with a contrast Notice','harbor',{rw:'4px',rr:'6px',rc:'6px',rm:'8px',row:'44px',ui:"'Segoe UI',Inter,sans-serif"},()=>head('','Search themes',back('Themes'))+`<div class="notice"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>harbor.toml: subtitle on selected is 3.8:1, below 4.5:1</span></div><div class="body">${ls(row('palette','Paper','','Built-in','', 'Light')+row('palette','Stone','','Built-in','', 'Dark')+row('palette','Harbor','','Custom',1),1)}<div class="pane"><div class="sw">${swatches(P.harbor)}</div><div class="sp" style="flex:1"></div>${fact([['Base','Stone'],['Density','Comfortable'],['Fonts','Segoe UI, JetBrains Mono'],['Contrast','1 pair below AA']])}</div></div>`+foot('Themes',['Use theme','Enter'],['Actions','Ctrl K'])],
+['7. Number cues while Alt is held, paper','paper',{},()=>head('term','')+`<div class="body">${ls(['Windows <b>Term</b>inal','<b>Term</b>inal Preview','Git Bash <b>Term</b>inal','VS Code <b>Term</b>inal'].map((t,i)=>row('terminal-2',t,'','',i==0,`<span class="cue">${i+1}</span>`)).join(''))}</div>`+foot('Launcher',['Open','Enter'],['Open by number','Alt 1-9'],['Actions','Ctrl K'])],
+['8. Compact density in a Custom theme','stone',{row:'36px',rr:'4px',rc:'4px'},()=>head('','Search apps and commands, or type > to run one...')+`<div class="body">${ls(['Visual Studio Code|Application|brand-vscode','Windows Terminal|Application|terminal-2','Clipboard history|Command|clipboard','Pick color|Command|color-picker','Themes|Command|palette','GitHub|Quicklink|world','Toggle dark mode|Command|moon','Awake 1 hour|Command|coffee','Lock|Command|lock','Settings file|Command|settings'].map((x,i)=>{const [t,k,c]=x.split('|');return row(c,t,'',k,i==0)}).join(''))}</div>`+foot('Launcher',['Open','Enter'],['Actions','Ctrl K'])]
+];
+document.getElementById('g').innerHTML=S.map(([t,p,s,f])=>`<figure><figcaption>${t}</figcaption><div class="scroll"><div class="nc" style="${vars(P[p],s)}">${f()}</div></div></figure>`).join('');
+</script>
+</body>
+</html>

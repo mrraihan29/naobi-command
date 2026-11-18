@@ -1,6 +1,6 @@
 # Constraints
 
-Last reviewed: 2026-10-22 by the design author (the owner reviews at Gate 1; owner decisions applied) · Stack: Rust stable, `x86_64-pc-windows-msvc`, native UI Slint, software renderer, accessibility on (D-034) (docs/adr/0001-stack.md)
+Last reviewed: 2026-11-18 by the design author for the UI/UX upgrade (the owner reviews at Gate 1) · Stack: Rust stable, `x86_64-pc-windows-msvc`, native UI Slint, software renderer, accessibility on (D-034) (docs/adr/0001-stack.md)
 Read before writing code. Never weaken this file to make a change pass.
 
 ## Floor (always enforced)
@@ -24,7 +24,7 @@ Read before writing code. Never weaken this file to make a change pass.
 | Unsafe | Only in `naobi-win32`; every block has `// SAFETY:` (D-011) | `forbid(unsafe_code)` in all other crates, `clippy::undocumented_unsafe_blocks` denied, run by the clippy row above | every edit |
 | Performance (R-006) | Every budget in "Project numbers" reports PASS | `cargo run --release -p naobi-perf -- all --out target/perf.json` (reads `docs/research/baseline-powertoys.json`, no PowerToys needed) | before Gate 3, after any hot-path change |
 | Network silence (R-010) | No socket opened in a 10-minute session without an explicit URL action | `cargo run --release -p naobi-perf -- network-silence --minutes 10` | Gate 3 |
-| Accessibility | All Naobi token text pairs meet WCAG 2.2 AA; manual checklist in DESIGN_SYSTEM.md passes | test `r007_token_pairs_meet_wcag_aa` in `cargo test --workspace`; manual keyboard-only pass and Accessibility Insights for Windows | task end (test); Gate 3 (manual) |
+| Accessibility | All Naobi token text pairs (the built-in themes `paper` and `stone`) meet WCAG 2.2 AA; a Custom theme below AA applies with a Notice naming the pair (R-033); manual checklist in DESIGN_SYSTEM.md passes | test `r007_token_pairs_meet_wcag_aa` in `cargo test --workspace`; manual keyboard-only pass and Accessibility Insights for Windows | task end (test); Gate 3 (manual) |
 | Dependencies (Rust) | No advisories, licenses allowed, banned crates absent | `cargo deny check` (cargo-deny) | task end (local) |
 | Secrets | None in source or history | `gitleaks detect --redact` | every edit, before commit (local) |
 | Static analysis | No high findings | `semgrep scan --config p/default --error` | before commit (local) |
@@ -58,6 +58,8 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 | Clipboard text | <= 1 MiB per entry | D-015 |
 | Clipboard store | <= 500 MB total | D-015 |
 | Color history | 20 colors | R-017 |
+| Theme file | <= 64 KiB, id `[a-z0-9-]{1,40}`, at most 100 themes read | D-043 |
+| Theme values | Window radius 0, 4 or 8; row and control radius 0 to 12; chip radius 0 to 8; font family <= 64 characters | R-030, D-043 |
 | Visible rows | <= 50 | D-016, D-021 |
 | File results | <= 30, async | D-016 |
 | Money and time | Rp0 (free and open-source dependencies only); no hard deadline | D-008 |

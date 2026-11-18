@@ -555,7 +555,7 @@ mod ui_check {
     use naobi_core::tokens;
     use naobi_core::ui::{
         ActionPanelView, ActionView, EmptyView, FooterView, NoticeView, PreviewView, RowView,
-        Section,
+        Section, ViewBar,
     };
     use slint::platform::software_renderer::{
         MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
@@ -725,6 +725,45 @@ mod ui_check {
         });
         empty.preview = Some(PreviewView::Empty);
 
+        let mut themes = screen(vec![Section {
+            header: None,
+            rows: ["Paper:Light", "Stone:Dark", "Harbor:Custom"]
+                .map(|entry| {
+                    let (name, note) = entry.split_once(':').unwrap_or((entry, ""));
+                    RowView {
+                        right: Some(note.into()),
+                        ..row("Theme", name, note)
+                    }
+                })
+                .into(),
+        }]);
+        themes.selected = 1;
+        themes.view = ViewBar {
+            name: "Themes".into(),
+            marked: true,
+            back: true,
+        };
+        themes.preview = Some(PreviewView::Swatches(
+            naobi_core::theme_file::color_tokens(&tokens::STONE)
+                .into_iter()
+                .map(|(key, color)| naobi_core::view_source::Swatch {
+                    label: key.replace('_', " "),
+                    color,
+                })
+                .collect(),
+        ));
+        themes.facts = vec![
+            fact("Base", "Stone"),
+            fact("Density", "Normal"),
+            fact("Fonts", "Inter, JetBrains Mono"),
+            fact("Contrast", "Passes WCAG AA"),
+        ];
+        themes.footer = FooterView {
+            primary: Some("Use theme".into()),
+            actions: true,
+            ..FooterView::default()
+        };
+
         let mut loading = results.clone();
         loading.action_panel = None;
         loading.loading = true;
@@ -734,6 +773,7 @@ mod ui_check {
             ("results", results),
             ("action-panel", panel),
             ("clipboard-image", clipboard),
+            ("themes", themes),
             ("notice-armed", notice),
             ("empty", empty),
             ("loading-scale-125", loading),
@@ -1107,6 +1147,35 @@ mod ui_check {
             (palette.raised.r, palette.raised.g, palette.raised.b),
             "{theme}: no footer at the bottom edge (empty strip under it)"
         );
+    }
+
+    // @R-029
+    #[test]
+    fn r029_show_and_selection_have_no_transition() {
+        let source = include_str!("../ui/app.slint");
+        let animated: Vec<&str> = source
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("animate "))
+            .filter_map(|l| l.split_whitespace().next())
+            .collect();
+        // The loading bar, the Notice fade and the action panel's opening: nothing on the window,
+        // the rows or the selection.
+        assert_eq!(animated, ["sweep", "fade", "opacity", "y"]);
+    }
+
+    // @R-029
+    #[test]
+    fn r029_no_new_window_or_process() {
+        let ui = include_str!("../ui/app.slint");
+        assert_eq!(ui.matches("inherits Window").count(), 1);
+        for source in [
+            include_str!("../../naobi-app/src/modules/themes.rs"),
+            include_str!("../../naobi-core/src/theme_file.rs"),
+        ] {
+            for call in ["Command::new", "CreateWindow", "thread::spawn"] {
+                assert!(!source.contains(call), "{call}");
+            }
+        }
     }
 
     // @R-007

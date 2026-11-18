@@ -52,7 +52,7 @@ mod tests {
 
     // @R-030
     #[test]
-    #[ignore = "tier2: interactive desktop"]
+    #[ignore = "tier2: interactive desktop"] // naobi-allow: reads the real Windows font list
     fn r030_installed_fonts_are_found_and_unknown_ones_are_not() {
         assert!(is_installed("Segoe UI"));
         assert!(!is_installed("No Such Font Family 12345"));

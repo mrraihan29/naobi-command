@@ -182,6 +182,10 @@ impl ViewSource for ClipboardView {
         ViewId(VIEW_ID.into())
     }
 
+    fn title(&self) -> &'static str {
+        "Clipboard"
+    }
+
     fn opened_by_hotkey(&self) -> bool {
         true
     }

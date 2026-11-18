@@ -88,6 +88,10 @@ impl ViewSource for ColorHistoryView {
         ViewId(VIEW_ID.into())
     }
 
+    fn title(&self) -> &'static str {
+        "Color history"
+    }
+
     fn opened_by_hotkey(&self) -> bool {
         false
     }

@@ -13,7 +13,7 @@ use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{
     ActionPanelView, ActionView, EmptyView, FooterView, Key, KeyChord, NoticeView, PreviewView,
-    RowView, Screen, Section, UiEvent,
+    RowView, Screen, Section, UiEvent, ViewBar,
 };
 use naobi_core::view_source::{Preview, ViewSource};
 use std::collections::HashSet;
@@ -146,6 +146,13 @@ impl Launcher {
                 if i < self.row_count() && self.panel.is_none() && self.selected != i {
                     self.armed.disarm();
                     self.selected = i;
+                }
+                vec![]
+            }
+            UiEvent::Back => {
+                if matches!(self.mode, Mode::Pushed(_)) && self.panel.is_none() {
+                    self.mode = Mode::Root;
+                    self.reset();
                 }
                 vec![]
             }
@@ -311,6 +318,7 @@ impl Launcher {
             }),
             action_panel: self.panel.as_ref().map(panel_view),
             footer,
+            view: self.view_bar(),
             placeholder: match self.mode {
                 Mode::Root => "Search apps and commands, or type > to run one...",
                 Mode::Pushed(i) | Mode::Hotkey(i) => self.views[i].placeholder(),
@@ -321,6 +329,21 @@ impl Launcher {
             loading: !pending.is_empty(),
             reduced_motion: false,
             text_scale: 1.0,
+        }
+    }
+
+    fn view_bar(&self) -> ViewBar {
+        match self.mode {
+            Mode::Root => ViewBar {
+                name: "Launcher".to_owned(),
+                marked: false,
+                back: false,
+            },
+            Mode::Pushed(i) | Mode::Hotkey(i) => ViewBar {
+                name: self.views[i].title().to_owned(),
+                marked: true,
+                back: matches!(self.mode, Mode::Pushed(_)),
+            },
         }
     }
 

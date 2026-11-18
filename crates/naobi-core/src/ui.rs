@@ -50,6 +50,7 @@ pub struct Screen {
     pub notice: Option<NoticeView>,
     pub action_panel: Option<ActionPanelView>,
     pub footer: FooterView,
+    pub view: ViewBar,
     /// The search field's hint while it is empty.
     pub placeholder: String,
     pub preview: Option<PreviewView>,
@@ -58,6 +59,17 @@ pub struct Screen {
     pub reduced_motion: bool,
     /// `ui.text_scale`: 1.0, 1.125 or 1.25.
     pub text_scale: f32,
+}
+
+/// Where the Owner is (R-028).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ViewBar {
+    /// The current view's name, shown in the footer.
+    pub name: String,
+    /// The search header marks the view: true everywhere but the root.
+    pub marked: bool,
+    /// The marker has a back control: a pushed view, not one opened by its own hotkey.
+    pub back: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,6 +195,10 @@ impl From<ViewModel> for Screen {
             notice: None,
             action_panel: None,
             footer: FooterView::default(),
+            view: ViewBar {
+                name: "Launcher".into(),
+                ..ViewBar::default()
+            },
             placeholder: "Search apps and commands, or type > to run one...".into(),
             preview: None,
             empty: None,
@@ -227,6 +243,8 @@ pub enum UiEvent {
     RowActivated(usize),
     /// The pointer moved onto a row: it becomes the selected row, like the arrow keys.
     RowHovered(usize),
+    /// The view marker's back control: leaves a pushed view.
+    Back,
     Dismissed,
 }
 

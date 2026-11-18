@@ -21,6 +21,10 @@ pub enum Preview {
 
 pub trait ViewSource: CommandSource {
     fn view_id(&self) -> ViewId;
+    /// The name shown in the search header and the footer.
+    fn title(&self) -> &'static str {
+        "View"
+    }
     /// True when the view has its own hotkey, so Esc hides instead of popping.
     fn opened_by_hotkey(&self) -> bool;
     fn preview(&self, id: &ItemId) -> Option<Preview>;

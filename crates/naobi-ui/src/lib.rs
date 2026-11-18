@@ -262,6 +262,9 @@ fn apply(ui: &AppWindow, s: Screen) {
     ui.set_empty_title(empty.map_or("", |e| e.title.as_str()).into());
     ui.set_empty_helper(empty.map_or("", |e| e.helper.as_str()).into());
 
+    ui.set_view_name(s.view.name.as_str().into());
+    ui.set_view_marked(s.view.marked);
+    ui.set_view_back(s.view.back);
     ui.set_footer_primary(s.footer.primary.as_deref().unwrap_or_default().into());
     ui.set_footer_secondary(s.footer.secondary.as_deref().unwrap_or_default().into());
     ui.set_placeholder(s.placeholder.as_str().into());
@@ -366,6 +369,8 @@ pub fn run(
         ui.on_row_activated(move |i| f(UiEvent::RowActivated(i.max(0) as usize)));
         let f = on_event.clone();
         ui.on_row_hovered(move |i| f(UiEvent::RowHovered(i.max(0) as usize)));
+        let f = on_event.clone();
+        ui.on_back_activated(move || f(UiEvent::Back));
         ui.on_key_pressed(move |text, ctrl, alt, shift| match key_from(&text, ctrl) {
             Some(key) => {
                 on_event(UiEvent::Key(KeyChord {
@@ -711,6 +716,38 @@ mod ui_check {
         }
         assert_selected_row_stays_in_view(&ui, &window);
         r025_kind_and_hint_end_at_the_right_edge(&ui, &window);
+        r028_held_backspace_stays_in_the_view(&ui);
+    }
+
+    // @R-028
+    /// Only a new press on the empty field reaches the core, which is what leaves a view.
+    fn r028_held_backspace_stays_in_the_view(ui: &AppWindow) {
+        use slint::platform::WindowEvent;
+        let reached = Rc::new(std::cell::Cell::new(0));
+        let count = reached.clone();
+        ui.on_key_pressed(move |_, _, _, _| {
+            count.set(count.get() + 1);
+            true
+        });
+        ui.invoke_focus_input();
+        let backspace = || -> slint::SharedString { SlintKey::Backspace.into() };
+        ui.set_query("abc".into());
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: backspace() });
+        assert_eq!(
+            reached.get(),
+            0,
+            "the field owns Backspace while it has text"
+        );
+        ui.set_query("".into());
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressRepeated { text: backspace() });
+        assert_eq!(reached.get(), 0, "a held key stops at the empty field");
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: backspace() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: backspace() });
+        assert_eq!(reached.get(), 1, "a new press goes on");
     }
 
     // @R-025

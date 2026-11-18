@@ -75,12 +75,12 @@ component Chip inherits Rectangle {
     // (muted ink fails 4.5:1 on the selected wash, see r007 tests).
     in property <bool> on-selected: false;
     height: 20px * Tokens.scale;
-    width: chip-text.preferred-width + 8px;
+    width: max(20px * Tokens.scale, chip-text.preferred-width + 10px);
     border-width: 1px;
     border-color: Tokens.line-strong;
     border-radius: 2px;
     chip-text := Text {
-        x: 4px;
+        x: (parent.width - self.width) / 2;
         y: 2px;
         text: root.text;
         font-size: 12px * Tokens.scale;
@@ -102,6 +102,77 @@ component HeaderItem inherits Rectangle {
         font-weight: 500;
         letter-spacing: 0.3px;
         color: Tokens.text-muted;
+    }
+}
+
+// A footer action: its label, then one key cap per key.
+component FooterAction inherits Rectangle {
+    in property <string> label;
+    in property <string> key-a;
+    in property <string> key-b;
+    horizontal-stretch: 0;
+    width: content.preferred-width;
+    content := HorizontalLayout {
+        spacing: 3px;
+        Text {
+            text: root.label;
+            font-size: 12px * Tokens.scale;
+            font-weight: 500;
+            color: Tokens.text-muted;
+            vertical-alignment: center;
+        }
+        Rectangle { width: 3px; }
+        Chip { y: (parent.height - self.height) / 2; text: root.key-a; }
+        if root.key-b != "" : Chip { y: (parent.height - self.height) / 2; text: root.key-b; }
+    }
+}
+
+// Names the current view in the search header. In a pushed view it is also the way back.
+component ViewMarker inherits Rectangle {
+    in property <string> name;
+    in property <bool> back;
+    callback activated();
+    height: 28px;
+    width: content.preferred-width;
+    border-width: 1px;
+    border-color: Tokens.line-strong;
+    border-radius: 2px;
+    background: root.back && touch.has-hover ? Tokens.surface-selected : transparent;
+    accessible-role: AccessibleRole.button;
+    accessible-label: root.back ? "Back" : root.name;
+    accessible-enabled: root.back;
+    accessible-action-default => {
+        if (root.back) {
+            root.activated();
+        }
+    }
+    content := HorizontalLayout {
+        padding-left: root.back ? 5px : 9px;
+        padding-right: 9px;
+        spacing: 3px;
+        if root.back : Path {
+            width: 14px;
+            height: 14px;
+            y: 7px;
+            viewbox-width: 24;
+            viewbox-height: 24;
+            commands: "M15 6 L9 12 L15 18";
+            stroke: Tokens.subtitle-selected;
+            stroke-width: 1.7px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+        }
+        Text {
+            text: root.name;
+            font-size: 12px;
+            font-weight: 500;
+            color: Tokens.text-primary;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.back;
+        clicked => { root.activated(); }
     }
 }
 
@@ -429,6 +500,9 @@ export component AppWindow inherits Window {
     in property <string> footer-secondary;
     in property <string> placeholder;
     in property <string> footer-confirmation;
+    in property <string> view-name;
+    in property <bool> view-marked;
+    in property <bool> view-back;
     in property <bool> loading;
     in property <bool> empty-visible;
     in property <string> empty-title;
@@ -445,6 +519,7 @@ export component AppWindow inherits Window {
     callback key-pressed(string, bool, bool, bool) -> bool;
     callback row-activated(int);
     callback row-hovered(int);
+    callback back-activated();
     // Where the pointer last was over a row: only motion away from it selects, so a list scrolling
     // under a still pointer does not steal the selection.
     property <length> pointer-x;
@@ -475,6 +550,10 @@ export component AppWindow inherits Window {
             if (e.text == Key.Backspace && root.query != "") {
                 return reject;
             }
+            // Held down, it stops at the empty field: only a new press leaves the view (R-028).
+            if (e.text == Key.Backspace && e.repeat) {
+                return accept;
+            }
             // Fail-safe: Ctrl+X reaches the core (entry delete) only with an empty field, where no text
             // can be selected. With text in the field it stays in the field (cut, or nothing).
             if (e.modifiers.control && root.query != "" && (e.text == "x" || e.text == "\u{18}")) {
@@ -496,10 +575,18 @@ export component AppWindow inherits Window {
                     DragHandle {
                         moved-by(dx, dy) => { root.move-by(dx, dy); }
                     }
-                    input := TextInput {
+                    marker := ViewMarker {
                         x: 16px;
+                        y: (parent.height - self.height) / 2;
+                        visible: root.view-marked;
+                        name: root.view-name;
+                        back: root.view-back;
+                        activated => { root.back-activated(); }
+                    }
+                    input := TextInput {
+                        x: root.view-marked ? marker.x + marker.width + 10px : 16px;
                         y: 15px;
-                        width: parent.width - 32px;
+                        width: parent.width - self.x - 16px;
                         height: parent.height - 30px;
                         vertical-alignment: center;
                         font-size: 16px * Tokens.scale;
@@ -511,7 +598,7 @@ export component AppWindow inherits Window {
                         edited => { root.text-changed(self.text); }
                     }
                     Text {
-                        x: 16px;
+                        x: input.x;
                         height: parent.height;
                         vertical-alignment: center;
                         visible: root.query == "";
@@ -632,10 +719,10 @@ export component AppWindow inherits Window {
                     }
                     HorizontalLayout {
                         padding-left: 16px;
-                        padding-right: 16px;
-                        spacing: 8px;
+                        padding-right: 12px;
+                        spacing: 14px;
                         Text {
-                            text: "Naobi Command";
+                            text: root.view-name;
                             font-size: 12px * Tokens.scale;
                             color: Tokens.text-muted;
                             vertical-alignment: center;
@@ -648,35 +735,19 @@ export component AppWindow inherits Window {
                             vertical-alignment: center;
                             accessible-role: text;
                         }
-                        if root.footer-primary != "" && root.footer-confirmation == "" : HorizontalLayout {
-                            spacing: 6px;
-                            Chip { y: (parent.height - self.height) / 2; text: "Enter"; }
-                            Text {
-                                text: root.footer-primary;
-                                font-size: 12px * Tokens.scale;
-                                color: Tokens.text-muted;
-                                vertical-alignment: center;
-                            }
+                        if root.footer-primary != "" && root.footer-confirmation == "" : FooterAction {
+                            label: root.footer-primary;
+                            key-a: "Enter";
                         }
-                        if root.footer-secondary != "" && root.footer-confirmation == "" : HorizontalLayout {
-                            spacing: 6px;
-                            Chip { y: (parent.height - self.height) / 2; text: "Ctrl Enter"; }
-                            Text {
-                                text: root.footer-secondary;
-                                font-size: 12px * Tokens.scale;
-                                color: Tokens.text-muted;
-                                vertical-alignment: center;
-                            }
+                        if root.footer-secondary != "" && root.footer-confirmation == "" : FooterAction {
+                            label: root.footer-secondary;
+                            key-a: "Ctrl";
+                            key-b: "Enter";
                         }
-                        if root.footer-actions : HorizontalLayout {
-                            spacing: 6px;
-                            Chip { y: (parent.height - self.height) / 2; text: "Ctrl K"; }
-                            Text {
-                                text: "Actions";
-                                font-size: 12px * Tokens.scale;
-                                color: Tokens.text-muted;
-                                vertical-alignment: center;
-                            }
+                        if root.footer-actions : FooterAction {
+                            label: "Actions";
+                            key-a: "Ctrl";
+                            key-b: "K";
                         }
                     }
                 }

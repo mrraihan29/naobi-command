@@ -110,6 +110,9 @@ impl ViewSource for Clip {
     fn view_id(&self) -> ViewId {
         ViewId("clip".into())
     }
+    fn title(&self) -> &'static str {
+        "Clipboard"
+    }
     fn opened_by_hotkey(&self) -> bool {
         self.hotkey
     }
@@ -1089,4 +1092,38 @@ fn r025_a_clipboard_entry_shows_its_time_at_the_right() {
     let (l, _) = engine(vec![entry], vec![]);
     let s = l.screen();
     assert_eq!(s.sections[0].rows[0].right.as_deref(), Some("3 min ago"));
+}
+
+// @R-028
+#[test]
+fn r028_pushed_view_has_name_and_back() {
+    let (mut l, _) = engine(
+        vec![item("push:clip", "Clipboard history")],
+        clip_view(false),
+    );
+    assert_eq!(l.screen().view.name, "Launcher");
+    assert!(!l.screen().view.marked);
+    key(&mut l, Key::Enter);
+    let view = l.screen().view;
+    assert_eq!(view.name, "Clipboard");
+    assert!(view.marked && view.back);
+    assert!(l.handle(UiEvent::Back).is_empty());
+    assert_eq!(l.screen().view.name, "Launcher");
+    assert_eq!(titles(&l.screen()), vec!["Clipboard history"]);
+}
+
+// @R-028
+#[test]
+fn r028_a_view_opened_by_its_hotkey_is_named_without_a_back_control() {
+    let (mut l, _) = engine(vec![], clip_view(true));
+    assert!(l.show_view(&ViewId("clip".into())));
+    let view = l.screen().view;
+    assert_eq!(view.name, "Clipboard");
+    assert!(view.marked && !view.back);
+    l.handle(UiEvent::Back);
+    assert_eq!(
+        l.screen().view.name,
+        "Clipboard",
+        "Back does not apply here"
+    );
 }

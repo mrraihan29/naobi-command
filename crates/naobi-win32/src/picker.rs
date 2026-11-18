@@ -2,9 +2,7 @@
 //! screen and one borderless topmost overlay per monitor that draws it with a magnifier and the HEX.
 //! Everything here runs on the picker thread the app starts for one pick; the platform thread is not
 //! involved. The snapshot is memory only and is wiped when it is dropped.
-use naobi_core::theme::ThemeSource;
-use naobi_core::tokens::{Palette, Rgba, PAPER, STONE};
-use naobi_core::ui::Theme;
+use naobi_core::tokens::{Palette, Rgba};
 use naobi_picker::{flip, Rgb, ScreenCapture};
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -211,15 +209,12 @@ fn monitors() -> Vec<RECT> {
 
 /// Shows the overlays over `snap` and runs their message loop until a click, Esc, a right click or
 /// a lost focus. Returns the picked color. Blocks the calling (picker) thread.
-pub fn overlay(snap: &Snapshot) -> Option<Rgb> {
+pub fn overlay(snap: &Snapshot, palette: &Palette) -> Option<Rgb> {
     let rects = monitors();
     if rects.is_empty() {
         return None;
     }
-    let pal = match crate::theme::SystemTheme.current() {
-        Theme::Paper => PAPER,
-        Theme::Stone => STONE,
-    };
+    let pal = *palette;
     PICK.with(|p| {
         *p.borrow_mut() = Some(State {
             snap,

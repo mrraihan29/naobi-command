@@ -15,6 +15,11 @@ impl Rgba {
         Self::with_alpha(hex, 255)
     }
 
+    /// The color as `0xRRGGBB`, without its alpha.
+    pub const fn to_rgb(self) -> u32 {
+        ((self.r as u32) << 16) | ((self.g as u32) << 8) | self.b as u32
+    }
+
     pub const fn with_alpha(hex: u32, a: u8) -> Self {
         Self {
             r: (hex >> 16) as u8,

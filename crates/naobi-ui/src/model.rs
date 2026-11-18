@@ -10,8 +10,6 @@ pub const BASE_HEIGHT: f32 = 475.0;
 /// The Launcher may take at most this share of the work area height (ui.text_scale rule).
 pub const WORK_AREA_SHARE: f32 = 0.9;
 
-/// A result row's height at 100% text scale, logical px (D-042).
-pub const ROW_HEIGHT: f32 = 40.0;
 /// A section header's height at 100% text scale, logical px (D-042).
 pub const SECTION_HEIGHT: f32 = 28.0;
 
@@ -49,7 +47,7 @@ pub fn lines(s: &Screen) -> Lines {
     let mut items = Vec::new();
     let mut selected = -1;
     let mut row = 0;
-    let (row_height, section_height) = (ROW_HEIGHT * s.text_scale, SECTION_HEIGHT * s.text_scale);
+    let (row_height, section_height) = (s.row_height * s.text_scale, SECTION_HEIGHT * s.text_scale);
     let (mut top, mut selected_top, mut selected_bottom) = (0.0, 0.0, 0.0);
     for section in &s.sections {
         if let Some(header) = &section.header {
@@ -401,6 +399,26 @@ mod tests {
         assert_eq!(out.items[0].right.as_str(), "Application");
         assert_eq!(out.items[1].right.as_str(), "3 min ago");
         assert_eq!(out.items[1].subtitle.as_str(), "", "not shown twice");
+    }
+
+    // @R-030
+    #[test]
+    fn r030_density_sets_row_height_and_scroll_math() {
+        for height in [36.0, 40.0, 44.0] {
+            let mut s = screen(
+                vec![Section {
+                    header: Some("Files".into()),
+                    rows: vec![row("a"), row("b")],
+                }],
+                1,
+            );
+            s.row_height = height;
+            let l = lines(&s);
+            assert_eq!(l.items[1].height, height);
+            assert_eq!(l.selected_top, 28.0 + height);
+            assert_eq!(l.selected_bottom, 28.0 + 2.0 * height);
+            assert_eq!(l.height, 28.0 + 2.0 * height);
+        }
     }
 
     // @D-042

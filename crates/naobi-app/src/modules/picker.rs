@@ -78,7 +78,8 @@ impl Drop for Free {
 
 /// One pick, start to end, on the picker thread. Nothing of the screen is logged (T-015).
 fn run(history: &Shared) {
-    let Some(color) = pick(&mut ScreenGrab, overlay) else {
+    let palette = crate::active_palette();
+    let Some(color) = pick(&mut ScreenGrab, |snap| overlay(snap, &palette)) else {
         tracing::info!(picked = false, "color pick");
         return;
     };

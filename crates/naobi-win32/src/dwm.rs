@@ -4,7 +4,7 @@ use windows::core::{w, BOOL, HSTRING};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Dwm::{
     DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_CLOAKED,
-    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND, DWMWCP_ROUNDSMALL,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -77,6 +77,24 @@ pub fn is_tool_window(h: isize) -> bool {
 }
 
 /// One-time setup of the freshly created window: tool-window style, rounded corners, then cloaked.
+/// Sets the window's corners: 0 is square, 4 small and anything else the normal Windows radius.
+pub fn set_corner_radius(h: isize, radius: u8) {
+    let preference = match radius {
+        0 => DWMWCP_DONOTROUND,
+        4 => DWMWCP_ROUNDSMALL,
+        _ => DWMWCP_ROUND,
+    };
+    // SAFETY: the attribute reads four bytes from `preference`, which outlives the call.
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            hwnd(h),
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &preference as *const _ as *const c_void,
+            4,
+        )
+    };
+}
+
 pub fn prepare(h: isize) {
     let w = hwnd(h);
     let round = DWMWCP_ROUND;

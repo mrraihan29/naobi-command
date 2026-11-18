@@ -6,7 +6,7 @@ use naobi_aot::{
 use naobi_core::command::{CommandSource, Cx, Query};
 use naobi_core::effect::Effect;
 use naobi_core::ids::{ActionId, HotkeyId, ItemId};
-use naobi_core::ui::Theme;
+use naobi_core::tokens::{PAPER, STONE};
 
 #[derive(Default)]
 struct Fake {
@@ -102,17 +102,20 @@ fn r018_no_window_and_a_refusal_change_nothing() {
 // @R-018
 #[test]
 fn r018_border_color_follows_windows_theme() {
-    assert_eq!(border_color("auto", Theme::Paper), 0x914A3B);
-    assert_eq!(border_color("auto", Theme::Stone), 0xE3BDA9);
+    // The default Theme slots give these two accents.
+    assert_eq!(PAPER.accent.to_rgb(), LIGHT);
+    assert_eq!(STONE.accent.to_rgb(), DARK);
     assert_eq!((LIGHT, DARK), (0x914A3B, 0xE3BDA9));
+    assert_eq!(border_color("auto", LIGHT), 0x914A3B);
+    assert_eq!(border_color("auto", DARK), 0xE3BDA9);
     // A custom color wins in both themes; anything malformed is "auto".
-    assert_eq!(border_color("#112233", Theme::Stone), 0x112233);
+    assert_eq!(border_color("#112233", DARK), 0x112233);
     for bad in ["", "red", "#12345", "#1234567", "#GGGGGG", "112233"] {
-        assert_eq!(border_color(bad, Theme::Paper), LIGHT, "{bad}");
+        assert_eq!(border_color(bad, LIGHT), LIGHT, "{bad}");
     }
     // `aot.border = false` hides it.
     assert_eq!(
-        style(false, "auto", Theme::Paper),
+        style(false, "auto", LIGHT),
         Style {
             show: false,
             color: LIGHT
@@ -143,4 +146,11 @@ fn r018_toggle_always_on_top_is_a_launcher_command_with_the_topmost_hotkey() {
         ])
     );
     assert_eq!(source.actions(&items[0].id).len(), 1);
+}
+
+// @R-030
+#[test]
+fn r030_an_automatic_border_uses_the_active_theme_accent() {
+    assert_eq!(border_color("auto", 0x7ED7C1), 0x7ED7C1);
+    assert_eq!(style(true, "auto", 0x7ED7C1).color, 0x7ED7C1);
 }

@@ -5,9 +5,8 @@ use naobi_aot::{style, toggle, AotCommands, Config, Outcome, TopmostOps};
 use naobi_core::ids::HotkeyId;
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::Settings;
-use naobi_core::theme::ThemeSource;
-use naobi_win32::theme::SystemTheme;
 use naobi_win32::topmost::Ops;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 fn config() -> &'static Config {
@@ -17,6 +16,8 @@ fn config() -> &'static Config {
 
 /// `aot.border` and `aot.border_color` of the live settings.
 static LOOK: Mutex<(bool, String)> = Mutex::new((true, String::new()));
+/// The active Theme's accent, `0xRRGGBB`.
+static ACCENT: AtomicU32 = AtomicU32::new(naobi_aot::LIGHT);
 
 /// The settings load and every hot reload call this: the chord for the item, and the border look.
 pub fn set_config(settings: &Settings) {
@@ -31,11 +32,16 @@ pub fn set_config(settings: &Settings) {
     restyle();
 }
 
-/// Applies the border look under the Windows theme as it is now: called after a settings change and
-/// when Windows switches between light and dark.
-pub fn restyle() {
+/// The active Theme changed: an automatic border takes its accent (R-018 v3).
+pub fn set_accent(accent: u32) {
+    ACCENT.store(accent, Ordering::Relaxed);
+    restyle();
+}
+
+/// Applies the border look as it is now.
+fn restyle() {
     let (show, setting) = LOOK.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    Ops.set_style(style(show, &setting, SystemTheme.current()));
+    Ops.set_style(style(show, &setting, ACCENT.load(Ordering::Relaxed)));
 }
 
 pub fn register(m: &mut Modules) {

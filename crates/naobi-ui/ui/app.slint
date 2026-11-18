@@ -74,6 +74,10 @@ export global Tokens {
     in-out property <color> danger;
     in-out property <color> line-hair;
     in-out property <color> line-strong;
+    // The active Theme's corner radii.
+    in-out property <length> radius-row: 2px;
+    in-out property <length> radius-chip: 2px;
+    in-out property <length> radius-control: 4px;
     // ui.text_scale: 1.0, 1.125 or 1.25.
     in-out property <float> scale: 1;
     // 0 under reduced motion (Windows "Animation effects" off), 1 otherwise.
@@ -89,7 +93,7 @@ component Chip inherits Rectangle {
     width: max(20px * Tokens.scale, chip-text.preferred-width + 10px);
     border-width: 1px;
     border-color: Tokens.line-strong;
-    border-radius: 2px;
+    border-radius: Tokens.radius-chip;
     chip-text := Text {
         x: (parent.width - self.width) / 2;
         y: 2px;
@@ -147,7 +151,7 @@ component ViewMarker inherits Rectangle {
     width: content.preferred-width;
     border-width: 1px;
     border-color: Tokens.line-strong;
-    border-radius: 2px;
+    border-radius: Tokens.radius-chip;
     background: root.back && touch.has-hover ? Tokens.surface-selected : transparent;
     accessible-role: AccessibleRole.button;
     accessible-label: root.back ? "Back" : root.name;
@@ -214,6 +218,7 @@ component ResultRow inherits Rectangle {
     // The Alt number this row answers to while Alt is held; 0 for none.
     in property <int> cue;
     clip: true;
+    border-radius: Tokens.radius-row;
     background: line.selected ? Tokens.surface-selected : transparent;
     accessible-role: AccessibleRole.list-item;
     accessible-label: line.label;
@@ -347,7 +352,7 @@ component ResultRow inherits Rectangle {
             y: (parent.height - self.height) / 2;
             border-width: 1px;
             border-color: Tokens.accent;
-            border-radius: 2px;
+            border-radius: Tokens.radius-chip;
             Text {
                 text: root.cue;
                 font-size: 12px * Tokens.scale;
@@ -430,6 +435,7 @@ component ActionItem inherits Rectangle {
         y: parent.height - self.height;
         height: 32px;
         clip: true;
+        border-radius: Tokens.radius-row;
         background: action.selected ? Tokens.surface-selected : transparent;
         if action.selected : Rectangle {
             x: 0;
@@ -489,7 +495,7 @@ component PreviewPane inherits Rectangle {
     property <length> facts-height: root.facts.length == 0 ? 0px : root.facts.length * 20px * Tokens.scale + 19px;
     horizontal-stretch: 1;
     background: Tokens.surface-well;
-    border-radius: 4px;
+    border-radius: Tokens.radius-control;
     clip: true;
     Rectangle {
         y: 0;
@@ -649,7 +655,10 @@ export component AppWindow inherits Window {
     public function focus-input() { input.focus(); }
 
     // Keep the selected line inside the viewport.
-    changed selected => {
+    changed selected => { reveal-selected(); }
+    // The selected row also moves when a Theme changes the row height.
+    changed selected-bottom => { reveal-selected(); }
+    function reveal-selected() {
         if (selected < 0) {
             return;
         }
@@ -931,7 +940,7 @@ export component AppWindow inherits Window {
                 background: Tokens.surface-raised;
                 border-width: 1px;
                 border-color: Tokens.line-hair;
-                border-radius: 4px;
+                border-radius: Tokens.radius-control;
                 clip: true;
                 // Clicks on the panel stay on the panel, not on the rows under it.
                 TouchArea { }

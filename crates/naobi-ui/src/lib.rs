@@ -73,8 +73,11 @@ impl UiHandle {
 
     /// Draws with `theme` from now on (R-007, R-030): no restart is needed.
     pub fn set_theme(&self, theme: &ResolvedTheme) {
-        let palette = theme.palette;
-        self.on_ui(move |ui, _| set_palette(ui, &palette));
+        let theme = theme.clone();
+        self.on_ui(move |ui, hwnd| {
+            set_theme_tokens(ui, &theme);
+            dwm::set_corner_radius(hwnd, theme.shape.window);
+        });
     }
 
     pub fn show(&self) {
@@ -226,6 +229,14 @@ fn set_palette(ui: &AppWindow, p: &Palette) {
     t.set_danger(model::color(p.danger));
     t.set_line_hair(model::color(p.hair));
     t.set_line_strong(model::color(p.strong));
+}
+
+fn set_theme_tokens(ui: &AppWindow, theme: &ResolvedTheme) {
+    set_palette(ui, &theme.palette);
+    let t = ui.global::<Tokens>();
+    t.set_radius_row(f32::from(theme.shape.row));
+    t.set_radius_chip(f32::from(theme.shape.chip));
+    t.set_radius_control(f32::from(theme.shape.control));
 }
 
 /// Sets the window height from the text scale and the work area (model::frame_height).
@@ -392,7 +403,8 @@ pub fn run(
     on_ready: impl FnOnce(UiHandle) + Send + 'static,
 ) -> Result<(), slint::PlatformError> {
     let ui = AppWindow::new()?;
-    set_palette(&ui, &theme.palette);
+    set_theme_tokens(&ui, theme);
+    let window_radius = theme.shape.window;
     // The window size comes from Rust only: 750 x frame_height, here at 100% and no work area.
     resize(&ui);
     let on_event = Rc::new(on_event);
@@ -434,7 +446,7 @@ pub fn run(
         .set_position(slint::PhysicalPosition::new(-32000, -32000));
     ui.show()?;
     let weak = ui.as_weak();
-    slint::invoke_from_event_loop(move || setup(weak, Box::new(on_ready)))
+    slint::invoke_from_event_loop(move || setup(weak, Box::new(on_ready), window_radius))
         .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
     slint::run_event_loop_until_quit()
 }
@@ -442,12 +454,15 @@ pub fn run(
 type Ready = Box<dyn FnOnce(UiHandle) + Send>;
 
 /// Finds the native window (retrying every 2 ms until winit has created it), cloaks it, reports ready.
-fn setup(ui: Weak<AppWindow>, on_ready: Ready) {
+fn setup(ui: Weak<AppWindow>, on_ready: Ready, window_radius: u8) {
     let Some(hwnd) = dwm::find_window(TITLE) else {
-        slint::Timer::single_shot(Duration::from_millis(2), move || setup(ui, on_ready));
+        slint::Timer::single_shot(Duration::from_millis(2), move || {
+            setup(ui, on_ready, window_radius)
+        });
         return;
     };
     dwm::prepare(hwnd);
+    dwm::set_corner_radius(hwnd, window_radius);
     on_ready(UiHandle {
         ui,
         hwnd,
@@ -981,8 +996,14 @@ mod ui_check {
         const LIST_TOP: u32 = 68;
         const LIST_BOTTOM: u32 = 431;
         set_palette(ui, &tokens::PAPER);
-        for with_header in [false, true] {
-            for selected in [49, 0, 49] {
+        // Square rows, so the accent bar is exactly as tall as the row.
+        ui.global::<Tokens>().set_radius_row(0.0);
+        for (with_header, row_height, selected) in [false, true]
+            .into_iter()
+            .flat_map(|h| [36.0, 40.0, 44.0].map(|r| (h, r)))
+            .flat_map(|(h, r)| [49, 0, 49].map(|s| (h, r, s)))
+        {
+            {
                 let rows = |from: usize, to: usize| -> Vec<RowView> {
                     (from..to)
                         .map(|i| row("Application", &format!("App {i}"), ""))
@@ -999,6 +1020,7 @@ mod ui_check {
                     },
                 ]);
                 s.selected = selected;
+                s.row_height = row_height;
                 apply(ui, s);
                 let size = ui.window().size();
                 let mut px =
@@ -1018,9 +1040,36 @@ mod ui_check {
                         (p.red, p.green, p.blue) == (accent.r, accent.g, accent.b)
                     })
                     .count();
-                assert_eq!(bar, 40, "row {selected}, Files header {with_header}");
+                assert_eq!(
+                    bar, row_height as usize,
+                    "row {selected}, Files header {with_header}, height {row_height}"
+                );
             }
         }
+        ui.global::<Tokens>().set_radius_row(2.0);
+        r030_a_theme_sets_the_corner_radii(ui);
+    }
+
+    // @R-030
+    fn r030_a_theme_sets_the_corner_radii(ui: &AppWindow) {
+        let mut theme = naobi_core::theme_file::builtin(naobi_core::ui::Theme::Paper);
+        theme.shape.row = 6;
+        theme.shape.chip = 3;
+        theme.shape.control = 9;
+        set_theme_tokens(ui, &theme);
+        let t = ui.global::<Tokens>();
+        assert_eq!(
+            (
+                t.get_radius_row(),
+                t.get_radius_chip(),
+                t.get_radius_control()
+            ),
+            (6.0, 3.0, 9.0)
+        );
+        set_theme_tokens(
+            ui,
+            &naobi_core::theme_file::builtin(naobi_core::ui::Theme::Paper),
+        );
     }
 
     /// At 125% the window must be 475 x 1.25 tall and the footer must sit on its bottom edge. A

@@ -20,6 +20,7 @@ use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::Settings;
 use naobi_core::theme::{self, Look};
 use naobi_core::theme_file::{self, Catalog, ResolvedTheme};
+use naobi_core::tokens::Palette;
 use naobi_core::ui::{Key, NoticeView, Screen, Theme, UiEvent, ViewModel};
 use naobi_launcher::frecency::Frecency;
 use naobi_launcher::{Clock, Launcher};
@@ -310,6 +311,9 @@ fn post_view(ui: &UiHandle, s: &State) {
     screen.reduced_motion = s.look.reduced_motion;
     // `ui.text_scale` from the settings (1.0, 1.125 or 1.25).
     screen.text_scale = s.settings.as_ref().map_or(1.0, |set| set.ui.text_scale);
+    if let Some(theme) = &s.theme {
+        screen.row_height = theme.density.row_height();
+    }
     screen.notice = s.notices.banner().map(|n| NoticeView {
         message: n.message.clone(),
     });
@@ -366,6 +370,17 @@ fn on_hotkeys_held(names: &[naobi_core::ids::HotkeyId]) {
 
 const THEME_SUBJECT: &str = "Theme";
 
+/// The palette of `theme`, or of the Built-in theme of Windows mode `mode` before one is resolved.
+fn palette_of(theme: Option<&ResolvedTheme>, mode: Theme) -> Palette {
+    theme.map_or_else(|| theme_file::builtin(mode).palette, |t| t.palette)
+}
+
+/// The colors the color picker overlay draws with (R-030).
+pub(crate) fn active_palette() -> Palette {
+    let s = state();
+    palette_of(s.theme.as_ref(), s.look.theme)
+}
+
 /// Works out the Theme for the current slot and Windows mode, redraws when it changed, and keeps the
 /// Theme Notices in step: one the Owner dismissed is not raised again until its text changes.
 fn refresh_theme(s: &mut State) {
@@ -380,6 +395,7 @@ fn refresh_theme(s: &mut State) {
         if let Some(ui) = &s.ui {
             ui.set_theme(&active);
         }
+        modules::aot::set_accent(active.palette.accent.to_rgb());
         s.theme = Some(active);
     }
     for message in messages.into_iter().filter(|m| !old.contains(m)) {
@@ -401,9 +417,7 @@ fn on_theme() {
     if let Some(look) = theme::follow(&AppEvent::ThemeChanged, &SystemTheme, s.look) {
         let mode_changed = look.theme != s.look.theme;
         s.look = look;
-        // The topmost borders follow Windows between light and dark too (R-018 v2).
         if mode_changed {
-            modules::aot::restyle();
             refresh_theme(&mut s);
         }
         if let Some(ui) = s.ui.clone() {
@@ -634,6 +648,22 @@ pub fn run() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // @R-030
+    #[test]
+    fn r030_picker_and_border_use_the_active_theme() {
+        let mut custom = theme_file::builtin(Theme::Stone);
+        custom.palette.accent = naobi_core::tokens::Rgba::rgb(0x7ED7C1);
+        assert_eq!(
+            palette_of(Some(&custom), Theme::Paper).accent.to_rgb(),
+            0x7ED7C1,
+            "the active theme wins over the Windows mode"
+        );
+        assert_eq!(
+            palette_of(None, Theme::Stone),
+            theme_file::builtin(Theme::Stone).palette
+        );
+    }
 
     /// Removes the throwaway key tree on drop, so a failing assert leaves nothing behind.
     struct Cleanup(String);

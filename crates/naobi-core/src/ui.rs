@@ -22,6 +22,9 @@ pub struct Row {
     pub subtitle: String,
 }
 
+/// A result row's height in the default Density, logical px at 100% text scale.
+pub const DEFAULT_ROW_HEIGHT: f32 = 40.0;
+
 /// An immutable snapshot of everything the Launcher shows.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ViewModel {
@@ -61,6 +64,8 @@ pub struct Screen {
     pub reduced_motion: bool,
     /// `ui.text_scale`: 1.0, 1.125 or 1.25.
     pub text_scale: f32,
+    /// The active Theme's row height before the text scale (R-030).
+    pub row_height: f32,
 }
 
 /// Where the Owner is (R-028).
@@ -216,6 +221,7 @@ impl From<ViewModel> for Screen {
             loading: false,
             reduced_motion: false,
             text_scale: 1.0,
+            row_height: DEFAULT_ROW_HEIGHT,
         }
     }
 }

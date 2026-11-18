@@ -13,7 +13,7 @@ use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{
     ActionPanelView, ActionView, EmptyView, FooterView, Key, KeyChord, NoticeView, PreviewView,
-    RowView, Screen, Section, UiEvent, ViewBar,
+    RowView, Screen, Section, UiEvent, ViewBar, DEFAULT_ROW_HEIGHT,
 };
 use naobi_core::view_source::{Fact, Preview, ViewSource};
 use std::collections::HashSet;
@@ -349,6 +349,7 @@ impl Launcher {
             loading: !pending.is_empty(),
             reduced_motion: false,
             text_scale: 1.0,
+            row_height: DEFAULT_ROW_HEIGHT,
         }
     }
 

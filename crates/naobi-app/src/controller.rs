@@ -159,7 +159,6 @@ impl Controller {
     pub fn finish_close(&mut self, host: &mut dyn Host) {
         if let Some(restore) = self.pending_close.take() {
             self.close(host, restore);
-            self.present(host);
         }
     }
 
@@ -176,7 +175,7 @@ impl Controller {
     /// A source's index changed: ranks the current query again and posts it.
     pub fn refresh(&mut self, host: &mut dyn Host) {
         self.launcher.refresh_sources();
-        // Ranking again dropped the file rows: ask for them again.
+        // The file rows may be out of date too: ask for them again.
         self.asked = None;
         self.ask_files(host);
         self.present(host);
@@ -196,6 +195,10 @@ impl Controller {
     fn close(&mut self, host: &mut dyn Host, restore: bool) {
         self.pending_close = None;
         host.hide();
+        // Back to the empty root: no query, command line or clipboard text stays decrypted behind
+        // a hidden window (T-014, T-034).
+        self.launcher.show_root();
+        self.present(host);
         let previous = self.previous.take();
         if let (true, Some(w)) = (restore, previous) {
             host.restore_focus(w);
@@ -204,7 +207,14 @@ impl Controller {
 
     pub fn on_ui_event(&mut self, ev: UiEvent, host: &mut dyn Host) {
         let restore = !matches!(ev, UiEvent::Dismissed);
+        let hover = matches!(ev, UiEvent::RowHovered(_));
+        let selected = self.launcher.selected();
         let effects = self.launcher.handle(ev);
+        // The pointer moving inside the selected row changes nothing; a redraw would rebuild every
+        // row, the one being clicked included.
+        if hover && self.launcher.selected() == selected {
+            return;
+        }
         self.execute(effects, restore, host);
         self.ask_files(host);
         self.present(host);
@@ -594,6 +604,23 @@ mod tests {
         assert_eq!(h.log, vec!["hide".to_string()]);
     }
 
+    #[test]
+    fn closing_leaves_no_query_behind_the_hidden_window() {
+        let (mut c, mut h) = shown(None);
+        c.on_ui_event(UiEvent::TextChanged("secret".into()), &mut h);
+        c.toggle(&mut h);
+        let query = h.last_post.as_ref().map(|s| s.query.as_str());
+        assert_eq!(query, Some(""));
+    }
+
+    #[test]
+    fn a_pointer_moving_inside_the_selected_row_does_not_redraw() {
+        let (mut c, mut h) = shown(None);
+        let posts = h.posts;
+        c.on_ui_event(UiEvent::RowHovered(0), &mut h);
+        assert_eq!(h.posts, posts);
+    }
+
     // @R-023
     #[test]
     fn r023_hotkey_toggles_and_a_show_resets_to_the_root() {
@@ -861,7 +888,7 @@ mod tests {
         let posts = h.posts;
         c.on_file_results(generation, rows(&[r"C:\old.txt".to_owned()]), &mut h);
         assert_eq!(h.posts, posts);
-        // A source refresh ranks again and drops the file rows: they are asked for again.
+        // A source refresh ranks again and asks for the file rows again.
         let before = searches(&h);
         c.refresh(&mut h);
         assert_eq!(searches(&h), before + 1);

@@ -159,15 +159,24 @@ fn is_paused() -> bool {
     lock_registry().as_ref().is_some_and(Registry::is_paused)
 }
 
-fn apply_pause(paused: bool) {
-    let hwnd = hwnd_of(p1_hwnd());
+/// Runs one registration pass, then reports the refused chords and the ones now held.
+fn register_with(hwnd: HWND, pass: impl FnOnce(&mut Registry, &mut Win32) -> Vec<AppEvent>) {
     let events = match lock_registry().as_mut() {
-        Some(reg) => reg.set_paused(&mut Win32 { hwnd }, paused),
+        Some(reg) => {
+            let mut events = pass(reg, &mut Win32 { hwnd });
+            events.extend(reg.held(&events));
+            events
+        }
         None => Vec::new(),
     };
     for ev in events {
         emit(ev);
     }
+}
+
+fn apply_pause(paused: bool) {
+    let hwnd = hwnd_of(p1_hwnd());
+    register_with(hwnd, |reg, os| reg.set_paused(os, paused));
     tray::set_paused(hwnd, paused);
 }
 
@@ -175,26 +184,13 @@ fn apply_pause(paused: bool) {
 /// conflict event. Any thread may call it.
 pub fn reload_hotkeys(settings: naobi_core::settings::Settings) -> bool {
     post_to_p1(Box::new(move || {
-        let hwnd = hwnd_of(p1_hwnd());
-        let events = match lock_registry().as_mut() {
-            Some(reg) => reg.reconfigure(&mut Win32 { hwnd }, &settings),
-            None => Vec::new(),
-        };
-        for ev in events {
-            emit(ev);
-        }
+        register_with(hwnd_of(p1_hwnd()), |reg, os| reg.reconfigure(os, &settings));
     }))
 }
 
 /// Retry after sleep: registers again whatever another process took meanwhile.
 fn retry_registrations(hwnd: HWND) {
-    let events = match lock_registry().as_mut() {
-        Some(reg) => reg.register_all(&mut Win32 { hwnd }),
-        None => Vec::new(),
-    };
-    for ev in events {
-        emit(ev);
-    }
+    register_with(hwnd, Registry::register_all);
 }
 
 /// Starts P1 with the chords of `settings` and returns once they are registered and the tray icon is

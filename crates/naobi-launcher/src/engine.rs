@@ -156,9 +156,25 @@ impl Launcher {
         }
     }
 
-    /// A source's index changed (the app catalog finished): ranks the current query again.
+    /// A source's index changed (the app catalog finished): ranks the current query again. The file
+    /// rows stay until their new answer, and the selection stays on its item while that is listed.
     pub fn refresh_sources(&mut self) {
+        let at = self.selected_hit().map(|h| h.id().clone());
+        let files = std::mem::take(&mut self.files);
         self.refresh();
+        self.files = files;
+        let found = at.and_then(|id| {
+            self.rows
+                .iter()
+                .chain(&self.files)
+                .position(|h| *h.id() == id)
+        });
+        self.selected = found.unwrap_or(0);
+    }
+
+    /// The selected row's position.
+    pub fn selected(&self) -> usize {
+        self.selected
     }
 
     /// The query a file search should answer now: its generation and text, or None when the root

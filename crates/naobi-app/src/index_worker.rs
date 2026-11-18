@@ -100,6 +100,13 @@ fn run(jobs: &[Job], mut watchers: Vec<DirWatcher>, owner: &[usize]) {
     }
     let mut pending: Vec<Pending> = jobs.iter().map(|_| Pending::default()).collect();
     loop {
+        // Every turn, so a folder that never goes quiet cannot hold a due job back.
+        let now = Instant::now();
+        for (job, p) in jobs.iter().zip(&mut pending) {
+            if p.take_due(now, job.settle) {
+                (job.run)();
+            }
+        }
         // The wait counts whole milliseconds, so one more keeps it from waking just before due.
         let timeout = pending
             .iter()
@@ -107,15 +114,13 @@ fn run(jobs: &[Job], mut watchers: Vec<DirWatcher>, owner: &[usize]) {
             .min()
             .map(|t| t.saturating_duration_since(Instant::now()) + Duration::from_millis(1));
         match wait_any(&mut watchers, timeout) {
-            Ok(Some(i)) => pending[owner[i]].changed(Instant::now()),
-            Ok(None) => {
-                let now = Instant::now();
-                for (job, p) in jobs.iter().zip(&mut pending) {
-                    if p.take_due(now, job.settle) {
-                        (job.run)();
-                    }
+            Ok(Some((i, watching))) => {
+                pending[owner[i]].changed(Instant::now());
+                if !watching {
+                    tracing::warn!("a folder watch stopped; its changes are not seen");
                 }
             }
+            Ok(None) => {}
             Err(e) => {
                 tracing::warn!(error = %e, "a folder watch stopped; the index worker ends");
                 return;

@@ -1022,6 +1022,19 @@ fn r017_a_color_row_draws_its_hex_as_the_swatch() {
     assert_eq!(swatch("#914A3D app"), Some(None), "not a Color item");
 }
 
+// A catalog that changes in the background must not move the selection under the Owner's Enter.
+#[test]
+fn a_source_refresh_keeps_the_selected_item() {
+    let (mut l, _) = engine(
+        vec![item("app:notepad", "Notepad"), item("app:notes", "Notes")],
+        vec![],
+    );
+    type_text(&mut l, "not");
+    l.handle(UiEvent::RowHovered(1));
+    l.refresh_sources();
+    assert_eq!(l.screen().selected, 1);
+}
+
 // The pointer moving onto a row selects it, like the arrow keys; a bad index changes nothing.
 #[test]
 fn hovering_a_row_selects_it_and_ignores_a_bad_index() {

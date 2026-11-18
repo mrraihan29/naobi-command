@@ -179,12 +179,17 @@ fn is_remote(p: &Path) -> bool {
 fn candidates(token: &str, path_var: &OsStr, pathext: &str) -> Vec<PathBuf> {
     let exts: Vec<&str> = pathext.split(';').filter(|e| !e.is_empty()).collect();
     let expand = |base: PathBuf, as_is: bool| -> Vec<PathBuf> {
-        let has_ext = base.extension().is_some();
+        let ext = base.extension().and_then(OsStr::to_str);
+        // `app.v2` has a dot but no program extension, so `app.v2.exe` is still a candidate.
+        let runnable = ext.is_some_and(|x| {
+            exts.iter()
+                .any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(x))
+        });
         let mut v = Vec::new();
-        if has_ext || as_is {
+        if base.extension().is_some() || as_is {
             v.push(base.clone());
         }
-        if !has_ext {
+        if !runnable {
             for e in &exts {
                 let mut s = base.clone().into_os_string();
                 s.push(e);
@@ -342,6 +347,18 @@ mod tests {
         assert_eq!(
             candidates(r"C:\a\x", OsStr::new(""), ".EXE"),
             vec![PathBuf::from(r"C:\a\x"), PathBuf::from(r"C:\a\x.EXE")]
+        );
+        // A dot that is no program extension still gets PATHEXT; a real one does not.
+        assert_eq!(
+            candidates("app.v2", OsStr::new(r"C:\Tools"), ".EXE"),
+            vec![
+                PathBuf::from(r"C:\Tools\app.v2"),
+                PathBuf::from(r"C:\Tools\app.v2.EXE")
+            ]
+        );
+        assert_eq!(
+            candidates("app.exe", OsStr::new(r"C:\Tools"), ".EXE"),
+            vec![PathBuf::from(r"C:\Tools\app.exe")]
         );
     }
 

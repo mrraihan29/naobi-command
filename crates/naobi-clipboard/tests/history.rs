@@ -3,10 +3,15 @@ use naobi_clipboard::capture::{capture, Capture};
 use naobi_clipboard::filters::Skip;
 use naobi_clipboard::history::Outcome;
 use naobi_clipboard::limits::{Limiter, Limits, INDEX_TTL_MS, MAX_TEXT_BYTES};
+use naobi_clipboard::ports::CipherError;
 use naobi_clipboard::testing::{FakeClock, TaggedCipher};
-use naobi_clipboard::{Captured, ClipSource, Content, Error, Flags, History, Purged, Stored};
+use naobi_clipboard::{
+    Captured, Cipher, ClipSource, Content, Error, Flags, History, Purged, Stored,
+};
 use naobi_core::db::Db;
 use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use zeroize::Zeroizing;
 
 const DAY_MS: i64 = 86_400_000;
@@ -430,4 +435,53 @@ fn d014_text_index_dropped_after_60s() {
     clock.advance(INDEX_TTL_MS / 2 + 1);
     h.tick();
     assert!(h.index_loaded(), "the second search restarted the clock");
+}
+
+#[test]
+fn settings_lower_the_limits_never_raise_them_and_name_the_ignored_apps() {
+    let (mut h, clock) = history();
+    h.configure(90, 1, vec!["notepad.exe".into()]);
+    assert_eq!(store(&mut h, text("skipped")).result, Err(Skip::IgnoredApp));
+    h.configure(90, 1, Vec::new());
+    store(&mut h, text("a"));
+    clock.advance(1000);
+    store(&mut h, text("b"));
+    assert_eq!(count(&h), 1, "max_entries lowered to 1");
+    clock.advance(31 * DAY_MS);
+    h.purge_now().unwrap_or_else(|e| panic!("purge: {e}"));
+    assert_eq!(count(&h), 0, "90 days is capped at 30");
+}
+
+/// Decrypts like `TaggedCipher` until `broken` is set.
+struct Breakable {
+    broken: Arc<AtomicBool>,
+}
+
+impl Cipher for Breakable {
+    fn encrypt(&self, plain: &[u8]) -> Result<Vec<u8>, CipherError> {
+        TaggedCipher.encrypt(plain)
+    }
+
+    fn decrypt(&self, blob: &[u8]) -> Result<Zeroizing<Vec<u8>>, CipherError> {
+        if self.broken.load(Ordering::Relaxed) {
+            return Err(CipherError);
+        }
+        TaggedCipher.decrypt(blob)
+    }
+}
+
+#[test]
+fn an_entry_that_no_longer_decrypts_stops_neither_copies_nor_search() {
+    let broken = Arc::new(AtomicBool::new(false));
+    let cipher = Breakable {
+        broken: broken.clone(),
+    };
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+    let clock = FakeClock::at(1_700_000_000_000);
+    let mut h = History::new(db, Box::new(cipher), Box::new(clock));
+    store(&mut h, text("first"));
+    broken.store(true, Ordering::Relaxed);
+    store(&mut h, text("second"));
+    assert_eq!(count(&h), 2);
+    assert_eq!(h.search("first").ok(), Some(Vec::new()));
 }

@@ -56,7 +56,7 @@ impl Default for Clipboard {
         Self {
             retention_days: MAX_RETENTION_DAYS,
             max_entries: MAX_ENTRIES,
-            ignored_apps: vec!["Proton Pass.exe".into()],
+            ignored_apps: vec!["ProtonPass.exe".into()],
         }
     }
 }
@@ -286,7 +286,7 @@ text_scale = 1.0 # 1.0, 1.125 or 1.25
 [clipboard]
 retention_days = 30 # may be lowered, never raised above 30
 max_entries = 1000  # may be lowered, never raised above 1000
-ignored_apps = ["Proton Pass.exe"]
+ignored_apps = ["ProtonPass.exe"]
 
 [aot]
 border = true

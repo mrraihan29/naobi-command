@@ -111,7 +111,9 @@ component DragHandle inherits TouchArea {
 component ResultRow inherits Rectangle {
     in property <Line> line;
     callback activated();
-    callback hovered();
+    // Both carry the pointer's position in the window.
+    callback hovered(length, length);
+    callback scrolled(length, length);
     height: 40px * Tokens.scale;
     clip: true;
     background: line.selected ? Tokens.surface-selected : transparent;
@@ -229,11 +231,16 @@ component ResultRow inherits Rectangle {
     // A click runs the row, like Enter on it. Last, so it is on top of the row's content.
     TouchArea {
         clicked => { root.activated(); }
-        // Real pointer motion only: a list scrolling under a still pointer must not steal the selection.
         pointer-event(e) => {
             if (e.kind == PointerEventKind.move) {
-                root.hovered();
+                root.hovered(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
             }
+        }
+        // Slint follows a wheel event with a move at the same spot; the window uses this to tell it
+        // from real motion. The list does the scrolling.
+        scroll-event(e) => {
+            root.scrolled(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            return EventResult.reject;
         }
     }
 }
@@ -242,7 +249,8 @@ component ResultRow inherits Rectangle {
 component LineItem inherits Rectangle {
     in property <Line> line;
     callback activated();
-    callback hovered();
+    callback hovered(length, length);
+    callback scrolled(length, length);
     height: 40px * Tokens.scale;
     if line.is-header : HeaderItem {
         text: line.title;
@@ -250,7 +258,8 @@ component LineItem inherits Rectangle {
     if !line.is-header : ResultRow {
         line: root.line;
         activated => { root.activated(); }
-        hovered => { root.hovered(); }
+        hovered(x, y) => { root.hovered(x, y); }
+        scrolled(x, y) => { root.scrolled(x, y); }
     }
 }
 
@@ -382,6 +391,10 @@ export component AppWindow inherits Window {
     callback key-pressed(string, bool, bool, bool) -> bool;
     callback row-activated(int);
     callback row-hovered(int);
+    // Where the pointer last was over a row: only motion away from it selects, so a list scrolling
+    // under a still pointer does not steal the selection.
+    property <length> pointer-x;
+    property <length> pointer-y;
     // The footer is the handle: dragging it moves the window by this many logical px.
     callback move-by(length, length);
     public function focus-input() { input.focus(); }
@@ -527,7 +540,17 @@ export component AppWindow inherits Window {
                         for l[i] in root.lines : LineItem {
                             line: l;
                             activated => { root.row-activated(l.row); }
-                            hovered => { root.row-hovered(l.row); }
+                            hovered(x, y) => {
+                                if (abs(x - root.pointer-x) >= 1px || abs(y - root.pointer-y) >= 1px) {
+                                    root.pointer-x = x;
+                                    root.pointer-y = y;
+                                    root.row-hovered(l.row);
+                                }
+                            }
+                            scrolled(x, y) => {
+                                root.pointer-x = x;
+                                root.pointer-y = y;
+                            }
                         }
                     }
                     if root.preview-kind != 0 : PreviewPane {

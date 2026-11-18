@@ -82,6 +82,19 @@ impl Registry {
         self.paused
     }
 
+    /// What a registration pass that returned `conflicts` leaves held. None while paused.
+    pub fn held(&self, conflicts: &[AppEvent]) -> Option<AppEvent> {
+        (!self.paused).then(|| {
+            AppEvent::HotkeysHeld(
+                self.entries
+                    .iter()
+                    .map(|(_, name, _)| name.clone())
+                    .filter(|name| !conflicts.contains(&AppEvent::HotkeyConflict(name.clone())))
+                    .collect(),
+            )
+        })
+    }
+
     /// Registers every chord unless paused. Returns one `HotkeyConflict` per chord that was refused.
     pub fn register_all(&mut self, r: &mut impl Registrar) -> Vec<AppEvent> {
         if self.paused {

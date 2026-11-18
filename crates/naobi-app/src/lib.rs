@@ -333,7 +333,25 @@ fn on_conflict(name: &str) {
         .as_ref()
         .and_then(|set| set.hotkeys.get(name))
         .copied();
-    raise_notice(&mut s, notices::hotkey_conflict(name, chord));
+    let notice = notices::hotkey_conflict(name, chord);
+    // A conflict on the chord this hotkey had before no longer applies.
+    s.notices.clear_conflict(name, Some(&notice));
+    raise_notice(&mut s, notice);
+}
+
+/// These hotkeys are registered now: a conflict Notice about them is out of date.
+fn on_hotkeys_held(names: &[naobi_core::ids::HotkeyId]) {
+    let mut s = state();
+    let mut cleared = false;
+    for id in names {
+        cleared |= s.notices.clear_conflict(&id.0, None);
+    }
+    if cleared {
+        sync_tray(&s.notices);
+        if let Some(ui) = s.ui.clone() {
+            post_view(&ui, &s);
+        }
+    }
 }
 
 /// R-007: Windows changed its theme or animation setting. The look follows it, palette included.
@@ -379,6 +397,7 @@ fn on_settings_changed(path: &Path) {
     }
     // Quicklinks are read live, so an edited alias works at once; an open Launcher ranks again.
     modules::aot::set_config(&next);
+    modules::clipboard_capture::set_config(&next);
     modules::builtin::set_quicklinks(next.quicklinks);
     to_modules(|c, h| c.refresh(h));
 }
@@ -413,6 +432,7 @@ fn route(ev: AppEvent) {
             c.on_app_event(&ev, h);
         }),
         AppEvent::HotkeyConflict(id) => on_conflict(&id.0),
+        AppEvent::HotkeysHeld(names) => on_hotkeys_held(&names),
         AppEvent::ThemeChanged => on_theme(),
     }
 }
@@ -445,10 +465,21 @@ fn apply_autostart(enabled: bool, exe: &std::path::Path, key: &str) {
     }
 }
 
-/// Writes the Run value for `enabled` at the program's own path, if this build writes one.
+/// True for an exe in Cargo's `target/debug` or `target/release`: a build, not the installed program.
+fn is_cargo_build(exe: &Path) -> bool {
+    let mut up = exe.ancestors().skip(1).map(Path::file_name);
+    up.next()
+        .flatten()
+        .is_some_and(|d| d == "debug" || d == "release")
+        && up.next().flatten().is_some_and(|d| d == "target")
+}
+
+/// Writes the Run value for `enabled` at the program's own path, if this build writes one. A Cargo
+/// build leaves the Owner's real Run key alone: `target` can be cleaned away.
 fn sync_autostart(enabled: bool) {
     let Some(key) = autostart_key() else { return };
     match std::env::current_exe() {
+        Ok(exe) if key == autostart::RUN_KEY && is_cargo_build(&exe) => {}
         Ok(exe) => apply_autostart(enabled, &exe, &key),
         Err(_) => {
             tracing::warn!("autostart: the program path is unknown; the Run value was not updated")
@@ -559,6 +590,22 @@ mod tests {
         );
         apply_autostart(false, exe, &key);
         assert_eq!(autostart::value(&key), None);
+    }
+
+    #[test]
+    fn d007_only_an_exe_in_cargos_target_folder_counts_as_a_build() {
+        for exe in [
+            r"C:\p\target\debug\naobi-app.exe",
+            r"C:\p\target\release\naobi-app.exe",
+        ] {
+            assert!(is_cargo_build(Path::new(exe)), "{exe}");
+        }
+        for exe in [
+            r"C:\Users\x\AppData\Local\NaobiCommand\bin\naobi-app.exe",
+            r"C:\release\naobi-app.exe",
+        ] {
+            assert!(!is_cargo_build(Path::new(exe)), "{exe}");
+        }
     }
 
     /// The Owner's Run key is written only by a release build. A perf build with no override writes

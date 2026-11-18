@@ -148,8 +148,12 @@ impl DirWatcher {
 }
 
 /// Waits up to `timeout` (forever when None) for a change in any of `watchers` (at most 64). Returns
-/// the index of the watcher that changed, already re-armed, or None on timeout.
-pub fn wait_any(watchers: &mut [DirWatcher], timeout: Option<Duration>) -> Result<Option<usize>> {
+/// the index of the watcher that fired and whether it is watching again, or None on timeout. One that
+/// is not (its folder went away) just never fires again; the others go on.
+pub fn wait_any(
+    watchers: &mut [DirWatcher],
+    timeout: Option<Duration>,
+) -> Result<Option<(usize, bool)>> {
     let ms = timeout.map_or(u32::MAX, |t| {
         t.as_millis().min(u128::from(u32::MAX - 1)) as u32
     });
@@ -161,7 +165,7 @@ pub fn wait_any(watchers: &mut [DirWatcher], timeout: Option<Duration>) -> Resul
     }
     let i = r.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
     match watchers.get_mut(i) {
-        Some(w) => w.collect().map(|()| Some(i)),
+        Some(w) => Ok(Some((i, w.collect().is_ok()))),
         None => Err(Error::from_thread()),
     }
 }

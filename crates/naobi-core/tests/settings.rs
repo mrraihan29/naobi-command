@@ -26,7 +26,7 @@ fn d024_default_quicklink_aliases() {
     assert_eq!(s.ui.text_scale, 1.0);
     assert_eq!(s.clipboard.retention_days, 30);
     assert_eq!(s.clipboard.max_entries, 1000);
-    assert!(s.clipboard.ignored_apps.contains(&"Proton Pass.exe".into()));
+    assert!(s.clipboard.ignored_apps.contains(&"ProtonPass.exe".into()));
     assert!(s.aot.border);
     assert_eq!(s.aot.border_color, "auto");
 }

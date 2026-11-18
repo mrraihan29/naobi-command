@@ -8,6 +8,9 @@ use naobi_core::notice::{Notice, NoticeKind};
 
 use crate::logging;
 
+/// How a hotkey conflict Notice ends.
+const CONFLICT_END: &str = " hotkey is off";
+
 /// The active Notices, oldest first. The oldest is the banner.
 #[derive(Default)]
 pub struct NoticeCenter {
@@ -37,6 +40,14 @@ impl NoticeCenter {
         self.active.front()
     }
 
+    /// Removes the conflict Notice of hotkey `name`, unless it is `keep`. True when one went.
+    pub fn clear_conflict(&mut self, name: &str, keep: Option<&Notice>) -> bool {
+        let before = self.active.len();
+        self.active
+            .retain(|n| n.subject != name || !n.message.ends_with(CONFLICT_END) || Some(n) == keep);
+        self.active.len() != before
+    }
+
     /// Esc on the banner dismisses it. False when there is no banner, so Esc hides the Launcher instead.
     pub fn dismiss(&mut self) -> bool {
         self.active.pop_front().is_some()
@@ -48,7 +59,7 @@ pub fn hotkey_conflict(name: &str, chord: Option<KeyChord>) -> Notice {
     let key = chord.map_or_else(|| name.to_string(), chord_text);
     Notice {
         subject: name.into(),
-        message: format!("{key} is taken by another app, so the {name} hotkey is off"),
+        message: format!("{key} is taken by another app, so the {name}{CONFLICT_END}"),
         kind: NoticeKind::Warning,
     }
 }
@@ -93,6 +104,25 @@ mod tests {
             message: message.into(),
             kind: NoticeKind::Warning,
         }
+    }
+
+    #[test]
+    fn a_conflict_notice_goes_once_the_hotkey_is_held_and_others_stay() {
+        let chord = KeyChord {
+            mods: ALT,
+            vk: 0x20,
+        };
+        let old = hotkey_conflict("launcher", Some(chord));
+        let mut center = NoticeCenter::new();
+        center.raise(old.clone());
+        center.raise(notice("launcher notice that is no conflict"));
+        assert!(!center.clear_conflict("launcher", Some(&old)), "kept");
+        assert!(center.clear_conflict("launcher", None));
+        assert!(!center.clear_conflict("launcher", None));
+        assert_eq!(
+            center.banner().map(|n| n.message.as_str()),
+            Some("launcher notice that is no conflict")
+        );
     }
 
     // @R-008

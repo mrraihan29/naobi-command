@@ -200,6 +200,15 @@ impl History {
         self
     }
 
+    /// The `[clipboard]` settings: the limits they may lower but never raise (D-015), and the exe
+    /// names whose copies are never kept.
+    pub fn configure(&mut self, retention_days: u32, max_entries: u32, ignored: Vec<String>) {
+        let most = Limits::default();
+        self.limits.retention_days = i64::from(retention_days).min(most.retention_days);
+        self.limits.max_entries = (max_entries as usize).min(most.max_entries);
+        self.ignored = ignored;
+    }
+
     fn content(c: &Captured) -> Result<Prepared, Skip> {
         match &c.content {
             Content::Text(t) => {
@@ -347,7 +356,10 @@ impl History {
         if Kind::from_column(&kind) != Some(p.kind) {
             return Ok(None);
         }
-        let plain = self.cipher.decrypt(&blob)?;
+        // An entry that no longer decrypts matches nothing; it must not stop new copies.
+        let Ok(plain) = self.cipher.decrypt(&blob) else {
+            return Ok(None);
+        };
         Ok((plain.as_slice() == p.payload.as_slice()).then_some(id))
     }
 
@@ -487,7 +499,11 @@ impl History {
         let (mut entries, mut bytes) = (Vec::new(), 0usize);
         for row in rows {
             let (id, blob) = row?;
-            let text = String::from_utf8_lossy(&self.cipher.decrypt(&blob)?).to_lowercase();
+            // An entry that no longer decrypts is left out; the others stay searchable.
+            let Ok(plain) = self.cipher.decrypt(&blob) else {
+                continue;
+            };
+            let text = String::from_utf8_lossy(&plain).to_lowercase();
             bytes += text.len();
             if bytes > INDEX_MAX_BYTES {
                 break;

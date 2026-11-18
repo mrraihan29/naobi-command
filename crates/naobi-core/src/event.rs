@@ -5,6 +5,8 @@ use crate::ids::{HotkeyId, TimerId};
 pub enum AppEvent {
     Hotkey(HotkeyId),
     HotkeyConflict(HotkeyId),
+    /// After a registration pass: the hotkeys the app holds now.
+    HotkeysHeld(Vec<HotkeyId>),
     /// Clipboard sequence number.
     ClipboardChanged(u32),
     ThemeChanged,

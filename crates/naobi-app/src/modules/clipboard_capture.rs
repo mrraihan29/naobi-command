@@ -9,6 +9,7 @@ use naobi_clipboard::view::{share, Shared};
 use naobi_clipboard::{Captured, Cipher, ClipSource, Clock, Content, Flags, History};
 use naobi_core::db::Db;
 use naobi_core::event::AppEvent;
+use naobi_core::settings::Settings;
 use naobi_win32::clipboard::{self, Snapshot};
 use naobi_win32::{dpapi, random};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -40,15 +41,8 @@ pub fn register(m: &mut Modules) {
         return;
     };
     let history = SHARED.get_or_init(|| share(history)).clone();
-    if let Ok(p) = history
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .purge_now()
-    {
-        if p.expired + p.excess + p.evicted > 0 {
-            logging::clipboard_purge(p.expired, p.excess, p.evicted);
-        }
-    }
+    let settings = crate::state().settings.clone().unwrap_or_default();
+    set_config(&settings);
     let (tx, rx): (Sender<Change>, Receiver<Change>) = mpsc::channel();
     let spawned = std::thread::Builder::new()
         .name("clipboard".into())
@@ -68,6 +62,19 @@ pub fn register(m: &mut Modules) {
     );
     if !clipboard::install_listener() {
         tracing::warn!("clipboard history is off: the change listener was not installed");
+    }
+}
+
+/// `[clipboard]` of the live settings, at start and on every hot reload. Lowered limits apply at once.
+pub fn set_config(settings: &Settings) {
+    let Some(history) = shared() else { return };
+    let c = &settings.clipboard;
+    let mut h = history.lock().unwrap_or_else(|e| e.into_inner());
+    h.configure(c.retention_days, c.max_entries, c.ignored_apps.clone());
+    if let Ok(p) = h.purge_now() {
+        if p.expired + p.excess + p.evicted > 0 {
+            logging::clipboard_purge(p.expired, p.excess, p.evicted);
+        }
     }
 }
 

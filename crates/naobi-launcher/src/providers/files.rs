@@ -117,7 +117,7 @@ pub fn rows(paths: &[String]) -> Vec<Item> {
 }
 
 /// The folder of a path, for "Open Containing Folder".
-fn parent(path: &str) -> Option<&str> {
+pub(crate) fn parent(path: &str) -> Option<&str> {
     let end = path.rfind(['\\', '/'])?;
     let dir = &path[..end];
     // `C:` alone is the drive's current directory; `C:\` is its root.

@@ -2,11 +2,22 @@ import { ScrollView } from "std-widgets.slint";
 import "../assets/Inter-subset.ttf";
 import "../assets/JetBrainsMono-Regular.ttf";
 
+// A piece of a title; the letters the query matched are strong.
+export struct TitleRun {
+    text: string,
+    strong: bool,
+}
+
 // One list line: a section header or a result row, built from naobi-core::ui::Screen.
 export struct Line {
     is-header: bool,
     title: string,
+    // The title in pieces when the query matched some of it, otherwise empty.
+    runs: [TitleRun],
     subtitle: string,
+    subtitle-mono: bool,
+    // The kind or another short fact at the right edge.
+    right: string,
     hint: string,
     label: string,
     selected: bool,
@@ -136,9 +147,8 @@ component ResultRow inherits Rectangle {
     }
     HorizontalLayout {
         padding-left: 12px;
-        padding-right: 12px;
+        padding-right: 14px;
         spacing: 12px;
-        alignment: start;
         if line.has-icon : Image {
             width: 22px;
             height: 22px;
@@ -184,30 +194,52 @@ component ResultRow inherits Rectangle {
             border-width: line.has-swatch ? 1px : 0px;
             border-color: Tokens.line-strong;
         }
-        Text {
-            text: line.title;
-            font-size: (line.calculator ? 18px : 13px) * Tokens.scale;
-            font-weight: line.calculator ? 500 : 400;
-            color: Tokens.text-primary;
-            opacity: line.disabled ? 0.38 : 1;
-            vertical-alignment: center;
+        title-box := Rectangle {
+            // A title too long for the row is the plain, elided text.
+            property <bool> show-runs: line.runs.length > 0 && title.preferred-width + 6px <= self.width;
+            horizontal-stretch: line.subtitle == "" ? 1 : 0;
+            min-width: 40px;
+            preferred-width: title.preferred-width + (line.runs.length > 0 ? 6px : 0px);
+            title := Text {
+                width: parent.width;
+                height: parent.height;
+                visible: !title-box.show-runs;
+                text: line.title;
+                font-size: (line.calculator ? 18px : 13px) * Tokens.scale;
+                font-weight: line.calculator ? 500 : 400;
+                color: Tokens.text-primary;
+                opacity: line.disabled ? 0.38 : 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if title-box.show-runs : HorizontalLayout {
+                alignment: start;
+                for run in line.runs : Text {
+                    text: run.text;
+                    font-size: 13px * Tokens.scale;
+                    font-weight: run.strong ? 600 : 400;
+                    color: Tokens.text-primary;
+                    opacity: line.disabled ? 0.38 : 1;
+                    vertical-alignment: center;
+                }
+            }
         }
-        Text {
-            // type.meta: JetBrains Mono.
+        if line.subtitle != "" : Text {
+            // type.meta for technical text, type.kind otherwise.
             text: line.subtitle;
-            font-family: "JetBrains Mono";
+            font-family: line.subtitle-mono ? "JetBrains Mono" : "Inter";
             font-size: 12px * Tokens.scale;
             color: line.selected ? Tokens.subtitle-selected : Tokens.text-muted;
             vertical-alignment: center;
             horizontal-stretch: 1;
             overflow: elide;
         }
-        Rectangle {
+        if line.pinned : Rectangle {
             width: 6px;
             height: 6px;
             y: (parent.height - self.height) / 2;
             border-radius: 3px;
-            background: line.pinned ? Tokens.accent : transparent;
+            background: Tokens.accent;
         }
         if line.glyph-trailing != "" : Rectangle {
             width: 18px;
@@ -229,6 +261,14 @@ component ResultRow inherits Rectangle {
             y: (parent.height - self.height) / 2;
             text: line.hint;
             on-selected: line.selected;
+        }
+        if line.hint == "" && line.right != "" : Text {
+            // type.kind.
+            text: line.right;
+            font-size: 12px * Tokens.scale;
+            color: line.selected ? Tokens.subtitle-selected : Tokens.text-muted;
+            vertical-alignment: center;
+            min-width: self.preferred-width;
         }
     }
     // A click runs the row, like Enter on it. Last, so it is on top of the row's content.

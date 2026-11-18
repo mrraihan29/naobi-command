@@ -86,6 +86,12 @@ pub struct RowView {
     pub icon_key: Option<String>,
     /// The icon, once it is loaded.
     pub icon: Option<std::sync::Arc<Icon>>,
+    /// Title characters the query matched, ascending (R-025).
+    pub matched: Vec<u32>,
+    /// The subtitle is technical text, such as a folder or an expression (R-025).
+    pub mono_subtitle: bool,
+    /// Shown at the right edge instead of the kind, such as a copy time. Empty shows nothing.
+    pub right: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,6 +162,9 @@ impl From<Row> for RowView {
             swatch: None,
             icon_key: None,
             icon: None,
+            matched: Vec::new(),
+            mono_subtitle: false,
+            right: None,
         }
     }
 }

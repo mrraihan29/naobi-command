@@ -506,6 +506,9 @@ mod ui_check {
             swatch: None,
             icon_key: None,
             icon: None,
+            matched: Vec::new(),
+            mono_subtitle: false,
+            right: None,
         }
     }
 
@@ -532,21 +535,19 @@ mod ui_check {
             section(
                 "Applications",
                 vec![
-                    row(
-                        "Application",
-                        "Visual Studio Code",
-                        "C:\\Program Files\\Microsoft VS Code\\Code.exe",
-                    ),
-                    row(
-                        "Application",
-                        "Windows Terminal",
-                        "C:\\Program Files\\WindowsApps\\Terminal.exe",
-                    ),
+                    RowView {
+                        matched: vec![14, 15, 16, 17],
+                        ..row("Application", "Visual Studio Code", "")
+                    },
+                    row("Application", "Windows Terminal", ""),
                 ],
             ),
             section(
                 "Files",
-                vec![row("File", "budget.xlsx", "C:\\Users\\Raihan\\Documents")],
+                vec![RowView {
+                    mono_subtitle: true,
+                    ..row("File", "budget.xlsx", "C:\\Users\\Raihan\\Documents")
+                }],
             ),
         ]);
         results.query = "code".into();
@@ -709,6 +710,58 @@ mod ui_check {
             }
         }
         assert_selected_row_stays_in_view(&ui, &window);
+        r025_kind_and_hint_end_at_the_right_edge(&ui, &window);
+    }
+
+    // @R-025
+    /// The last drawn pixel of each row is the same, whatever the title and subtitle length.
+    fn r025_kind_and_hint_end_at_the_right_edge(ui: &AppWindow, window: &MinimalSoftwareWindow) {
+        const LIST_TOP: u32 = 68;
+        set_palette(ui, &tokens::PAPER);
+        let long = "A title long enough to need most of the row before anything else fits";
+        let hinted = RowView {
+            hint: Some("Copy".into()),
+            ..row("Calculator", "42", "")
+        };
+        let rows = vec![
+            row("Application", "Notepad", ""),
+            row(
+                "File",
+                long,
+                "C:\\A\\very\\long\\folder\\that\\cannot\\fit\\here",
+            ),
+            hinted,
+        ];
+        let count = rows.len() as u32;
+        let mut s = screen(vec![Section { header: None, rows }]);
+        s.selected = usize::MAX;
+        apply(ui, s);
+        let size = ui.window().size();
+        let mut px = vec![PremultipliedRgbaColor::default(); (size.width * size.height) as usize];
+        for _ in 0..2 {
+            slint::platform::update_timers_and_animations();
+            window.request_redraw();
+            window.draw_if_needed(|renderer| {
+                renderer.render(&mut px, size.width as usize);
+            });
+        }
+        let background = tokens::PAPER.window;
+        let edges: Vec<u32> = (0..count)
+            .map(|i| {
+                (LIST_TOP + i * 40..LIST_TOP + (i + 1) * 40)
+                    .flat_map(|y| (600..size.width - 2).map(move |x| (x, y)))
+                    .filter(|(x, y)| {
+                        let p = px[(y * size.width + x) as usize];
+                        (p.red, p.green, p.blue) != (background.r, background.g, background.b)
+                    })
+                    .map(|(x, _)| x)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .collect();
+        for edge in &edges {
+            assert!((732..=735).contains(edge), "right edges: {edges:?}");
+        }
     }
 
     // @D-042

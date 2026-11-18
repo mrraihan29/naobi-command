@@ -78,6 +78,19 @@ fn key(k: Key) -> UiEvent {
     })
 }
 
+// @R-025
+#[test]
+fn r025_application_row_has_no_path() {
+    let catalog = AppCatalog::default();
+    catalog.set(vec![entry("App.Id!App", "Notepad")]);
+    let mut l = launcher(&catalog);
+    l.refresh_sources();
+    l.handle(UiEvent::TextChanged("note".into()));
+    let s = l.screen();
+    let row = &s.sections[0].rows[0];
+    assert_eq!((row.title.as_str(), row.subtitle.as_str()), ("Notepad", ""));
+}
+
 // @R-012
 #[test]
 fn d013_indexing_row_until_catalog_ready() {

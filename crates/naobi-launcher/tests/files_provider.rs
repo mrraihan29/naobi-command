@@ -164,7 +164,8 @@ fn r013_file_results_never_in_apps_section() {
     assert_eq!(titles(&s, None), ["Chrome"], "only the real app up front");
     assert_eq!(titles(&s, Some("Files")), ["Chrome.exe"]);
     let row = &s.sections[1].rows[0];
-    assert_eq!(row.subtitle, r"C:\Users\me\Downloads\Chrome.exe");
+    // The file name is the title and its folder the subtitle, so it is never taken for the app.
+    assert_eq!(row.subtitle, r"C:\Users\me\Downloads");
     assert_eq!(row.kind, "File");
 }
 

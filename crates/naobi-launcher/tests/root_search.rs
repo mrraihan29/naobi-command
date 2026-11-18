@@ -1049,3 +1049,44 @@ fn hovering_a_row_selects_it_and_ignores_a_bad_index() {
     assert!(l.handle(UiEvent::RowHovered(9)).is_empty());
     assert_eq!(l.screen().selected, 1);
 }
+
+// @R-025
+#[test]
+fn r025_matched_title_letters_are_marked() {
+    let (mut l, _) = engine(vec![item("a", "Visual Studio Code")], vec![]);
+    type_text(&mut l, "code");
+    assert_eq!(l.screen().sections[0].rows[0].matched, vec![14, 15, 16, 17]);
+    type_text(&mut l, "");
+    assert!(l.screen().sections[0].rows[0].matched.is_empty());
+}
+
+// @R-025
+#[test]
+fn r025_file_row_shows_its_folder_in_mono() {
+    let (mut l, _) = engine(vec![], vec![]);
+    type_text(&mut l, "notes");
+    let file = Item {
+        kind: ItemKind::File,
+        subtitle: r"C:\Users\me\notes.txt".into(),
+        ..item("file:n", "notes.txt")
+    };
+    assert!(l.file_results(l.generation(), 0, vec![file]));
+    let s = l.screen();
+    let row = &s.sections[0].rows[0];
+    assert_eq!(row.subtitle, r"C:\Users\me");
+    assert!(row.mono_subtitle);
+    assert_eq!(row.matched, vec![0, 1, 2, 3, 4]);
+}
+
+// @R-025
+#[test]
+fn r025_a_clipboard_entry_shows_its_time_at_the_right() {
+    let entry = Item {
+        kind: ItemKind::ClipboardEntry,
+        subtitle: "3 min ago".into(),
+        ..item("clip:1", "text")
+    };
+    let (l, _) = engine(vec![entry], vec![]);
+    let s = l.screen();
+    assert_eq!(s.sections[0].rows[0].right.as_deref(), Some("3 min ago"));
+}

@@ -209,8 +209,11 @@ impl Launcher {
                 exact: false,
                 total: 0.0,
                 opens: 0.0,
+                matched: Vec::new(),
             })
             .collect();
+        self.ranker
+            .mark_title_letters(self.query.trim(), &mut self.files);
         true
     }
 
@@ -220,7 +223,7 @@ impl Launcher {
         let to_row = |h: &Hit| RowView {
             kind: kind_name(h.item.kind).to_owned(),
             title: h.item.title.clone(),
-            subtitle: h.item.subtitle.clone(),
+            subtitle: shown_subtitle(&h.item),
             hint: None,
             calculator: h.item.kind == ItemKind::Calculator,
             disabled: false,
@@ -229,6 +232,16 @@ impl Launcher {
             swatch: swatch_of(&h.item),
             icon_key: icon_key_of(&h.item),
             icon: None,
+            matched: h.matched.clone(),
+            mono_subtitle: matches!(
+                h.item.kind,
+                ItemKind::File
+                    | ItemKind::Calculator
+                    | ItemKind::Quicklink
+                    | ItemKind::CommandLine
+                    | ItemKind::Color
+            ),
+            right: (h.item.kind == ItemKind::ClipboardEntry).then(|| h.item.subtitle.clone()),
         };
         let mut sections = Vec::new();
         if !self.rows.is_empty() {
@@ -275,6 +288,9 @@ impl Launcher {
                         swatch: None,
                         icon_key: None,
                         icon: None,
+                        matched: Vec::new(),
+                        mono_subtitle: false,
+                        right: Some(String::new()),
                     })
                     .collect(),
             });
@@ -346,8 +362,19 @@ impl Launcher {
         self.refresh();
     }
 
-    /// Recomputes the sync rows for the current mode and query. Empty text lists the most frecent.
+    /// Recomputes the sync rows and the letters the query matches in their titles.
     fn refresh(&mut self) {
+        self.load_rows();
+        let text = if self.claimed.is_some() {
+            ""
+        } else {
+            self.query.trim()
+        };
+        self.ranker.mark_title_letters(text, &mut self.rows);
+    }
+
+    /// Loads the sync rows for the current mode and query. Empty text lists the most frecent.
+    fn load_rows(&mut self) {
         let text = self.query.trim().to_owned();
         let q = Query { text: text.clone() };
         let was_claimed = self.claimed.take();
@@ -368,6 +395,7 @@ impl Launcher {
                     exact: false,
                     total: 0.0,
                     opens: 0.0,
+                    matched: Vec::new(),
                 })
                 .collect();
             self.files.clear();
@@ -403,6 +431,7 @@ impl Launcher {
                         exact: false,
                         total: 0.0,
                         opens: 0.0,
+                        matched: Vec::new(),
                     })
                     .take(limit)
                     .collect();
@@ -756,6 +785,17 @@ fn icon_key_of(item: &Item) -> Option<String> {
             .to_owned(),
         ),
         _ => None,
+    }
+}
+
+/// A file row shows its folder, because the title is already the file name. Other rows show their
+/// subtitle as it is.
+fn shown_subtitle(item: &Item) -> String {
+    match item.kind {
+        ItemKind::File => crate::providers::files::parent(&item.subtitle)
+            .unwrap_or(&item.subtitle)
+            .to_owned(),
+        _ => item.subtitle.clone(),
     }
 }
 

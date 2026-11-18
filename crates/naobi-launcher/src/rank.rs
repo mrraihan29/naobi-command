@@ -63,6 +63,8 @@ pub struct Hit {
     /// Fuzzy score plus the capped boost; the decayed open count when the query is empty.
     pub total: f64,
     pub opens: f64,
+    /// Title characters the current query matched (R-025).
+    pub matched: Vec<u32>,
 }
 
 impl Hit {
@@ -181,8 +183,30 @@ impl Ranker {
                 exact: c.exact,
                 total: c.total,
                 opens: c.opens,
+                matched: Vec::new(),
             })
             .collect()
+    }
+
+    /// Marks the title characters `text` matches on each shown row; an empty `text` clears them.
+    pub fn mark_title_letters(&mut self, text: &str, rows: &mut [Hit]) {
+        let pat = (!text.is_empty())
+            .then(|| Pattern::parse(text, CaseMatching::Ignore, Normalization::Smart));
+        for hit in rows {
+            hit.matched.clear();
+            if let Some(pat) = &pat {
+                let title = Utf32Str::new(&hit.item.title, &mut self.buf);
+                if pat
+                    .indices(title, &mut self.matcher, &mut hit.matched)
+                    .is_some()
+                {
+                    hit.matched.sort_unstable();
+                    hit.matched.dedup();
+                } else {
+                    hit.matched.clear();
+                }
+            }
+        }
     }
 
     /// The better of the title and any keyword.

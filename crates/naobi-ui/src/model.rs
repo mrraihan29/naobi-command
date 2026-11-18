@@ -1,9 +1,9 @@
 //! Pure mapping from `naobi_core::ui::Screen` to the Slint models. No window is needed, so these
 //! run in `cargo test -p naobi-ui`.
-use crate::generated::{ActionLine, Line};
+use crate::generated::{ActionLine, Line, TitleRun};
 use naobi_core::tokens::Rgba;
 use naobi_core::ui::{ActionPanelView, PreviewView, RowView, Screen};
-use slint::{Color, Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
+use slint::{Color, Image, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 
 /// The Launcher's height at 100% text scale, logical px (750 x 475, DESIGN_SYSTEM.md).
 pub const BASE_HEIGHT: f32 = 475.0;
@@ -80,7 +80,15 @@ pub fn lines(s: &Screen) -> Lines {
             items.push(Line {
                 is_header: false,
                 title: r.title.as_str().into(),
-                subtitle: r.subtitle.as_str().into(),
+                runs: runs_model(title_runs(&r.title, &r.matched)),
+                // A subtitle moved to the right edge is not repeated.
+                subtitle: if r.right.as_deref() == Some(r.subtitle.as_str()) {
+                    SharedString::default()
+                } else {
+                    r.subtitle.as_str().into()
+                },
+                subtitle_mono: r.mono_subtitle,
+                right: r.right.as_deref().unwrap_or(&r.kind).into(),
                 hint: r.hint.as_deref().unwrap_or_default().into(),
                 label: accessible_label(r).into(),
                 selected: row == s.selected,
@@ -111,6 +119,36 @@ pub fn lines(s: &Screen) -> Lines {
         selected_bottom,
         height: top,
     }
+}
+
+/// The title cut where matched and other letters meet; nothing when no letter matched.
+fn title_runs(title: &str, matched: &[u32]) -> Vec<(String, bool)> {
+    if matched.is_empty() {
+        return Vec::new();
+    }
+    let mut runs: Vec<(String, bool)> = Vec::new();
+    for (i, c) in title.chars().enumerate() {
+        let strong = matched.binary_search(&(i as u32)).is_ok();
+        match runs.last_mut() {
+            Some((text, s)) if *s == strong => text.push(c),
+            _ => runs.push((c.to_string(), strong)),
+        }
+    }
+    runs
+}
+
+fn runs_model(runs: Vec<(String, bool)>) -> ModelRc<TitleRun> {
+    if runs.is_empty() {
+        return ModelRc::default();
+    }
+    ModelRc::new(VecModel::from(
+        runs.into_iter()
+            .map(|(text, strong)| TitleRun {
+                text: text.into(),
+                strong,
+            })
+            .collect::<Vec<_>>(),
+    ))
 }
 
 /// The accessible name of a row: title, subtitle and kind; an empty part is left out, and an
@@ -226,6 +264,9 @@ mod tests {
             swatch: None,
             icon_key: None,
             icon: None,
+            matched: Vec::new(),
+            mono_subtitle: false,
+            right: None,
         }
     }
 
@@ -264,6 +305,36 @@ mod tests {
         // a, b, the "Files" header, c: a click on c reports row 2, the index the engine selects by.
         assert_eq!(rows, [(false, 0), (false, 1), (true, 0), (false, 2)]);
         assert_eq!(l.selected, 3);
+    }
+
+    // @R-025
+    #[test]
+    fn r025_title_runs_mark_exactly_the_matched_letters() {
+        let strong = |s: &str| (s.to_owned(), true);
+        let plain = |s: &str| (s.to_owned(), false);
+        assert_eq!(
+            title_runs("Visual Code", &[0, 7, 8]),
+            [strong("V"), plain("isual "), strong("Co"), plain("de")]
+        );
+        assert!(title_runs("Visual Code", &[]).is_empty());
+    }
+
+    // @R-025
+    #[test]
+    fn r025_the_right_edge_shows_the_kind_unless_the_row_names_something_else() {
+        let mut timed = row("Entry");
+        timed.subtitle = "3 min ago".into();
+        timed.right = Some("3 min ago".into());
+        let out = lines(&screen(
+            vec![Section {
+                header: None,
+                rows: vec![row("Notepad"), timed],
+            }],
+            0,
+        ));
+        assert_eq!(out.items[0].right.as_str(), "Application");
+        assert_eq!(out.items[1].right.as_str(), "3 min ago");
+        assert_eq!(out.items[1].subtitle.as_str(), "", "not shown twice");
     }
 
     // @D-042

@@ -32,6 +32,19 @@ impl ViewSource for FakeView {
     }
 }
 
+// @R-028
+#[test]
+fn a_view_that_overrides_nothing_gets_the_documented_defaults() {
+    let v = FakeView;
+    let id = ItemId("a".into());
+    assert_eq!(v.title(), "View");
+    assert_eq!(v.look(&id), None);
+    assert!(v.ranked());
+    let (preview, facts) = v.pane(&id).expect("the preview is the pane");
+    assert!(matches!(preview, Preview::Text(t) if t == "x"));
+    assert!(facts.is_empty());
+}
+
 #[test]
 fn fake_view_is_a_view_source() {
     let v: Box<dyn ViewSource> = Box::new(FakeView);

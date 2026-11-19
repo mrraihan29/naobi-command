@@ -194,4 +194,51 @@ fn d043_slot_write_refuses_a_broken_file() {
     assert!(with_theme_slot("[ui\n", "light", "harbor").is_err());
     assert!(with_theme_slot("", "light", r"..\x").is_err());
     assert!(with_theme_slot("", "other", "harbor").is_err());
+    // Either a bad id or a bad slot alone is refused before anything is written.
+    for (slot, id) in [("other", "harbor"), ("light", r"..\x")] {
+        match with_theme_slot("", slot, id) {
+            Err(naobi_core::error::SettingsError::Syntax { message, .. }) => {
+                assert_eq!(message, "that is not a theme name")
+            }
+            other => panic!("{slot} {id}: {other:?}"),
+        }
+    }
+}
+
+// @D-043
+#[test]
+fn d043_slot_write_finds_the_key_when_another_section_follows() {
+    use naobi_core::settings::with_theme_slot;
+    for (text, want) in [
+        (
+            "[theme]\nlight = \"paper\"\ndark = \"stone\"\n\n[ui]\ntext_scale = 1.0\n",
+            "[theme]\nlight = \"paper\"\ndark = \"night\"\n\n[ui]\ntext_scale = 1.0\n",
+        ),
+        (
+            "# top\n[theme]\nlight = \"paper\"\ndark = \"stone\"\n[ui]\ntext_scale = 1.0\n",
+            "# top\n[theme]\nlight = \"paper\"\ndark = \"night\"\n[ui]\ntext_scale = 1.0\n",
+        ),
+    ] {
+        assert_eq!(
+            with_theme_slot(text, "dark", "night").expect("written"),
+            want
+        );
+    }
+    // A missing key goes right under the [theme] header, not into the section above it.
+    let out = with_theme_slot(
+        "[ui]\ntext_scale = 1.0\n[theme]\nlight = \"paper\"\n",
+        "dark",
+        "night",
+    )
+    .expect("written");
+    assert_eq!(
+        out,
+        "[ui]\ntext_scale = 1.0\n[theme]\ndark = \"night\"\nlight = \"paper\"\n"
+    );
+}
+
+// @D-043
+#[test]
+fn d043_a_theme_file_is_capped_at_64_kib() {
+    assert_eq!(naobi_core::theme_file::MAX_THEME_BYTES, 65_536);
 }

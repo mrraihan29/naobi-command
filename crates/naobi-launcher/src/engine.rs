@@ -934,3 +934,48 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::Theme => "Theme",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // @R-026
+    #[test]
+    fn r026_each_action_id_has_its_glyph_group_and_danger_style() {
+        for (id, glyph, group, destructive) in [
+            ("apply", "action.apply", 0, false),
+            ("open", "action.open", 0, false),
+            ("run", "action.run", 0, false),
+            ("paste", "action.paste", 0, false),
+            ("folder", "action.folder", 1, false),
+            ("duplicate", "action.copy", 1, false),
+            ("edit", "action.edit", 1, false),
+            ("pin", "action.pin", 1, false),
+            ("delete", "action.delete", 2, true),
+            ("hex", "action.copy", 0, false),
+        ] {
+            let s = action_style(id);
+            assert_eq!(
+                (s.glyph, s.group, s.destructive),
+                (glyph, group, destructive),
+                "{id}"
+            );
+        }
+    }
+
+    // @R-031
+    #[test]
+    fn r031_a_theme_row_draws_the_themes_glyph() {
+        let item = Item {
+            id: ItemId("theme:paper".into()),
+            title: "Paper".into(),
+            subtitle: String::new(),
+            keywords: Vec::new(),
+            alias: None,
+            kind: ItemKind::Theme,
+            primary: ActionId("apply".into()),
+            secondary: None,
+        };
+        assert_eq!(icon_key_of(&item).as_deref(), Some("g:themes.open"));
+    }
+}

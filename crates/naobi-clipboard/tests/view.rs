@@ -197,6 +197,7 @@ fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
     open(&mut l);
     let s = l.screen();
     assert_eq!(s.placeholder, "Search clipboard history...");
+    assert_eq!(s.view.name, "Clipboard");
     assert_eq!(s.footer.primary.as_deref(), Some("Paste"));
     assert_eq!(s.footer.secondary.as_deref(), Some("Copy"));
     // Ctrl+K lists every action with its key.
@@ -254,6 +255,20 @@ fn r027_preview_facts_for_text_image_and_files() {
             pair("Copied", "just now")
         ]
     );
+}
+
+// @R-027
+#[test]
+fn r027_preview_alone_matches_the_pane_preview() {
+    use naobi_core::ids::ItemId;
+    use naobi_core::view_source::ViewSource;
+    let (_, h, _) = setup();
+    copy(&h, "a note");
+    let view = ClipboardView::new(h.clone());
+    let id = ItemId(format!("clip:{}", ids(&h)[0]));
+    let pane = view.pane(&id).map(|(p, _)| p);
+    assert!(pane.is_some());
+    assert_eq!(view.preview(&id), pane);
 }
 
 // @R-027

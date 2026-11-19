@@ -640,6 +640,39 @@ mod tests {
         assert_eq!(t.fonts.interface.as_deref(), Some("Segoe UI"));
     }
 
+    #[test]
+    fn density_reads_each_word_and_reports_only_a_wrong_value() {
+        for (list, want, reported) in [
+            ("", Density::Normal, false),
+            ("density = \"normal\"\n", Density::Normal, false),
+            ("density = \"comfortable\"\n", Density::Comfortable, false),
+            ("density = 5\n", Density::Normal, true),
+            ("density = \"tight\"\n", Density::Normal, true),
+        ] {
+            let parsed = parse("d", &format!("[list]\n{list}")).expect("parses");
+            assert_eq!(parsed.theme.density, want, "{list}");
+            assert_eq!(!parsed.reports.is_empty(), reported, "{list}");
+        }
+    }
+
+    #[test]
+    fn a_font_that_is_empty_too_long_or_has_a_control_character_is_refused() {
+        let long = "a".repeat(MAX_FONT_CHARS + 1);
+        for family in [" ", long.as_str(), "Segoe\u{7}UI"] {
+            let text = format!("[fonts]\ninterface = {}\n", toml::Value::from(family));
+            let parsed = parse("f", &text).expect("parses");
+            assert_eq!(parsed.theme.fonts.interface, None, "{family:?}");
+            assert_eq!(parsed.reports.len(), 1, "{family:?}");
+        }
+        let longest = "a".repeat(MAX_FONT_CHARS);
+        let text = format!("[fonts]\ninterface = \"{longest}\"\n");
+        let parsed = parse("f", &text).expect("parses");
+        assert_eq!(
+            parsed.theme.fonts.interface.as_deref(),
+            Some(longest.as_str())
+        );
+    }
+
     // @R-030
     #[test]
     fn r030_missing_font_falls_back_with_notice() {
@@ -732,6 +765,31 @@ mod tests {
             notes,
             ["Theme slot dark names gone, which does not exist; using stone"]
         );
+    }
+
+    #[test]
+    fn a_theme_name_is_trimmed_and_limited_to_40_characters() {
+        let name = |text: &str| parse("harbor", &format!("name = {text}\n")).expect("parses");
+        let longest = "n".repeat(MAX_NAME_CHARS);
+        let ok = name(&format!("\"{longest}\""));
+        assert_eq!(ok.theme.name, longest);
+        assert!(ok.reports.is_empty());
+        assert_eq!(name("\"  Harbor  \"").theme.name, "Harbor");
+        for bad in [" ".to_owned(), "n".repeat(MAX_NAME_CHARS + 1)] {
+            let parsed = name(&format!("\"{bad}\""));
+            assert_eq!(parsed.theme.name, "harbor", "{bad:?}");
+            assert_eq!(parsed.reports.len(), 1, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn exactly_the_most_themes_are_read_without_a_notice() {
+        let files = (0..MAX_THEMES)
+            .map(|i| (format!("t{i:03}.toml"), FileContent::Text(String::new())))
+            .collect();
+        let c = Catalog::build(files);
+        assert_eq!(c.themes.len(), MAX_THEMES);
+        assert!(c.problems.is_empty(), "{:?}", c.problems);
     }
 
     // @R-033

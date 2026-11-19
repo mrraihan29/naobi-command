@@ -286,6 +286,14 @@ mod tests {
         }
     }
 
+    // @R-028
+    #[test]
+    fn a_plain_screen_is_the_root_named_launcher() {
+        let s = Screen::from(rows(1));
+        assert_eq!(s.view.name, "Launcher");
+        assert!(!s.view.marked && !s.view.back);
+    }
+
     #[test]
     fn selection_stays_inside_the_rows() {
         let mut vm = rows(3);

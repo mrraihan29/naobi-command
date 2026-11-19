@@ -8,7 +8,13 @@ yanked = "deny"
 # pin-utils is unmaintained (informational, no vulnerability). It is a build-time-only dependency of
 # spin_on, pulled by slint-build and slint-macros; it never runs in the exe. Owner approved 2026-11-13.
 # Remove when slint drops spin_on.
-ignore = [{ id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained, build-time only via slint-build/slint-macros" }]
+# chrono is unmaintained (informational, no vulnerability). It is a runtime dependency of
+# i-slint-core, used for Slint's date helpers; no Naobi code names it. Owner approved 2026-11-19.
+# Remove when slint drops chrono or the advisory is withdrawn.
+ignore = [
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained, build-time only via slint-build/slint-macros" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, pulled by i-slint-core; no Naobi code uses it" },
+]
 
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0", "MPL-2.0"]

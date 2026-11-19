@@ -987,7 +987,7 @@ R-002 14-day usage log; R-007 keyboard-only pass of every capability (a Narrator
 | R-025 | `r025_matched_title_letters_are_marked`, `r025_kind_and_hint_end_at_the_right_edge`, `r025_file_row_shows_its_folder_in_mono` | 1: engine `Screen`; headless Slint frame |
 | R-026 | `r026_panel_has_title_groups_and_glyphs`, `r026_destructive_actions_come_last`, `r026_filter_is_last_and_keeps_focus` | 1: engine; headless Slint |
 | R-027 | `r027_preview_facts_for_text_image_and_files`, `r027_schema_version_unchanged` | 1: `ClipboardView` |
-| R-028 | `r028_pushed_view_has_name_and_back`, `r028_held_backspace_stays_in_the_view`, `r028_alt_number_runs_the_nth_visible_row`, `r028_alt_cues_only_while_alt_is_held` | 1: engine, `model`, headless key events; 2: real Alt handling |
+| R-028 | `r028_pushed_view_has_name_and_back`, `r028_held_backspace_stays_in_the_view`, `r028_alt_number_runs_the_nth_visible_row`, `r028_alt_cues_only_while_alt_is_held`, `r028_alt_alone_keeps_typing_and_alt_1_runs_the_first_result` | 1: engine, `model`, headless key events; 2: real Alt handling |
 | R-029 | `naobi-perf all`, `r029_show_and_selection_have_no_transition`, `r029_no_new_window_or_process` | 3 and 2 |
 | R-030 | `r030_theme_overrides_every_token`, `r030_density_sets_row_height_and_scroll_math`, `r030_missing_font_falls_back_with_notice`, `r030_picker_and_border_use_the_active_theme` | 1: `theme_file`, `model`, picker and border colors; 3: idle with an installed font |
 | R-031 | `r031_selection_previews_and_esc_restores`, `r031_enter_applies_to_the_current_slot`, `r031_duplicate_creates_and_selects_a_theme`, `r031_edit_file_opens_only_the_theme_path`, `r031_saved_theme_applies_within_one_second` | 1: engine, Themes view with a temp folder; index worker |
@@ -1056,7 +1056,7 @@ GPUI is rejected for no UI Automation tree, a custom text input to write, and hi
 
 | RK-16 | Slint's styled text may not draw per-letter weight with the software renderer | The first visual ticket tries it in a headless frame; the fallback is a row of plain text runs, with the plain title when it would need eliding |
 | RK-17 | `ListView` virtualization may estimate positions poorly when headers and rows differ in height | **Resolved (NCMD-44).** Slint's `ListView` positions by an average height, so the list is now a `ScrollView` whose lines carry exact positions from `model`. Line content exists only near the viewport, and the row model is updated in place. A headless test finds the selected row's accent bar on screen at both ends of the list |
-| RK-18 | Alt alone may activate the window's system menu or lose its key-up when focus changes | Tier 2 test on the real window; cues clear on hide and focus loss. Alt+digit still works if cues must be dropped |
+| RK-18 | Alt alone may activate the window's system menu or lose its key-up when focus changes | **Tested (NCMD-54).** `r028_alt_alone_keeps_typing_and_alt_1_runs_the_first_result` passes on the real window: after Alt alone, typing still reaches the field, and Alt+1 runs the first result. Cues clear on hide and focus loss |
 | RK-19 | An installed font can raise idle memory past R-006 | **Measured (NCMD-53).** `naobi-perf idle --theme`, 60 s, hidden window: embedded fonts 34.78 MB, Segoe UI with Consolas 34.82 MB, both under 40 MB and at 0.00% CPU |
 
 ### 11.3 Out of scope (non-goals)

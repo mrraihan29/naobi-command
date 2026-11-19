@@ -1,14 +1,13 @@
 //! t0 recorder of the keystroke metric (R-006, RK-15). Compiled only with feature `perf`.
-//! A window subclass on the Launcher takes QPC at the first `WM_KEYDOWN` or `WM_CHAR` of each key
-//! and writes `{"ev":"key","qpc":<ticks>}` to stdout (a pipe to the harness; no socket, no file).
+//! A window subclass on the Launcher takes QPC at the first `WM_KEYDOWN` of each key (the one whose
+//! previous-state bit is clear, so auto-repeat adds nothing; `WM_CHAR` always follows it) and writes `{"ev":"key","qpc":<ticks>}` to stdout (a pipe to the harness; no socket, no file).
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, Ordering};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{WM_CHAR, WM_KEYDOWN, WM_KEYUP};
+use windows::Win32::UI::WindowsAndMessaging::WM_KEYDOWN;
 
-/// True between the first KEYDOWN/CHAR of a key and its KEYUP, so one key yields one line.
-static DOWN: AtomicBool = AtomicBool::new(false);
+/// Bit 30 of a `WM_KEYDOWN` lParam: the key was already down (an auto-repeat).
+const WAS_DOWN: isize = 1 << 30;
 
 unsafe extern "system" fn proc(
     h: HWND,
@@ -18,14 +17,9 @@ unsafe extern "system" fn proc(
     _id: usize,
     _data: usize,
 ) -> LRESULT {
-    let t0 = match m {
-        WM_KEYDOWN | WM_CHAR if !DOWN.swap(true, Ordering::Relaxed) => Some(crate::platform::qpc()),
-        WM_KEYUP => {
-            DOWN.store(false, Ordering::Relaxed);
-            None
-        }
-        _ => None,
-    };
+    // A flag held between KEYDOWN and KEYUP stuck when the show hotkey's KEYDOWN reached the window
+    // without its KEYUP, and the next key then wrote no line.
+    let t0 = (m == WM_KEYDOWN && l.0 & WAS_DOWN == 0).then(crate::platform::qpc);
     // SAFETY: forwards the unchanged message down the subclass chain.
     let r = unsafe { DefSubclassProc(h, m, w, l) };
     // Written after the key was handled so the line does not delay the path being measured.

@@ -2,7 +2,7 @@
 //! system is held awake; `awake off` lets it sleep again. The request is read back through
 //! `SystemExecutionState`, which needs no elevated `powercfg`.
 use naobi_win32::power::execution_state;
-use naobi_win32::{autostart, dwm, inject};
+use naobi_win32::{autostart, dwm, inject, paste};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -27,14 +27,18 @@ impl Drop for RunKey {
     }
 }
 
-/// Opens the Launcher, types `line` and presses Enter.
+/// Opens the Launcher, types `line` and presses Enter. Types nothing unless the Launcher has the
+/// foreground: a Launcher still closing from the last command is waited out first.
 fn command(line: &str) -> bool {
     let visible = || dwm::find_window(naobi_ui::TITLE).is_some_and(|h| !dwm::is_cloaked(h));
-    if !visible() {
-        inject::launcher();
-        if !until(Duration::from_secs(3), visible) {
-            return false;
-        }
+    let focused =
+        || visible() && dwm::find_window(naobi_ui::TITLE) == Some(paste::foreground_window());
+    if !until(Duration::from_secs(2), || !visible()) {
+        return false;
+    }
+    inject::launcher();
+    if !until(Duration::from_secs(3), focused) {
+        return false;
     }
     std::thread::sleep(Duration::from_millis(400));
     inject::text(line);

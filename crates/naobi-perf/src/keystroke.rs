@@ -23,7 +23,7 @@ pub fn parse_line(line: &str) -> Option<(String, i64)> {
     Some((v["ev"].as_str()?.to_string(), v["qpc"].as_i64()?))
 }
 
-/// The injected key lines must be exactly `n`, strictly increasing in QPC.
+/// The injected key lines must be exactly `n` (one per key sent), strictly increasing in QPC.
 pub fn check_key_lines(lines: &[(String, i64)], n: usize) -> Result<()> {
     let keys: Vec<i64> = lines.iter().filter(|l| l.0 == "key").map(|l| l.1).collect();
     if keys.len() != n {
@@ -54,6 +54,23 @@ fn key(i: usize) -> u16 {
         (_, 0) => u16::from(b'X'),
         _ => u16::from(b'C'),
     }
+}
+
+/// Waits up to 500 ms for the next `key` line and returns its QPC. Every line read goes into `seen`; other
+/// events on the pipe (`files_shown` when Windows Search answers the query) are skipped.
+fn next_key(
+    lines: &std::sync::mpsc::Receiver<(String, i64)>,
+    seen: &mut Vec<(String, i64)>,
+) -> Option<i64> {
+    let end = Instant::now() + Duration::from_millis(500);
+    while let Ok(line) = lines.recv_timeout(end.saturating_duration_since(Instant::now())) {
+        let key = (line.0 == "key").then_some(line.1);
+        seen.push(line);
+        if key.is_some() {
+            return key;
+        }
+    }
+    None
 }
 
 pub fn run(exe: &Path, runs: usize, items: usize, out: &Path) -> Result<()> {
@@ -92,6 +109,8 @@ pub fn run(exe: &Path, runs: usize, items: usize, out: &Path) -> Result<()> {
 
     let (mut upper, mut from_inject, mut to_wndproc) = (Vec::new(), Vec::new(), Vec::new());
     let (mut discarded, mut keys, mut seen) = (0, 0, Vec::new());
+    // Lines so far come from start-up and the show hotkey itself, never from an injected key.
+    while app.lines.try_recv().is_ok() {}
     let mut attempts = 0;
     while upper.len() < runs && attempts < runs * 2 {
         let vk = key(attempts);
@@ -113,17 +132,18 @@ pub fn run(exe: &Path, runs: usize, items: usize, out: &Path) -> Result<()> {
                 break None;
             }
         };
-        let line = app.lines.recv_timeout(Duration::from_millis(500)).ok();
+        let line = next_key(&app.lines, &mut seen);
         match (t1, line) {
-            (Some(t1), Some((ev, t0))) if ev == "key" && t_inject <= t0 && t0 <= t1 => {
+            (Some(t1), Some(t0)) if t_inject <= t0 && t0 <= t1 => {
                 upper.push(qpc_to_ms(t1 - t0));
                 from_inject.push(qpc_to_ms(t1 - t_inject));
                 to_wndproc.push(qpc_to_ms(t0 - t_inject));
-                seen.push((ev, t0));
             }
             _ => discarded += 1,
         }
     }
+    // A key line that came late for a discarded run still counts toward one line per key sent.
+    while next_key(&app.lines, &mut seen).is_some() {}
     let bg_cpu = cpu.finish(pid);
     inject::launcher();
     if upper.len() < runs {
@@ -132,7 +152,7 @@ pub fn run(exe: &Path, runs: usize, items: usize, out: &Path) -> Result<()> {
             upper.len()
         );
     }
-    check_key_lines(&seen, upper.len())?;
+    check_key_lines(&seen, keys)?;
     let p95_upper = percentile(&upper, 95.0).unwrap_or(f64::NAN);
     let p95_est = p95_upper - probe_cost;
     let valid = hotkey::pinned_rate(probe::refresh_hz(rect));

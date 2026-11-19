@@ -34,6 +34,17 @@ pub fn alt_space() {
     unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
 }
 
+/// Presses and releases Alt, alone or around `vk` (Alt+1 to 9 on the Launcher, R-028).
+pub fn alt(vk: Option<u16>) {
+    let mut seq = vec![key(VK_MENU, false)];
+    if let Some(vk) = vk {
+        seq.extend([key(VIRTUAL_KEY(vk), false), key(VIRTUAL_KEY(vk), true)]);
+    }
+    seq.push(key(VK_MENU, true));
+    // SAFETY: SendInput reads `seq`, a slice of fully initialised INPUT values, with their true size.
+    unsafe { SendInput(&seq, std::mem::size_of::<INPUT>() as i32) };
+}
+
 /// Presses and releases Left Ctrl+Space.
 pub fn ctrl_space() {
     let seq = [

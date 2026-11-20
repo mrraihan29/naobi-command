@@ -511,6 +511,7 @@ fn on_settings_changed(path: &Path) {
     modules::clipboard_capture::set_config(&next);
     modules::builtin::set_quicklinks(next.quicklinks);
     modules::builtin::set_calc_rem_base_px(next.calculator.rem_base_px);
+    modules::builtin::set_currency_config(&next.currency);
     to_modules(|c, h| c.refresh(h));
 }
 
@@ -642,6 +643,7 @@ pub fn run() -> anyhow::Result<()> {
     sync_autostart(settings.general.autostart);
     modules::builtin::set_quicklinks(settings.quicklinks.clone());
     modules::builtin::set_calc_rem_base_px(settings.calculator.rem_base_px);
+    modules::builtin::set_currency_config(&settings.currency);
     modules::aot::set_config(&settings);
     {
         let mut s = state();

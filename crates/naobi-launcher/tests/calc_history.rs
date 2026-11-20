@@ -257,3 +257,115 @@ fn css_rem_base_px_config_updates_live_and_calc_skips_frecency() {
         .unwrap();
     assert_eq!(count, 0);
 }
+
+#[test]
+fn currency_conversion_in_launcher_formats_copies_raw_and_offers_action_panel_copy_with_currency() {
+    let tmp = TempDb::new("fx-conv");
+    let fx_path = std::env::temp_dir().join(format!("naobi-fx-conv-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&fx_path);
+    std::fs::write(
+        &fx_path,
+        r#"{"amount":1.0,"base":"EUR","date":"2026-11-19","rates":{"USD":1.05,"IDR":19065.9,"JPY":162.75}}"#,
+    )
+    .unwrap();
+
+    let clock = Arc::new(AtomicI64::new(T0));
+    let cfg = CalcConfig::default();
+    cfg.set_fx_path(Some(fx_path.clone()));
+    let mut l = build_launcher(Some(&tmp.0), clock, cfg.clone());
+
+    type_text(&mut l, "53 usd");
+    let s = l.screen();
+    assert_eq!(titles(&s), vec!["962,374.00 IDR"]);
+    assert_eq!(
+        s.sections[0].rows[0].subtitle,
+        "53 USD to IDR · Rates 2026-11-19"
+    );
+
+    // Primary action (Enter) copies raw numeric value.
+    assert_eq!(
+        press(&mut l, Key::Enter, false),
+        vec![Effect::CopyText("962374.00".into()), Effect::Hide]
+    );
+
+    // `ans` chains from the copied numeric currency value.
+    l.show_root();
+    type_text(&mut l, "ans + 26");
+    assert_eq!(titles(&l.screen()), vec!["962400"]);
+
+    // Action panel offers "Copy with currency".
+    l.show_root();
+    type_text(&mut l, "53 usd");
+    press(&mut l, Key::K, true);
+    let panel = l.screen().action_panel.expect("action panel open");
+    let labels: Vec<&str> = panel.actions.iter().map(|a| a.label.as_str()).collect();
+    assert_eq!(labels, vec!["Copy", "Copy with currency"]);
+    press(&mut l, Key::Down, false);
+    assert_eq!(
+        press(&mut l, Key::Enter, false),
+        vec![Effect::CopyText("962,374.00 IDR".into()), Effect::Hide]
+    );
+
+    // Live config switch to EUR + `id` number format.
+    cfg.set_currency("EUR", "id");
+    l.show_root();
+    type_text(&mut l, "53 usd");
+    assert_eq!(titles(&l.screen()), vec!["50,48 EUR"]);
+
+    l.show_root();
+    type_text(&mut l, "53 usd to idr");
+    assert_eq!(titles(&l.screen()), vec!["962.374,00 IDR"]);
+    assert_eq!(
+        press(&mut l, Key::Enter, false),
+        vec![Effect::CopyText("962374.00".into()), Effect::Hide]
+    );
+
+    l.show_root();
+    type_text(&mut l, "53k usd in jpy");
+    assert_eq!(titles(&l.screen()), vec!["8.215.000,00 JPY"]);
+
+    let _ = std::fs::remove_file(&fx_path);
+}
+
+#[test]
+fn currency_missing_cache_shows_helper_row_and_notice_without_failing_silently() {
+    let tmp = TempDb::new("fx-missing");
+    let fx_path =
+        std::env::temp_dir().join(format!("naobi-fx-missing-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&fx_path);
+
+    let clock = Arc::new(AtomicI64::new(T0));
+    let cfg = CalcConfig::default();
+    cfg.set_fx_path(Some(fx_path.clone()));
+    let mut l = build_launcher(Some(&tmp.0), clock, cfg);
+
+    type_text(&mut l, "53 usd");
+    let s = l.screen();
+    assert_eq!(titles(&s), vec!["No cached currency rates"]);
+    assert!(
+        s.sections[0].rows[0]
+            .subtitle
+            .to_ascii_lowercase()
+            .contains("refresh"),
+        "{}",
+        s.sections[0].rows[0].subtitle
+    );
+
+    // Pressing Enter shows a Notice and keeps Launcher open.
+    let fx = press(&mut l, Key::Enter, false);
+    assert!(!fx.contains(&Effect::Hide));
+    assert!(matches!(fx.as_slice(), [Effect::Notice(_)]), "{fx:?}");
+    assert!(l.screen().notice.is_some());
+
+    // Dropping fx-rates.json locally enables conversion immediately without restart or network.
+    std::fs::write(
+        &fx_path,
+        r#"{"base":"EUR","date":"2026-11-19","rates":{"USD":1.05,"IDR":19065.9}}"#,
+    )
+    .unwrap();
+    l.show_root();
+    type_text(&mut l, "53 usd");
+    assert_eq!(titles(&l.screen()), vec!["962,374.00 IDR"]);
+
+    let _ = std::fs::remove_file(&fx_path);
+}

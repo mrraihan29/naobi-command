@@ -1,10 +1,13 @@
 //! Pure calculator and unit-conversion seam (R-014, D-017). Std only, no adapters.
 
+mod currency;
 mod format;
 mod parse;
 mod time;
 mod tz;
 mod units;
+
+pub use currency::{evaluate_currency, CurrencyConversion, CurrencyOutcome, FxRates, NumberFormat};
 
 /// What kind of result `CalcOutcome::text` holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

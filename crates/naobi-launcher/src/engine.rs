@@ -633,11 +633,16 @@ impl Launcher {
             Outcome::Effects(more) => effects.extend(more),
             Outcome::Failed(n) => effects.push(Effect::Notice(n)),
         }
-        // A calculator or quicklink row exists only for the text just typed, and a file row is never
-        // ranked (it trails the list): nothing to rank by later, so it must not fill the table.
+        // A calculator, inline color, or quicklink row exists only for the text just typed, and a
+        // file row is never ranked (it trails the list): nothing to rank by later, so it must not
+        // fill the table.
         let ephemeral = matches!(
             hit.item.kind,
-            ItemKind::Calculator | ItemKind::Quicklink | ItemKind::File | ItemKind::CommandLine
+            ItemKind::Calculator
+                | ItemKind::Color
+                | ItemKind::Quicklink
+                | ItemKind::File
+                | ItemKind::CommandLine
         );
         if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
@@ -912,13 +917,12 @@ fn shown_subtitle(item: &Item) -> String {
     }
 }
 
-/// A Color item's title is its `#RRGGBB`; the row draws that color as its swatch.
+/// A Color item's title is a valid color notation; the row draws that color as its swatch.
 fn swatch_of(item: &Item) -> Option<u32> {
     if item.kind != ItemKind::Color {
         return None;
     }
-    let hex = item.title.strip_prefix('#').filter(|h| h.len() == 6)?;
-    u32::from_str_radix(hex, 16).ok()
+    naobi_core::color::parse(&item.title).map(|c| c.rgb.packed())
 }
 
 fn kind_name(k: ItemKind) -> &'static str {

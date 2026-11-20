@@ -6,6 +6,7 @@ use crate::logging;
 use naobi_core::db::Db;
 use naobi_core::quicklink::Quicklink;
 use naobi_launcher::providers::calc::CalcSource;
+use naobi_launcher::providers::color::ColorSource;
 use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
 use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
 use naobi_launcher::providers::system::{SystemCommand, SystemOps, SystemSource};
@@ -25,6 +26,7 @@ pub fn set_quicklinks(links: Vec<Quicklink>) {
 
 pub fn register(m: &mut Modules) {
     m.register_source(Box::new(CalcSource));
+    m.register_source(Box::new(ColorSource));
     m.register_source(Box::new(QuicklinkSource::new(quicklinks().clone())));
     m.register_source(Box::new(SystemSource::new(Arc::new(AppOps))));
     m.register_source(Box::new(RunSource::new(

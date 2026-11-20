@@ -1206,3 +1206,89 @@ fn r026_the_filter_narrows_the_actions_and_enter_runs_what_is_left() {
     let effects = key(&mut l, Key::Enter);
     assert!(effects.contains(&Effect::Launch(LaunchTarget::ShellItem("pin".into()))));
 }
+
+#[test]
+fn inline_color_converts_notations_draws_swatch_and_copies_via_enter_and_panel() {
+    use naobi_launcher::providers::color::ColorSource;
+
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("in-memory db: {e}"));
+    let frecency =
+        Frecency::open(db, T0_MS / 1000).unwrap_or_else(|e| panic!("frecency open: {e}"));
+    let mut l = Launcher::new(
+        vec![
+            Box::new(Apps {
+                items: vec![item("app:notepad", "Notepad")],
+            }),
+            Box::new(ColorSource),
+        ],
+        vec![],
+        frecency,
+        Box::new(FakeClock(Rc::new(Cell::new(T0_MS)))),
+    );
+
+    for (query, want_swatch, want_copy) in [
+        ("#914A3B", 0x914A3B, "rgb(145, 74, 59)"),
+        ("#f0a", 0xFF00AA, "rgb(255, 0, 170)"),
+        ("rgb(145, 74, 59)", 0x914A3B, "#914A3B"),
+        ("hsl(0, 100%, 50%)", 0xFF0000, "#FF0000"),
+        ("oklch(49.3% 0.099 33.1)", 0x914A3B, "#914A3B"),
+    ] {
+        l.show_root();
+        type_text(&mut l, query);
+        let s = l.screen();
+        let row = &s.sections[0].rows[0];
+        assert_eq!(row.kind, "Color", "query {query}");
+        assert_eq!(row.swatch, Some(want_swatch), "query {query}");
+        assert_eq!(row.title, want_copy, "query {query}");
+        assert!(row.mono_subtitle, "query {query}");
+        assert_eq!(
+            key(&mut l, Key::Enter),
+            vec![Effect::CopyText(want_copy.into()), Effect::Hide],
+            "enter for {query}"
+        );
+    }
+
+    // Subtitle shows the other converted notations; Ctrl+K offers all four copy actions.
+    l.show_root();
+    type_text(&mut l, "rgb(145, 74, 59)");
+    let row = &l.screen().sections[0].rows[0];
+    assert!(row.subtitle.contains("hsl(10, 42%, 40%)"));
+    assert!(row.subtitle.contains("oklch(49.3% 0.099 33.1)"));
+
+    ctrl(&mut l, Key::K);
+    let panel = l.screen().action_panel.expect("action panel open");
+    let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        ["Copy as HEX", "Copy as RGB", "Copy as HSL", "Copy as OKLCH"]
+    );
+    key(&mut l, Key::Down);
+    key(&mut l, Key::Down);
+    key(&mut l, Key::Down);
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![
+            Effect::CopyText("oklch(49.3% 0.099 33.1)".into()),
+            Effect::Hide
+        ]
+    );
+
+    // Invalid inputs produce no Color row.
+    for bad in [
+        "#12345",
+        "rgb(256, 0, 0)",
+        "hsl(0, 110%, 50%)",
+        "oklch(150% 0.1 0)",
+        "notepad",
+    ] {
+        l.show_root();
+        type_text(&mut l, bad);
+        let has_color = l
+            .screen()
+            .sections
+            .iter()
+            .flat_map(|sec| &sec.rows)
+            .any(|r| r.kind == "Color");
+        assert!(!has_color, "spurious Color row for {bad:?}");
+    }
+}

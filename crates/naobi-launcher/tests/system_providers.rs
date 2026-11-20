@@ -23,19 +23,26 @@ impl Clock for Zero {
 struct FakeOps {
     ran: Mutex<Vec<SystemCommand>>,
     fail: bool,
+    local_ip: Option<String>,
 }
 
 impl SystemOps for FakeOps {
-    fn run(&self, command: SystemCommand) -> Result<(), String> {
+    fn run(&self, command: SystemCommand) -> Result<Option<String>, String> {
         self.ran
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(command);
         if self.fail {
-            Err("Windows refused the command.".into())
-        } else {
-            Ok(())
+            return Err("Windows refused the command.".into());
         }
+        if command == SystemCommand::CopyLocalIp {
+            return self
+                .local_ip
+                .clone()
+                .map(Some)
+                .ok_or_else(|| "No active local IP address found.".to_owned());
+        }
+        Ok(None)
     }
 }
 
@@ -173,13 +180,25 @@ fn d024_catalog_contains_listed_commands_only() {
         vec![
             "sys.lock",
             "sys.sleep",
+            "sys.sleep_displays",
             "sys.hibernate",
             "sys.restart",
             "sys.shut_down",
             "sys.sign_out",
             "sys.empty_recycle_bin",
             "sys.toggle_dark_mode",
+            "sys.toggle_mute",
+            "sys.volume_0",
+            "sys.volume_25",
+            "sys.volume_50",
+            "sys.volume_75",
+            "sys.volume_100",
+            "sys.copy_local_ip",
             "sys.open_windows_settings",
+            "sys.open_night_light_settings",
+            "sys.open_sound_settings",
+            "sys.open_wifi_settings",
+            "sys.open_bluetooth_settings",
             "sys.open_settings_file",
             "sys.pause_hotkeys",
             "sys.quit",
@@ -193,6 +212,53 @@ fn d024_catalog_contains_listed_commands_only() {
     let titles: Vec<_> = SystemCommand::ALL.iter().map(|c| c.title()).collect();
     assert!(titles.contains(&"Open Settings File") && titles.contains(&"Pause Hotkeys"));
     assert!(titles.contains(&"Quit Naobi Command"));
+}
+
+// @R-020
+#[test]
+fn ticket8_safe_system_commands_search_and_execute() {
+    for (query, command) in [
+        ("sleep displays", SystemCommand::SleepDisplays),
+        ("toggle mute", SystemCommand::ToggleMute),
+        ("volume 0", SystemCommand::Volume0),
+        ("volume 25", SystemCommand::Volume25),
+        ("volume 50", SystemCommand::Volume50),
+        ("volume 75", SystemCommand::Volume75),
+        ("volume 100", SystemCommand::Volume100),
+        ("night light", SystemCommand::OpenNightLightSettings),
+        ("sound settings", SystemCommand::OpenSoundSettings),
+        ("wi-fi", SystemCommand::OpenWifiSettings),
+        ("bluetooth", SystemCommand::OpenBluetoothSettings),
+    ] {
+        let mut r = rig();
+        type_text(&mut r.launcher, query);
+        assert_eq!(r.launcher.handle(enter()), vec![Effect::Hide], "{query}");
+        assert_eq!(r.ops.ran(), vec![command], "{query}");
+    }
+
+    let mut r = rig_with(FakeOps {
+        local_ip: Some("192.168.1.42".into()),
+        ..FakeOps::default()
+    });
+    type_text(&mut r.launcher, "copy local ip");
+    assert_eq!(
+        r.launcher.handle(enter()),
+        vec![Effect::CopyText("192.168.1.42".into()), Effect::Hide]
+    );
+    assert_eq!(r.ops.ran(), vec![SystemCommand::CopyLocalIp]);
+
+    let mut r = rig();
+    type_text(&mut r.launcher, "copy local ip");
+    let effects = r.launcher.handle(enter());
+    assert!(
+        matches!(
+            effects.as_slice(),
+            [Effect::Notice(n)]
+                if n.subject == "Copy Local IP"
+                    && n.message == "No active local IP address found."
+        ),
+        "{effects:?}"
+    );
 }
 
 // @R-021

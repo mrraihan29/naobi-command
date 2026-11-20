@@ -2,14 +2,26 @@
 //! command line is ever built from a string. The tests never run the destructive ones.
 use std::ffi::c_void;
 use std::io;
+use std::net::Ipv4Addr;
 
 use windows::core::{w, Error, Result, HSTRING};
 use windows::Win32::Foundation::{
-    CloseHandle, GetLastError, ERROR_NOT_ALL_ASSIGNED, E_UNEXPECTED, HANDLE, LPARAM, LUID, WPARAM,
+    CloseHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, ERROR_NOT_ALL_ASSIGNED, ERROR_NO_DATA,
+    E_UNEXPECTED, HANDLE, LPARAM, LUID, NO_ERROR, WPARAM,
+};
+use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+use windows::Win32::Media::Audio::{eMultimedia, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+use windows::Win32::NetworkManagement::IpHelper::{
+    GetIfEntry, GetIpAddrTable, IF_OPER_STATUS_OPERATIONAL, IF_TYPE_SOFTWARE_LOOPBACK, MIB_IFROW,
+    MIB_IPADDRROW_XP, MIB_IPADDRTABLE, MIB_IPADDR_DELETED, MIB_IPADDR_DISCONNECTED,
+    MIB_IPADDR_PRIMARY,
 };
 use windows::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
     SE_SHUTDOWN_NAME, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
+};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::System::Power::SetSuspendState;
 use windows::Win32::System::Registry::{
@@ -24,7 +36,8 @@ use windows::Win32::UI::Shell::{
     SHEmptyRecycleBinW, SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+    SendMessageTimeoutW, SendNotifyMessageW, HWND_BROADCAST, SC_MONITORPOWER, SMTO_ABORTIFHUNG,
+    WM_SETTINGCHANGE, WM_SYSCOMMAND,
 };
 
 /// Where Windows keeps the light or dark choice.
@@ -45,6 +58,151 @@ pub fn suspend(hibernate: bool) -> io::Result<()> {
     } else {
         Err(Error::from_thread().into())
     }
+}
+
+/// Powers off displays using `WM_SYSCOMMAND` / `SC_MONITORPOWER` without blocking on hung windows.
+pub fn sleep_displays() -> io::Result<()> {
+    // SAFETY: broadcasts asynchronously with `SendNotifyMessageW` so hung top-level windows cannot
+    // block the caller; `lparam = 2` is documented display-off.
+    Ok(unsafe {
+        SendNotifyMessageW(
+            HWND_BROADCAST,
+            WM_SYSCOMMAND,
+            WPARAM(SC_MONITORPOWER as usize),
+            LPARAM(2),
+        )
+    }?)
+}
+
+struct ComGuard(bool);
+
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        if self.0 {
+            // SAFETY: pairs a successful `CoInitializeEx` on this thread.
+            unsafe { CoUninitialize() };
+        }
+    }
+}
+
+fn with_audio_endpoint<T>(f: impl FnOnce(&IAudioEndpointVolume) -> Result<T>) -> io::Result<T> {
+    // SAFETY: initializes COM on this thread if not yet initialized; `ComGuard` drops after
+    // `endpoint` is released.
+    let _com = ComGuard(unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok() });
+    // SAFETY: documented Core Audio COM sequence (`IMMDeviceEnumerator` -> `IAudioEndpointVolume`).
+    let endpoint: IAudioEndpointVolume = unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+        let device = enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia)?;
+        device.Activate(CLSCTX_ALL, None)?
+    };
+    let out = f(&endpoint)?;
+    drop(endpoint);
+    Ok(out)
+}
+
+/// Toggles the mute state of the default multimedia render endpoint.
+pub fn toggle_mute() -> io::Result<()> {
+    with_audio_endpoint(|ep| {
+        // SAFETY: `ep` is an active `IAudioEndpointVolume`; `GetMute`/`SetMute` take no event GUID.
+        unsafe {
+            let muted = ep.GetMute()?.as_bool();
+            ep.SetMute(!muted, std::ptr::null())
+        }
+    })
+}
+
+/// Sets the master scalar volume of the default multimedia render endpoint (`0..=100`).
+pub fn set_volume(percent: u8) -> io::Result<()> {
+    let level = f32::from(percent.min(100)) / 100.0;
+    with_audio_endpoint(|ep| {
+        // SAFETY: `ep` is an active `IAudioEndpointVolume`; `level` is in `0.0..=1.0`.
+        unsafe { ep.SetMasterVolumeLevelScalar(level, std::ptr::null()) }
+    })
+}
+
+/// A candidate IPv4 interface address collected from the Windows IP Helper tables.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LocalAddr {
+    pub ip: Ipv4Addr,
+    pub operational: bool,
+    pub loopback: bool,
+    pub primary: bool,
+    pub disconnected_or_deleted: bool,
+}
+
+/// Picks the best active non-loopback local IPv4 address (preferring non-link-local and primary).
+pub fn select_local_ip(addrs: &[LocalAddr]) -> Option<Ipv4Addr> {
+    let pick = |allow_link_local: bool| {
+        let mut eligible = addrs.iter().filter(|a| {
+            a.operational
+                && !a.loopback
+                && !a.disconnected_or_deleted
+                && !a.ip.is_unspecified()
+                && !a.ip.is_loopback()
+                && (allow_link_local || !a.ip.is_link_local())
+        });
+        let first = eligible.clone().next()?;
+        eligible.find(|a| a.primary).or(Some(first)).map(|a| a.ip)
+    };
+    pick(false).or_else(|| pick(true))
+}
+
+/// Reads the active local interface IPv4 address via IP Helper without opening any socket (R-010).
+pub fn local_ip() -> io::Result<Option<String>> {
+    let mut size = 0u32;
+    let mut buf = Vec::<u32>::new();
+    for _ in 0..8 {
+        buf.resize((size as usize).div_ceil(4).max(1), 0);
+        let mut given = size;
+        let ptr = (size > 0).then(|| buf.as_mut_ptr().cast::<MIB_IPADDRTABLE>());
+        // SAFETY: passes null on the size query or a `u32`-aligned buffer of `given` bytes.
+        let code = unsafe { GetIpAddrTable(ptr, &mut given, false) };
+        if code == NO_ERROR.0 && size > 0 {
+            let byte_len = buf.len() * 4;
+            let header = std::mem::offset_of!(MIB_IPADDRTABLE, table);
+            let max_rows =
+                byte_len.saturating_sub(header) / std::mem::size_of::<MIB_IPADDRROW_XP>();
+            // SAFETY: `buf` holds a valid `MIB_IPADDRTABLE` written by `GetIpAddrTable` and `count`
+            // is bounded by the allocated buffer size.
+            let rows = unsafe {
+                let table = &*buf.as_ptr().cast::<MIB_IPADDRTABLE>();
+                let count = (table.dwNumEntries as usize).min(max_rows);
+                std::slice::from_raw_parts(table.table.as_ptr(), count)
+            };
+            let addrs: Vec<LocalAddr> = rows
+                .iter()
+                .map(|row| {
+                    let mut if_row = MIB_IFROW {
+                        dwIndex: row.dwIndex,
+                        ..Default::default()
+                    };
+                    // SAFETY: `if_row.dwIndex` is set and `if_row` is a live `MIB_IFROW` on the stack.
+                    let operational = unsafe { GetIfEntry(&mut if_row) } == NO_ERROR.0
+                        && if_row.dwOperStatus == IF_OPER_STATUS_OPERATIONAL;
+                    LocalAddr {
+                        ip: Ipv4Addr::from(row.dwAddr.to_ne_bytes()),
+                        operational,
+                        loopback: if_row.dwType == IF_TYPE_SOFTWARE_LOOPBACK,
+                        primary: (u32::from(row.wType) & MIB_IPADDR_PRIMARY) != 0,
+                        disconnected_or_deleted: (u32::from(row.wType)
+                            & (MIB_IPADDR_DISCONNECTED | MIB_IPADDR_DELETED))
+                            != 0,
+                    }
+                })
+                .collect();
+            return Ok(select_local_ip(&addrs).map(|ip| ip.to_string()));
+        }
+        if code == ERROR_NO_DATA.0 {
+            return Ok(None);
+        }
+        if code == NO_ERROR.0 || code == ERROR_INSUFFICIENT_BUFFER.0 {
+            size = given.saturating_add(256);
+            continue;
+        }
+        return Err(io::Error::from_raw_os_error(code as i32));
+    }
+    Err(io::Error::other("the IP address table kept growing"))
 }
 
 pub fn restart() -> io::Result<()> {
@@ -220,5 +378,55 @@ mod tests {
         assert_eq!(toggled(Some(1)), 0, "light becomes dark");
         assert_eq!(toggled(Some(0)), 1, "dark becomes light");
         assert_eq!(toggled(None), 0, "a missing value is the default, light");
+    }
+
+    // @R-010
+    #[test]
+    fn ticket8_select_local_ip_filters_inactive_loopback_and_prefers_primary() {
+        use std::net::Ipv4Addr;
+
+        let addr =
+            |ip: [u8; 4], operational: bool, loopback: bool, primary: bool, dead: bool| LocalAddr {
+                ip: Ipv4Addr::from(ip),
+                operational,
+                loopback,
+                primary,
+                disconnected_or_deleted: dead,
+            };
+
+        assert_eq!(select_local_ip(&[]), None);
+        assert_eq!(
+            select_local_ip(&[
+                addr([127, 0, 0, 1], true, true, true, false),
+                addr([0, 0, 0, 0], true, false, true, false),
+                addr([10, 0, 0, 2], false, false, true, false),
+                addr([10, 0, 0, 3], true, false, true, true),
+            ]),
+            None
+        );
+        assert_eq!(
+            select_local_ip(&[
+                addr([169, 254, 1, 5], true, false, true, false),
+                addr([192, 168, 1, 20], true, false, false, false),
+                addr([10, 0, 0, 5], true, false, true, false),
+            ]),
+            Some(Ipv4Addr::new(10, 0, 0, 5))
+        );
+        assert_eq!(
+            select_local_ip(&[addr([169, 254, 1, 5], true, false, false, false)]),
+            Some(Ipv4Addr::new(169, 254, 1, 5))
+        );
+    }
+
+    // @R-010
+    #[test]
+    fn r010_local_ip_reads_valid_non_loopback_without_sockets() {
+        let got = local_ip().unwrap_or_else(|e| panic!("local_ip: {e}"));
+        if let Some(ip_str) = got {
+            let ip: std::net::Ipv4Addr = ip_str
+                .parse()
+                .unwrap_or_else(|e| panic!("invalid IPv4 {ip_str}: {e}"));
+            assert!(!ip.is_loopback() && !ip.is_unspecified());
+        }
     }
 }

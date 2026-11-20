@@ -335,7 +335,7 @@ mod catalog {
             .map(|s| &**s)
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
             .collect();
-        let table: [(&str, &str); 16] = [
+        let table: [(&str, &str); 28] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -349,6 +349,18 @@ mod catalog {
             ("log off", "sys.sign_out"),
             ("dark mode", "sys.toggle_dark_mode"),
             ("lock", "sys.lock"),
+            ("sleep displays", "sys.sleep_displays"),
+            ("toggle mute", "sys.toggle_mute"),
+            ("volume 0", "sys.volume_0"),
+            ("volume 25", "sys.volume_25"),
+            ("volume 50", "sys.volume_50"),
+            ("volume 75", "sys.volume_75"),
+            ("volume 100", "sys.volume_100"),
+            ("copy local ip", "sys.copy_local_ip"),
+            ("night light", "sys.open_night_light_settings"),
+            ("sound settings", "sys.open_sound_settings"),
+            ("wi-fi", "sys.open_wifi_settings"),
+            ("bluetooth", "sys.open_bluetooth_settings"),
             ("recycle bin", "sys.empty_recycle_bin"),
             ("always on top", "aot.toggle"),
             ("topmost", "aot.toggle"),

@@ -521,4 +521,3 @@ fn css_px_and_rem_convert_using_configurable_base() {
     assert_eq!(custom("16 px to rem", -16.0, None), None);
     assert_eq!(custom("16 px to rem", f64::NAN, None), None);
 }
-}

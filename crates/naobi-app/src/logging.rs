@@ -230,6 +230,42 @@ mod tests {
     }
 
     #[test]
+    fn d020_dev_tools_never_log_clipboard_payloads() {
+        use naobi_core::command::{CommandSource, Cx, Query};
+        use naobi_core::ids::ActionId;
+        use naobi_launcher::providers::dev::{DevEnv, DevSource};
+
+        struct FakeDevEnv;
+        impl DevEnv for FakeDevEnv {
+            fn clipboard_text(&self) -> Option<String> {
+                Some("zq-clip-dev-9182".to_owned())
+            }
+            fn random16(&self) -> Option<[u8; 16]> {
+                Some([0x42; 16])
+            }
+            fn now_ms(&self) -> i64 {
+                1_700_000_000_000
+            }
+        }
+
+        let text = capture(|| {
+            let src = DevSource::new(Box::new(FakeDevEnv));
+            for cmd in ["b64", "b64d", "url", "urld", "sha256", "json", "wc"] {
+                let items = src.items(&Query { text: cmd.into() });
+                for item in items.iter() {
+                    let mut cx = Cx::default();
+                    let _ = src.run(&item.id, ActionId("copy".into()), &mut cx);
+                }
+            }
+        });
+        assert!(
+            !text.contains("zq-clip-dev-9182"),
+            "log leaked clipboard payload: {text}"
+        );
+        assert!(text.is_empty(), "dev tools must emit zero logs: {text}");
+    }
+
+    #[test]
     fn d020_log_has_command_id_no_content() {
         let text = capture(|| command("clip.paste", 3));
         assert!(text.contains("clip.paste"), "{text}");

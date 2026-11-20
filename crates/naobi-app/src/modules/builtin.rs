@@ -10,11 +10,12 @@ use naobi_launcher::providers::calc::{
     CalcConfig, CalcHistoryCommands, CalcHistoryView, CalcSource,
 };
 use naobi_launcher::providers::color::ColorSource;
+use naobi_launcher::providers::dev::{DevEnv, DevSource};
 use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
 use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
 use naobi_launcher::providers::system::{SystemCommand, SystemOps, SystemSource};
 use naobi_launcher::run_history::RunHistory;
-use naobi_win32::{platform, random, run, shell_exec, system_commands};
+use naobi_win32::{clipboard_marker, platform, random, run, shell_exec, system_commands};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// The quicklinks of the live settings: the settings load and every hot reload `set` them.
@@ -45,6 +46,7 @@ pub fn register(m: &mut Modules) {
         Box::new(now_ms),
     )));
     m.register_source(Box::new(ColorSource));
+    m.register_source(Box::new(DevSource::new(Box::new(WinDevEnv))));
     if let Some(history) = calc_history {
         m.register_source(Box::new(CalcHistoryCommands));
         m.register_view(Box::new(CalcHistoryView::new(history, Box::new(now_ms))));
@@ -56,6 +58,22 @@ pub fn register(m: &mut Modules) {
         Box::new(WinLookup),
         Box::new(now_ms),
     )));
+}
+
+struct WinDevEnv;
+
+impl DevEnv for WinDevEnv {
+    fn clipboard_text(&self) -> Option<String> {
+        clipboard_marker::read_text()
+    }
+
+    fn random16(&self) -> Option<[u8; 16]> {
+        random::random16().ok()
+    }
+
+    fn now_ms(&self) -> i64 {
+        now_ms()
+    }
 }
 
 fn now_ms() -> i64 {

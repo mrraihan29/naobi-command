@@ -2,6 +2,7 @@
 pub mod apps;
 pub mod calc;
 pub mod color;
+pub mod dev;
 pub mod files;
 pub mod quicklink;
 pub mod run;

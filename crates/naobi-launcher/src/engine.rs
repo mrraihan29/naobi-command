@@ -523,6 +523,7 @@ impl Launcher {
                 vec![]
             }
             Key::Enter if self.panel.is_some() => self.run_panel(),
+            Key::Enter if c.ctrl && c.shift && !c.alt => self.run_named("paste_plain"),
             Key::Enter => self.run_selected(c.ctrl),
             Key::Escape => self.escape(),
             Key::K if c.ctrl => {
@@ -840,6 +841,10 @@ fn action_style(id: &str) -> ActionStyle {
         "open" | "focus" => ("action.open", 0, false),
         "run" => ("action.run", 0, false),
         "paste" => ("action.paste", 0, false),
+        "paste_plain" => ("action.paste_plain", 0, false),
+        "queue_add" => ("action.queue_add", 1, false),
+        "queue_next" => ("action.queue_next", 1, false),
+        "queue_clear" => ("action.queue_clear", 1, false),
         "folder" => ("action.folder", 1, false),
         "duplicate" => ("action.copy", 1, false),
         "edit" => ("action.edit", 1, false),
@@ -969,6 +974,10 @@ mod tests {
             ("focus", "action.open", 0, false),
             ("run", "action.run", 0, false),
             ("paste", "action.paste", 0, false),
+            ("paste_plain", "action.paste_plain", 0, false),
+            ("queue_add", "action.queue_add", 1, false),
+            ("queue_next", "action.queue_next", 1, false),
+            ("queue_clear", "action.queue_clear", 1, false),
             ("folder", "action.folder", 1, false),
             ("duplicate", "action.copy", 1, false),
             ("edit", "action.edit", 1, false),

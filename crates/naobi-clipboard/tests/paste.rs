@@ -1,8 +1,10 @@
 //! The paste sequence with a fake pasteboard and a fake foreground.
 use naobi_clipboard::paste::{
-    paste, Abort, ForegroundOps, Outcome, Pasteboard, Payload, Snapshot, RESTORE_AFTER_MS,
+    paste, paste_next, Abort, ForegroundOps, Outcome, PasteQueue, Pasteboard, Payload, Snapshot,
+    RESTORE_AFTER_MS,
 };
 use naobi_clipboard::Content;
+use naobi_core::ids::EntryId;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -13,6 +15,7 @@ struct World {
     /// Bumped by every write and by "another copy".
     seq: Cell<u32>,
     log: RefCell<Vec<String>>,
+    written: RefCell<Vec<String>>,
     clipboard: RefCell<Option<Content>>,
     /// Total milliseconds the sequence slept.
     slept: Cell<u64>,
@@ -41,6 +44,7 @@ impl Pasteboard for Board {
         self.w.seq.set(self.w.seq.get() + 1);
         self.w.log.borrow_mut().push("write".into());
         if let Payload::Text(t) = payload {
+            self.w.written.borrow_mut().push((**t).clone());
             *self.w.clipboard.borrow_mut() = Some(Content::Text((**t).clone()));
         }
         true
@@ -270,4 +274,50 @@ fn r015_failed_write_puts_the_previous_clipboard_back() {
     );
     assert_eq!(out, Outcome::Aborted(Abort::WriteFailed));
     assert_eq!(text(&w).as_deref(), Some("previous"));
+}
+
+// @R-015
+#[test]
+fn r015_paste_queue_pastes_in_fifo_order_restoring_clipboard_and_clears() {
+    let w = Rc::new(World::default());
+    *w.clipboard.borrow_mut() = Some(Content::Text("previous".into()));
+    let mut board = Board {
+        w: w.clone(),
+        excluded: false,
+        unreadable: false,
+        fail_write: false,
+    };
+    let mut q = PasteQueue::default();
+    q.push(EntryId(10));
+    q.push(EntryId(20));
+    q.push(EntryId(30));
+    assert_eq!(q.len(), 3);
+
+    let resolve = |id: EntryId| match id.0 {
+        10 => Some(Payload::Text("first".to_owned().into())),
+        20 => Some(Payload::Text("second".to_owned().into())),
+        30 => Some(Payload::Text("third".to_owned().into())),
+        _ => None,
+    };
+
+    let mut f = fg(&w);
+    let first = paste_next(&mut q, Some(TARGET), &mut board, &mut f, resolve);
+    assert_eq!(first, Some((EntryId(10), Outcome::Pasted)));
+    assert_eq!(q.len(), 2);
+    assert_eq!(text(&w).as_deref(), Some("previous"));
+
+    let mut f = fg(&w);
+    let second = paste_next(&mut q, Some(TARGET), &mut board, &mut f, resolve);
+    assert_eq!(second, Some((EntryId(20), Outcome::Pasted)));
+    assert_eq!(q.len(), 1);
+    assert_eq!(text(&w).as_deref(), Some("previous"));
+    assert_eq!(*w.written.borrow(), ["first", "second"]);
+
+    q.clear();
+    assert!(q.is_empty());
+    let mut f = fg(&w);
+    assert_eq!(
+        paste_next(&mut q, Some(TARGET), &mut board, &mut f, resolve),
+        None
+    );
 }

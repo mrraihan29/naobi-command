@@ -1191,4 +1191,108 @@ mod tests {
         assert_eq!(*fg.lock().unwrap(), Some(200));
         assert_eq!(h.fake.log, vec!["hide".to_string()]);
     }
+
+    // @R-015
+    #[test]
+    fn r015_clipboard_plain_text_and_paste_queue_flow_through_controller() {
+        use naobi_clipboard::testing::{FakeClock, TaggedCipher};
+        use naobi_clipboard::view::{share, ClipboardView, VIEW_ID};
+        use naobi_clipboard::{Captured, Content, Flags, History};
+        use naobi_core::ids::HotkeyId;
+
+        let clock = FakeClock::at(1_700_000_000_000);
+        let cdb = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let shared = share(History::new(cdb, Box::new(TaggedCipher), Box::new(clock)));
+        for text in ["first", "second"] {
+            shared
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .on_change(Captured {
+                    flags: Flags::default(),
+                    marker: false,
+                    owner_exe: None,
+                    content: Content::Text(text.into()),
+                })
+                .unwrap_or_else(|e| panic!("capture: {e}"));
+        }
+        let ids: Vec<i64> = shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .list(10)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        let (second_id, first_id) = (ids[0], ids[1]);
+
+        let fdb = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(fdb, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        let launcher = Launcher::new(
+            vec![],
+            vec![Box::new(ClipboardView::new(shared))],
+            frecency,
+            Box::new(Zero),
+        );
+        let mut m = crate::modules::Modules::new();
+        m.subscribe(
+            HotkeyId("clipboard".into()),
+            Box::new(|_, cx| cx.open_view(ViewId(VIEW_ID.into()))),
+        );
+        let crate::modules::Parts { router, .. } = m.into_parts();
+        let mut c = Controller::new(launcher, router);
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
+
+        assert!(c.on_hotkey(&HotkeyId("clipboard".into()), &mut h));
+        h.log.clear();
+
+        // Ctrl+Shift+Enter on selected ("second") pastes into Paste target after hiding.
+        c.on_ui_event(
+            UiEvent::Key(KeyChord {
+                key: Key::Enter,
+                ctrl: true,
+                alt: false,
+                shift: true,
+            }),
+            &mut h,
+        );
+        assert_eq!(
+            h.log,
+            vec!["hide".to_string(), format!("paste {second_id} Some(77)")]
+        );
+
+        // Re-open, queue "first" then "second", then paste next twice.
+        assert!(c.on_hotkey(&HotkeyId("clipboard".into()), &mut h));
+        h.log.clear();
+        c.on_ui_event(key(Key::Down, false), &mut h);
+        c.on_ui_event(key(Key::K, true), &mut h);
+        c.on_ui_event(UiEvent::PanelFilter("Add to paste queue".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        c.on_ui_event(key(Key::Up, false), &mut h);
+        c.on_ui_event(key(Key::K, true), &mut h);
+        c.on_ui_event(UiEvent::PanelFilter("Add to paste queue".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert!(h.visible, "adding to paste queue keeps clipboard view open");
+        assert!(h.log.is_empty());
+
+        c.on_ui_event(key(Key::K, true), &mut h);
+        c.on_ui_event(UiEvent::PanelFilter("Paste next in queue".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.log,
+            vec!["hide".to_string(), format!("paste {first_id} Some(77)")]
+        );
+
+        assert!(c.on_hotkey(&HotkeyId("clipboard".into()), &mut h));
+        h.log.clear();
+        c.on_ui_event(key(Key::K, true), &mut h);
+        c.on_ui_event(UiEvent::PanelFilter("Paste next in queue".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.log,
+            vec!["hide".to_string(), format!("paste {second_id} Some(77)")]
+        );
+    }
 }

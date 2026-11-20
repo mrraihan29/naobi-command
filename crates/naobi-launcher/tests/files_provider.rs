@@ -6,8 +6,12 @@ use naobi_core::effect::{Effect, LaunchTarget};
 use naobi_core::ids::{ActionId, ItemId};
 use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::ui::{Key, KeyChord, Screen, UiEvent};
+use naobi_launcher::file_index::{is_safe_local_path, resolve_roots, FileIndex, IndexEvent};
 use naobi_launcher::frecency::Frecency;
-use naobi_launcher::providers::files::{contains_sql, like_sql, rows, FileCommands, UNAVAILABLE};
+use naobi_launcher::providers::files::{
+    classify_query, contains_sql, like_sql, merge_paths, rows, FileCommands, FileQuery, LIMIT,
+    UNAVAILABLE,
+};
 use naobi_launcher::{Clock, Launcher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -251,4 +255,236 @@ fn r013_opening_a_file_row_is_not_counted_as_usage() {
     let stored = open().raw_rows().unwrap_or_default();
     let _ = std::fs::remove_file(&path);
     assert!(stored.is_empty(), "no usage row for a file: {stored:?}");
+}
+
+struct TempDir(std::path::PathBuf);
+impl TempDir {
+    fn new(name: &str) -> Self {
+        let p = std::env::temp_dir().join(format!("naobi-fidx-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap_or_else(|e| panic!("mkdir: {e}"));
+        Self(p)
+    }
+}
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+// @R-013
+#[test]
+fn r013_file_index_persists_across_reopen_and_filters_ignored_and_unc() {
+    let tmp = TempDir::new("persist");
+    let root = tmp.0.join("root");
+    let db_path = tmp.0.join("file-index.db");
+    for rel in [
+        "docs\\report-2026.pdf",
+        "src\\main.rs",
+        "node_modules\\pkg\\index.js",
+        ".git\\HEAD",
+        "target\\debug\\app.exe",
+    ] {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap_or(&root)).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(&p, "x").unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    assert!(!is_safe_local_path(std::path::Path::new(
+        r"\\server\share\docs"
+    )));
+    assert!(!is_safe_local_path(std::path::Path::new(r"\\?\UNC\a\b")));
+    assert!(is_safe_local_path(&root));
+
+    let configured = vec![
+        root.to_string_lossy().into_owned(),
+        r"\\server\share\docs".to_owned(),
+    ];
+    let roots = resolve_roots(&configured, None);
+    assert_eq!(roots, vec![root.clone()]);
+
+    let ignore: Vec<String> = naobi_core::settings::DEFAULT_FILE_IGNORE
+        .iter()
+        .map(|&s| s.to_owned())
+        .collect();
+    let mut idx = FileIndex::open(&db_path).unwrap_or_else(|e| panic!("open: {e}"));
+    let count = idx
+        .sync_roots(&roots, &ignore)
+        .unwrap_or_else(|e| panic!("sync: {e}"));
+    assert_eq!(count, 2);
+    drop(idx);
+
+    let reopened = FileIndex::open(&db_path).unwrap_or_else(|e| panic!("reopen: {e}"));
+    assert_eq!(
+        reopened.search("report", LIMIT).unwrap_or_default(),
+        vec![root
+            .join(r"docs\report-2026.pdf")
+            .to_string_lossy()
+            .into_owned()]
+    );
+    assert_eq!(
+        reopened.search("main", LIMIT).unwrap_or_default(),
+        vec![root.join(r"src\main.rs").to_string_lossy().into_owned()]
+    );
+    assert!(reopened
+        .search("index.js", LIMIT)
+        .unwrap_or_default()
+        .is_empty());
+    assert!(reopened
+        .search("HEAD", LIMIT)
+        .unwrap_or_default()
+        .is_empty());
+    assert!(reopened
+        .search("app.exe", LIMIT)
+        .unwrap_or_default()
+        .is_empty());
+}
+
+// @R-013
+#[test]
+fn r013_file_index_incremental_add_rename_delete_updates() {
+    let tmp = TempDir::new("incr");
+    let root = tmp.0.join("root");
+    let db_path = tmp.0.join("file-index.db");
+    std::fs::create_dir_all(root.join("folder")).unwrap_or_else(|e| panic!("{e}"));
+    let alpha = root.join("alpha.txt");
+    let inside = root.join("folder").join("inside.txt");
+    std::fs::write(&alpha, "a").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(&inside, "i").unwrap_or_else(|e| panic!("{e}"));
+
+    let roots = vec![root.clone()];
+    let ignore = vec![".git".to_owned(), "node_modules".to_owned()];
+    let mut idx = FileIndex::open(&db_path).unwrap_or_else(|e| panic!("open: {e}"));
+    idx.sync_roots(&roots, &ignore)
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    // Add normal file and ignored file.
+    let beta = root.join("beta.txt");
+    std::fs::write(&beta, "b").unwrap_or_else(|e| panic!("{e}"));
+    std::fs::create_dir_all(root.join(".git")).unwrap_or_else(|e| panic!("{e}"));
+    let secret = root.join(".git").join("secret.txt");
+    std::fs::write(&secret, "s").unwrap_or_else(|e| panic!("{e}"));
+    idx.apply_events(
+        &[IndexEvent::Added(beta.clone()), IndexEvent::Added(secret)],
+        &roots,
+        &ignore,
+    )
+    .unwrap_or_else(|e| panic!("add: {e}"));
+    assert_eq!(
+        idx.search("beta", LIMIT).unwrap_or_default(),
+        vec![beta.to_string_lossy().into_owned()]
+    );
+    assert!(idx.search("secret", LIMIT).unwrap_or_default().is_empty());
+
+    // Rename file.
+    let gamma = root.join("gamma.txt");
+    std::fs::rename(&alpha, &gamma).unwrap_or_else(|e| panic!("{e}"));
+    idx.apply_events(
+        &[IndexEvent::Renamed {
+            from: alpha,
+            to: gamma.clone(),
+        }],
+        &roots,
+        &ignore,
+    )
+    .unwrap_or_else(|e| panic!("rename file: {e}"));
+    assert!(idx.search("alpha", LIMIT).unwrap_or_default().is_empty());
+    assert_eq!(
+        idx.search("gamma", LIMIT).unwrap_or_default(),
+        vec![gamma.to_string_lossy().into_owned()]
+    );
+
+    // Rename folder.
+    let new_folder = root.join("renamed_folder");
+    std::fs::rename(root.join("folder"), &new_folder).unwrap_or_else(|e| panic!("{e}"));
+    idx.apply_events(
+        &[IndexEvent::Renamed {
+            from: root.join("folder"),
+            to: new_folder.clone(),
+        }],
+        &roots,
+        &ignore,
+    )
+    .unwrap_or_else(|e| panic!("rename folder: {e}"));
+    assert_eq!(
+        idx.search("inside", LIMIT).unwrap_or_default(),
+        vec![new_folder.join("inside.txt").to_string_lossy().into_owned()]
+    );
+
+    // Delete file and folder.
+    idx.apply_events(
+        &[IndexEvent::Removed(gamma), IndexEvent::Removed(new_folder)],
+        &roots,
+        &ignore,
+    )
+    .unwrap_or_else(|e| panic!("delete: {e}"));
+    assert!(idx.search("gamma", LIMIT).unwrap_or_default().is_empty());
+    assert!(idx.search("inside", LIMIT).unwrap_or_default().is_empty());
+}
+
+// @R-013
+#[test]
+fn r013_file_index_search_prefix_substring_and_capped() {
+    let tmp = TempDir::new("search");
+    let root = tmp.0.join("root");
+    std::fs::create_dir_all(&root).unwrap_or_else(|e| panic!("{e}"));
+    for i in 0..40 {
+        std::fs::write(root.join(format!("item{i:02}.txt")), "x").unwrap_or_else(|e| panic!("{e}"));
+    }
+    let budget = root.join("quarterly-budget.xlsx");
+    std::fs::write(&budget, "x").unwrap_or_else(|e| panic!("{e}"));
+
+    let mut idx = FileIndex::open_in_memory().unwrap_or_else(|e| panic!("{e}"));
+    idx.sync_roots(&[root], &[])
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    assert_eq!(idx.search("item", LIMIT).unwrap_or_default().len(), 30);
+    assert_eq!(
+        idx.search("quarter budget", LIMIT).unwrap_or_default(),
+        vec![budget.to_string_lossy().into_owned()]
+    );
+    assert_eq!(
+        idx.search("udget", LIMIT).unwrap_or_default(),
+        vec![budget.to_string_lossy().into_owned()]
+    );
+    assert!(idx.search("\"'*():", LIMIT).is_ok());
+}
+
+// @R-013
+#[test]
+fn r013_classify_query_and_merge_paths_routing_helpers() {
+    assert_eq!(classify_query(""), None);
+    assert_eq!(classify_query("   "), None);
+    assert_eq!(classify_query("ws:"), None);
+    assert_eq!(classify_query("WS:   "), None);
+    assert_eq!(classify_query("report"), Some(FileQuery::Local("report")));
+    assert_eq!(
+        classify_query("ws:report"),
+        Some(FileQuery::WindowsSearch("report"))
+    );
+    assert_eq!(
+        classify_query("  WS:  my budget "),
+        Some(FileQuery::WindowsSearch("my budget"))
+    );
+
+    let merged = merge_paths(
+        vec![r"C:\Docs\Report.pdf".into(), r"C:\Docs\A.txt".into()],
+        vec![r"c:\docs\report.pdf".into(), r"D:\Other\Report2.pdf".into()],
+        LIMIT,
+    );
+    assert_eq!(
+        merged,
+        vec![
+            r"C:\Docs\Report.pdf",
+            r"C:\Docs\A.txt",
+            r"D:\Other\Report2.pdf",
+        ]
+    );
+
+    let mut l = launcher(vec![], Arc::new(AtomicBool::new(false)));
+    type_text(&mut l, "ws:rep");
+    let (gen, source) = (l.generation(), l.file_source().unwrap_or(0));
+    assert!(l.file_results(gen, source, rows(&[r"C:\Docs\report.pdf".into()])));
+    let s = l.screen();
+    assert_eq!(s.sections[0].rows[0].matched, vec![0, 1, 2]);
 }

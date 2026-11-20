@@ -14,6 +14,15 @@ pub const MAX_FILE_BYTES: usize = 256 * 1024;
 pub const MAX_RETENTION_DAYS: u32 = 30;
 pub const MAX_ENTRIES: u32 = 1000;
 pub const DEFAULT_REM_BASE_PX: f64 = 16.0;
+pub const DEFAULT_FILE_IGNORE: [&str; 7] = [
+    ".git",
+    "node_modules",
+    "target",
+    ".cargo",
+    ".venv",
+    "dist",
+    "build",
+];
 const TEXT_SCALES: [f32; 3] = [1.0, 1.125, 1.25];
 
 /// One line of the parse report. `line` is 1-based when known.
@@ -125,6 +134,21 @@ impl Default for Currency {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Files {
+    pub roots: Vec<String>,
+    pub ignore: Vec<String>,
+}
+impl Default for Files {
+    fn default() -> Self {
+        Self {
+            roots: Vec::new(),
+            ignore: DEFAULT_FILE_IGNORE.iter().map(|&s| s.to_owned()).collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub general: General,
@@ -136,6 +160,7 @@ pub struct Settings {
     pub aot: Aot,
     pub calculator: Calculator,
     pub currency: Currency,
+    pub files: Files,
     pub quicklinks: Vec<Quicklink>,
 }
 
@@ -153,6 +178,7 @@ struct Raw {
     aot: Aot,
     calculator: Calculator,
     currency: Currency,
+    files: Files,
     quicklinks: Option<Vec<Quicklink>>,
 }
 
@@ -203,6 +229,7 @@ impl Default for Settings {
             aot: Aot::default(),
             calculator: Calculator::default(),
             currency: Currency::default(),
+            files: Files::default(),
             quicklinks: DEFAULT_QUICKLINKS
                 .iter()
                 .map(|&(name, alias, url)| Quicklink {
@@ -271,6 +298,7 @@ impl Settings {
             aot: raw.aot,
             calculator: raw.calculator,
             currency: raw.currency,
+            files: raw.files,
             ..Settings::default()
         };
         if !TEXT_SCALES.contains(&s.ui.text_scale) {
@@ -461,6 +489,10 @@ rem_base_px = 16.0 # root font size in pixels for px <-> rem conversions
 default_currency = "IDR" # target currency when none is typed (e.g. "53 usd")
 number_format = "us"     # "us" (1,234.56) or "id" (1.234,56)
 auto_refresh = true      # refresh cached rates at most once every 24h
+
+[files]
+roots = [] # empty uses %USERPROFILE% folders (Desktop, Documents, Downloads, Pictures, Videos, plus project folders)
+ignore = [".git", "node_modules", "target", ".cargo", ".venv", "dist", "build"]
 
 # Defining any [[quicklinks]] replaces the four below. {query} is required and must not be in the host.
 [[quicklinks]]

@@ -263,6 +263,35 @@ fn calculator_rem_base_px_defaults_to_16_and_validates() {
 }
 
 #[test]
+fn currency_settings_default_validate_and_fallback_with_report() {
+    let def = Settings::parse("").unwrap();
+    assert_eq!(def.settings.currency.default_currency, "IDR");
+    assert_eq!(def.settings.currency.number_format, "us");
+    assert!(def.settings.currency.auto_refresh);
+    assert!(def.reports.is_empty());
+    assert!(Settings::default_toml().contains("[currency]"));
+
+    let custom = Settings::parse(
+        "[currency]\ndefault_currency = \"eur\"\nnumber_format = \"id\"\nauto_refresh = false\n",
+    )
+    .unwrap();
+    assert_eq!(custom.settings.currency.default_currency, "EUR");
+    assert_eq!(custom.settings.currency.number_format, "id");
+    assert!(!custom.settings.currency.auto_refresh);
+    assert!(custom.reports.is_empty());
+
+    for bad in ["", "US", "USDD", "123", "usd1"] {
+        let p = Settings::parse(&format!("[currency]\ndefault_currency = \"{bad}\"\n")).unwrap();
+        assert_eq!(p.settings.currency.default_currency, "IDR", "{bad}");
+        assert_eq!(p.reports.len(), 1, "{bad}");
+    }
+
+    for bad in ["", "eu", "de"] {
+        let p = Settings::parse(&format!("[currency]\nnumber_format = \"{bad}\"\n")).unwrap();
+        assert_eq!(p.settings.currency.number_format, "us", "{bad}");
+        assert_eq!(p.reports.len(), 1, "{bad}");
+    }
+
     assert!(Settings::parse("[currency]\nunknown = 1\n").is_err());
 }
 
@@ -280,4 +309,40 @@ fn window_switcher_hotkey_is_optional_with_no_default_binding() {
     );
 
     assert!(Settings::parse("[hotkeys]\nwindow_switcher = \"W\"\n").is_err());
+}
+
+// @R-013
+#[test]
+fn r013_files_settings_default_and_custom_parse_strictly() {
+    let def = Settings::parse("").unwrap();
+    assert!(def.reports.is_empty());
+    assert!(def.settings.files.roots.is_empty());
+    assert_eq!(
+        def.settings.files.ignore,
+        [
+            ".git",
+            "node_modules",
+            "target",
+            ".cargo",
+            ".venv",
+            "dist",
+            "build"
+        ]
+    );
+
+    let custom_roots =
+        Settings::parse("[files]\nroots = [\"D:\\\\Work\", \"C:\\\\Notes\"]\n").unwrap();
+    assert!(custom_roots.reports.is_empty());
+    assert_eq!(custom_roots.settings.files.roots, ["D:\\Work", "C:\\Notes"]);
+    assert_eq!(
+        custom_roots.settings.files.ignore,
+        def.settings.files.ignore
+    );
+
+    let custom_ignore = Settings::parse("[files]\nignore = [\".git\", \"out\"]\n").unwrap();
+    assert!(custom_ignore.reports.is_empty());
+    assert!(custom_ignore.settings.files.roots.is_empty());
+    assert_eq!(custom_ignore.settings.files.ignore, [".git", "out"]);
+
+    assert!(Settings::parse("[files]\nunknown = 1\n").is_err());
 }

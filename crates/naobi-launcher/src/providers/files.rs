@@ -10,10 +10,58 @@ use std::sync::Arc;
 
 /// Rows asked for (the engine shows at most this many too).
 pub const LIMIT: usize = 30;
+/// Local hits below this count trigger Windows Search fallback (ADR-0009).
+pub const SPARSE_THRESHOLD: usize = 5;
 /// Longer text is cut: a name search never needs more.
 const MAX_TEXT_CHARS: usize = 100;
 /// The status row while Windows Search cannot answer.
 pub const UNAVAILABLE: &str = "File search unavailable";
+
+/// Routing decision for a typed file-search query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileQuery<'a> {
+    /// Query local File index first, falling back to Windows Search if sparse.
+    Local(&'a str),
+    /// Explicit `ws:` prefix: bypass local index and query Windows Search directly.
+    WindowsSearch(&'a str),
+}
+
+/// Strips optional `ws:` prefix (case-insensitive) and classifies the query.
+pub fn classify_query(text: &str) -> Option<FileQuery<'_>> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed
+        .get(..3)
+        .is_some_and(|p| p.eq_ignore_ascii_case("ws:"))
+    {
+        let rest = trimmed[3..].trim();
+        return (!rest.is_empty()).then_some(FileQuery::WindowsSearch(rest));
+    }
+    Some(FileQuery::Local(trimmed))
+}
+
+/// Merges local File index results with Windows Search fallback results, deduplicating
+/// case-insensitively while preserving order and capping at `limit.min(LIMIT)`.
+pub fn merge_paths(local: Vec<String>, fallback: Vec<String>, limit: usize) -> Vec<String> {
+    let cap = limit.min(LIMIT);
+    let mut seen: std::collections::HashSet<String> = local
+        .iter()
+        .take(cap)
+        .map(|p| p.to_ascii_lowercase())
+        .collect();
+    let mut out: Vec<String> = local.into_iter().take(cap).collect();
+    for p in fallback {
+        if out.len() >= cap {
+            break;
+        }
+        if seen.insert(p.to_ascii_lowercase()) {
+            out.push(p);
+        }
+    }
+    out
+}
 
 /// The words of `text` that a query can use: control characters, double quotes and `*` are dropped
 /// (a quote cannot be escaped inside a CONTAINS phrase, and `*` is the prefix wildcard), single

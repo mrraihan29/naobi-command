@@ -5,6 +5,7 @@ pub mod armed;
 pub mod calc_history;
 pub mod engine;
 pub mod esc;
+pub mod file_index;
 pub mod frecency;
 pub mod icons;
 pub mod ports;

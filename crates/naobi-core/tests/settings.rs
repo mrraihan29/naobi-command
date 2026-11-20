@@ -261,3 +261,39 @@ fn calculator_rem_base_px_defaults_to_16_and_validates() {
 
     assert!(Settings::parse("[calculator]\nunknown = 1\n").is_err());
 }
+
+// @R-013
+#[test]
+fn r013_files_settings_default_and_custom_parse_strictly() {
+    let def = Settings::parse("").unwrap();
+    assert!(def.reports.is_empty());
+    assert!(def.settings.files.roots.is_empty());
+    assert_eq!(
+        def.settings.files.ignore,
+        [
+            ".git",
+            "node_modules",
+            "target",
+            ".cargo",
+            ".venv",
+            "dist",
+            "build"
+        ]
+    );
+
+    let custom_roots =
+        Settings::parse("[files]\nroots = [\"D:\\\\Work\", \"C:\\\\Notes\"]\n").unwrap();
+    assert!(custom_roots.reports.is_empty());
+    assert_eq!(custom_roots.settings.files.roots, ["D:\\Work", "C:\\Notes"]);
+    assert_eq!(
+        custom_roots.settings.files.ignore,
+        def.settings.files.ignore
+    );
+
+    let custom_ignore = Settings::parse("[files]\nignore = [\".git\", \"out\"]\n").unwrap();
+    assert!(custom_ignore.reports.is_empty());
+    assert!(custom_ignore.settings.files.roots.is_empty());
+    assert_eq!(custom_ignore.settings.files.ignore, [".git", "out"]);
+
+    assert!(Settings::parse("[files]\nunknown = 1\n").is_err());
+}

@@ -2,23 +2,184 @@
 //! directory, waited on by the thread that owns the watch. It has no thread of its own and no timer
 //! (review minor M12), so an idle app wakes for nothing.
 use std::ffi::c_void;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use windows::core::{Error, Result, HSTRING};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, ReadDirectoryChangesW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OVERLAPPED,
-    FILE_LIST_DIRECTORY, FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE,
+    CreateFileW, GetDriveTypeW, ReadDirectoryChangesW, FILE_ACTION_ADDED, FILE_ACTION_MODIFIED,
+    FILE_ACTION_REMOVED, FILE_ACTION_RENAMED_NEW_NAME, FILE_ACTION_RENAMED_OLD_NAME,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OVERLAPPED, FILE_LIST_DIRECTORY, FILE_NOTIFY_CHANGE,
+    FILE_NOTIFY_CHANGE_DIR_NAME, FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE,
     FILE_NOTIFY_CHANGE_SIZE, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows::Win32::System::Threading::{
-    CreateEventW, WaitForMultipleObjects, WaitForSingleObject,
+    CreateEventW, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
 };
 use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 
 /// Room for the change records: 16 KiB. An overflow reports as a change with no records.
 const BUF_WORDS: usize = 4096;
+/// `WaitForMultipleObjects` limit.
+pub const MAX_WAIT_HANDLES: usize = 64;
+
+const DEFAULT_FILTER: FILE_NOTIFY_CHANGE = FILE_NOTIFY_CHANGE(
+    FILE_NOTIFY_CHANGE_FILE_NAME.0 | FILE_NOTIFY_CHANGE_LAST_WRITE.0 | FILE_NOTIFY_CHANGE_SIZE.0,
+);
+const TREE_CHANGES_FILTER: FILE_NOTIFY_CHANGE =
+    FILE_NOTIFY_CHANGE(FILE_NOTIFY_CHANGE_FILE_NAME.0 | FILE_NOTIFY_CHANGE_DIR_NAME.0);
+
+/// `GetDriveTypeW` values for local writable drives (`DRIVE_REMOVABLE`, `DRIVE_FIXED`, `DRIVE_RAMDISK`).
+const DRIVE_REMOVABLE: u32 = 2;
+const DRIVE_FIXED: u32 = 3;
+const DRIVE_RAMDISK: u32 = 6;
+
+/// True when `path` is drive-absolute (`X:\...`) on a local non-network drive (`DRIVE_FIXED`,
+/// `DRIVE_REMOVABLE`, or `DRIVE_RAMDISK`). Rejects UNC, `\\?\`, and network shares without I/O.
+pub fn is_local_dir(path: &Path) -> bool {
+    let s = path.to_string_lossy();
+    let b = s.as_bytes();
+    if b.len() < 3 || !b[0].is_ascii_alphabetic() || b[1] != b':' || !matches!(b[2], b'\\' | b'/') {
+        return false;
+    }
+    let root = HSTRING::from(format!("{}:\\", char::from(b[0]).to_ascii_uppercase()));
+    // SAFETY: a plain query on a null-terminated drive root string alive for the call; touches no network.
+    let kind = unsafe { GetDriveTypeW(&root) };
+    matches!(kind, DRIVE_REMOVABLE | DRIVE_FIXED | DRIVE_RAMDISK)
+}
+
+/// Kind of change reported in a `ReadDirectoryChangesW` notification record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileAction {
+    Added,
+    Removed,
+    Modified,
+    RenamedOld,
+    RenamedNew,
+}
+
+/// One notification record relative to the watched directory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileChange {
+    pub action: FileAction,
+    pub rel_path: PathBuf,
+}
+
+/// Decoded batch from one `ReadDirectoryChangesW` completion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangeBatch {
+    pub changes: Vec<FileChange>,
+    pub overflow: bool,
+}
+
+/// Decodes a `FILE_NOTIFY_INFORMATION` buffer of `bytes` valid bytes into `ChangeBatch`.
+/// `bytes == 0` indicates a kernel buffer overflow.
+pub fn parse_notify_buffer(words: &[u32], bytes: usize) -> ChangeBatch {
+    let limit = bytes.min(std::mem::size_of_val(words));
+    if limit == 0 {
+        return ChangeBatch {
+            changes: Vec::new(),
+            overflow: true,
+        };
+    }
+    let mut changes = Vec::new();
+    let mut offset = 0usize;
+    while offset + 12 <= limit {
+        let word = offset / 4;
+        let next_offset = words[word] as usize;
+        let action_raw = words[word + 1];
+        let name_bytes = words[word + 2] as usize;
+        let name_start = offset + 12;
+        let Some(name_end) = name_start.checked_add(name_bytes) else {
+            break;
+        };
+        if name_end > limit || !name_bytes.is_multiple_of(2) {
+            break;
+        }
+        let u16_len = name_bytes / 2;
+        let mut utf16 = Vec::with_capacity(u16_len);
+        for i in 0..u16_len {
+            let w = words[word + 3 + (i / 2)];
+            let code = if i.is_multiple_of(2) {
+                (w & 0xFFFF) as u16
+            } else {
+                (w >> 16) as u16
+            };
+            utf16.push(code);
+        }
+        let action = match action_raw {
+            x if x == FILE_ACTION_ADDED.0 => Some(FileAction::Added),
+            x if x == FILE_ACTION_REMOVED.0 => Some(FileAction::Removed),
+            x if x == FILE_ACTION_MODIFIED.0 => Some(FileAction::Modified),
+            x if x == FILE_ACTION_RENAMED_OLD_NAME.0 => Some(FileAction::RenamedOld),
+            x if x == FILE_ACTION_RENAMED_NEW_NAME.0 => Some(FileAction::RenamedNew),
+            _ => None,
+        };
+        if let Some(action) = action {
+            let name = String::from_utf16_lossy(&utf16);
+            if !name.is_empty() {
+                changes.push(FileChange {
+                    action,
+                    rel_path: PathBuf::from(name),
+                });
+            }
+        }
+        if next_offset == 0 {
+            break;
+        }
+        if next_offset < 12 || !next_offset.is_multiple_of(4) {
+            break;
+        }
+        let Some(next) = offset.checked_add(next_offset) else {
+            break;
+        };
+        offset = next;
+    }
+    ChangeBatch {
+        changes,
+        overflow: false,
+    }
+}
+
+/// Auto-reset event used to wake a `wait_any_changes` call from another thread.
+pub struct WakeEvent(HANDLE);
+
+// SAFETY: a Win32 event handle is thread-safe to signal (`SetEvent`) from another thread.
+unsafe impl Send for WakeEvent {}
+// SAFETY: `SetEvent` is thread-safe across threads sharing `&WakeEvent`.
+unsafe impl Sync for WakeEvent {}
+
+impl WakeEvent {
+    pub fn new() -> Result<Self> {
+        // SAFETY: unnamed auto-reset event; no pointers.
+        let handle = unsafe { CreateEventW(None, false, false, None)? };
+        Ok(Self(handle))
+    }
+
+    pub fn signal(&self) {
+        // SAFETY: `self.0` is an open Win32 event handle until `Drop`.
+        let _ = unsafe { SetEvent(self.0) };
+    }
+}
+
+impl Drop for WakeEvent {
+    fn drop(&mut self) {
+        // SAFETY: closes the event handle owned exclusively by this struct.
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
+/// Outcome of waiting on multiple `DirWatcher`s and an optional `WakeEvent`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MultiWake {
+    Watcher {
+        index: usize,
+        batch: Option<ChangeBatch>,
+    },
+    Signaled,
+    Timeout,
+}
 
 /// What `DirWatcher::wait` saw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +202,7 @@ pub struct DirWatcher {
     io: Box<Io>,
     /// Also report changes in the folders below `dir`.
     subtree: bool,
+    filter: FILE_NOTIFY_CHANGE,
 }
 
 // SAFETY: the handles and the boxed read belong to this value alone and are touched only by the thread
@@ -50,15 +212,20 @@ unsafe impl Send for DirWatcher {}
 impl DirWatcher {
     /// Opens `dir` and starts one read for creations, renames, writes and size changes.
     pub fn open(dir: &Path) -> Result<Self> {
-        Self::open_with(dir, false)
+        Self::open_with(dir, false, DEFAULT_FILTER)
     }
 
     /// Like `open`, and the folders below `dir` are watched too (the Start Menu has sub-folders).
     pub fn open_subtree(dir: &Path) -> Result<Self> {
-        Self::open_with(dir, true)
+        Self::open_with(dir, true, DEFAULT_FILTER)
     }
 
-    fn open_with(dir: &Path, subtree: bool) -> Result<Self> {
+    /// Opens `dir` recursively for file and directory add/remove/rename events (used by File index).
+    pub fn open_tree_changes(dir: &Path) -> Result<Self> {
+        Self::open_with(dir, true, TREE_CHANGES_FILTER)
+    }
+
+    fn open_with(dir: &Path, subtree: bool, filter: FILE_NOTIFY_CHANGE) -> Result<Self> {
         let name = HSTRING::from(dir.as_os_str());
         // SAFETY: `name` outlives the call; no security attributes and no template handle.
         let dir_handle = unsafe {
@@ -91,6 +258,7 @@ impl DirWatcher {
             event,
             io,
             subtree,
+            filter,
         };
         watcher.arm()?;
         Ok(watcher)
@@ -109,9 +277,7 @@ impl DirWatcher {
                 io.buf.as_mut_ptr().cast::<c_void>(),
                 (BUF_WORDS * std::mem::size_of::<u32>()) as u32,
                 self.subtree,
-                FILE_NOTIFY_CHANGE_FILE_NAME
-                    | FILE_NOTIFY_CHANGE_LAST_WRITE
-                    | FILE_NOTIFY_CHANGE_SIZE,
+                self.filter,
                 Some(&mut io.bytes as *mut u32),
                 Some(&mut io.ov as *mut OVERLAPPED),
                 None,
@@ -145,6 +311,19 @@ impl DirWatcher {
         unsafe { GetOverlappedResult(self.dir, &io.ov, &mut io.bytes, false)? };
         self.arm()
     }
+
+    /// The event fired: decodes the completed read's records and re-arms before returning.
+    fn collect_changes(&mut self) -> Result<ChangeBatch> {
+        let bytes = {
+            let io = &mut *self.io;
+            // SAFETY: the event fired, so the read has completed and `io.bytes` is final.
+            unsafe { GetOverlappedResult(self.dir, &io.ov, &mut io.bytes, false)? };
+            io.bytes as usize
+        };
+        let batch = parse_notify_buffer(&self.io.buf, bytes);
+        self.arm()?;
+        Ok(batch)
+    }
 }
 
 /// Waits up to `timeout` (forever when None) for a change in any of `watchers` (at most 64). Returns
@@ -166,6 +345,43 @@ pub fn wait_any(
     let i = r.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
     match watchers.get_mut(i) {
         Some(w) => Ok(Some((i, w.collect().is_ok()))),
+        None => Err(Error::from_thread()),
+    }
+}
+
+/// Waits on `watchers` and an optional `wake` event, returning the decoded change batch when a
+/// watcher fired. Caller must pass at most `MAX_WAIT_HANDLES - wake.is_some() as usize` watchers.
+pub fn wait_any_changes(
+    watchers: &mut [DirWatcher],
+    wake: Option<&WakeEvent>,
+    timeout: Option<Duration>,
+) -> Result<MultiWake> {
+    let ms = timeout.map_or(u32::MAX, |t| {
+        t.as_millis().min(u128::from(u32::MAX - 1)) as u32
+    });
+    let mut events: Vec<HANDLE> = watchers.iter().map(|w| w.event).collect();
+    let wake_idx = wake.map(|e| {
+        let idx = events.len();
+        events.push(e.0);
+        idx
+    });
+    if events.is_empty() {
+        return Ok(MultiWake::Timeout);
+    }
+    // SAFETY: all handles belong to live `watchers` and `wake` for the duration of this call.
+    let r = unsafe { WaitForMultipleObjects(&events, false, ms) };
+    if r == WAIT_TIMEOUT {
+        return Ok(MultiWake::Timeout);
+    }
+    let i = r.0.wrapping_sub(WAIT_OBJECT_0.0) as usize;
+    if wake_idx == Some(i) {
+        return Ok(MultiWake::Signaled);
+    }
+    match watchers.get_mut(i) {
+        Some(w) => Ok(MultiWake::Watcher {
+            index: i,
+            batch: w.collect_changes().ok(),
+        }),
         None => Err(Error::from_thread()),
     }
 }

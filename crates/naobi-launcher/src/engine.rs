@@ -237,8 +237,15 @@ impl Launcher {
                 matched: Vec::new(),
             })
             .collect();
+        let highlight_query = match crate::providers::files::classify_query(&self.query) {
+            Some(
+                crate::providers::files::FileQuery::Local(q)
+                | crate::providers::files::FileQuery::WindowsSearch(q),
+            ) => q,
+            None => self.query.trim(),
+        };
         self.ranker
-            .mark_title_letters(self.query.trim(), &mut self.files);
+            .mark_title_letters(highlight_query, &mut self.files);
         true
     }
 

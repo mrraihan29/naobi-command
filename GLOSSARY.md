@@ -11,7 +11,7 @@ The single Windows 11 user who installs and uses the app; also the only decider.
 _Avoid_: user, customer, admin, account
 
 **Module**:
-One of the six built-in capabilities: launcher, calculator, clipboard history, color picker, always-on-top, awake. Phase 2 modules do not ship in the MVP.
+One of the built-in capabilities of Naobi Command: launcher, calculator, clipboard history, color picker, always-on-top, awake, window switcher, snippets, scratchpad and emoji picker.
 _Avoid_: plugin, extension, feature, tool
 
 **Launcher**:
@@ -33,7 +33,7 @@ The single text field at the root of the Launcher that searches every kind of It
 _Avoid_: omnibox, command bar
 
 **Item**:
-Anything the root search can return: app, file, command, quicklink or calculator result.
+Anything the root search can return: app, file, command, quicklink, calculator result, currency result, utility output, open window or snippet.
 _Avoid_: entry (reserved for the clipboard), result (the ranked form of an Item)
 
 **Result**:
@@ -201,3 +201,29 @@ _Avoid_: active theme file, variant
 **Density**:
 The result row height of a Theme: compact (36 px), normal (40 px) or comfortable (44 px).
 _Avoid_: spacing mode, size
+
+### Phase 2 extensions
+
+**Currency rate**:
+A cached foreign exchange conversion factor used by the calculator for inline currency results.
+_Avoid_: fx quote, forex, spot price
+
+**File index**:
+The local disk-backed index of files inside the Owner's configured folders, kept current in real time without elevation.
+_Avoid_: file cache, crawler, MFT dump
+
+**Window switcher**:
+The capability that lists and searches open desktop windows for focus, minimization, closing or force-quit.
+_Avoid_: task manager, window list, alt-tab clone
+
+**Open window**:
+A visible desktop window of a running app shown as a Window switcher Item.
+_Avoid_: task, tab, active process
+
+**Snippet**:
+A named, reusable text entry with optional dynamic placeholders that pastes into the previous window from the Launcher.
+_Avoid_: macro, template, canned text
+
+**Scratchpad**:
+The persistent quick-capture Markdown view inside the Launcher for transient notes.
+_Avoid_: note, sticky note, memo

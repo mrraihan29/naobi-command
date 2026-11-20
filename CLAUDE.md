@@ -28,3 +28,18 @@ Cargo workspace, one crate per module: `naobi-core` (kernel and UI data types), 
 - `docs/design/DESIGN_SYSTEM.md`: tokens, states, keyboard map
 - `docs/ledger.yaml`: requirements (R-) and decisions (D-)
 - `docs/research/`: clean-room PowerToys and Raycast behaviour notes (read-only; copy no code or assets)
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `mrraihan29/naobi-command`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context (`GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.
+

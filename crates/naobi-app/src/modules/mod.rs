@@ -392,6 +392,7 @@ mod catalog {
         );
         assert!(item("aot.toggle") && hotkey("topmost"), "always on top");
         assert!(item("awake.on"), "awake");
+        assert!(naobi_ui::has_own_glyph("dev"), "dev micro-tools glyph");
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
             let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];

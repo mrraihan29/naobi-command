@@ -13,6 +13,7 @@ pub enum ItemKind {
     Color,
     CommandLine,
     Theme,
+    Utility,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

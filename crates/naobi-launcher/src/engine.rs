@@ -265,6 +265,7 @@ impl Launcher {
                     | ItemKind::Quicklink
                     | ItemKind::CommandLine
                     | ItemKind::Color
+                    | ItemKind::Utility
             ),
             right: matches!(h.item.kind, ItemKind::ClipboardEntry | ItemKind::Theme)
                 .then(|| h.item.subtitle.clone()),
@@ -637,7 +638,11 @@ impl Launcher {
         // ranked (it trails the list): nothing to rank by later, so it must not fill the table.
         let ephemeral = matches!(
             hit.item.kind,
-            ItemKind::Calculator | ItemKind::Quicklink | ItemKind::File | ItemKind::CommandLine
+            ItemKind::Calculator
+                | ItemKind::Quicklink
+                | ItemKind::File
+                | ItemKind::CommandLine
+                | ItemKind::Utility
         );
         if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
@@ -888,6 +893,7 @@ fn icon_key_of(item: &Item) -> Option<String> {
         ItemKind::Theme => Some("g:themes.open".to_owned()),
         ItemKind::Quicklink => Some("g:quicklink".to_owned()),
         ItemKind::Calculator => Some("g:calc".to_owned()),
+        ItemKind::Utility => Some("g:dev".to_owned()),
         // Never the line: the key must not carry command text.
         ItemKind::CommandLine => Some(
             if item.id.0.starts_with(crate::providers::run::HISTORY_PREFIX) {
@@ -932,6 +938,7 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::Color => "Color",
         ItemKind::CommandLine => "Command line",
         ItemKind::Theme => "Theme",
+        ItemKind::Utility => "Utility",
     }
 }
 

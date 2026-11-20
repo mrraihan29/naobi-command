@@ -46,7 +46,7 @@ impl Quicklink {
     /// T-006: percent-encodes `query` (RFC 3986 unreserved set stays) and re-checks the result.
     pub fn build_url(&self, query: &str) -> Result<String, String> {
         self.validate()?;
-        let url = self.url.replace(PLACEHOLDER, &encode(query));
+        let url = self.url.replace(PLACEHOLDER, &percent_encode(query));
         match (scheme_authority(&self.url), scheme_authority(&url)) {
             (Some(before), Some(after)) if before == after => Ok(url),
             _ => Err("built url changed scheme or host".into()),
@@ -54,7 +54,8 @@ impl Quicklink {
     }
 }
 
-fn encode(s: &str) -> String {
+/// Percent-encodes `s` keeping the RFC 3986 unreserved set.
+pub fn percent_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {

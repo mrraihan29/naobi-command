@@ -6,11 +6,12 @@ use crate::logging;
 use naobi_core::db::Db;
 use naobi_core::quicklink::Quicklink;
 use naobi_launcher::providers::calc::CalcSource;
+use naobi_launcher::providers::dev::{DevEnv, DevSource};
 use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
 use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
 use naobi_launcher::providers::system::{SystemCommand, SystemOps, SystemSource};
 use naobi_launcher::run_history::RunHistory;
-use naobi_win32::{platform, random, run, shell_exec, system_commands};
+use naobi_win32::{clipboard_marker, platform, random, run, shell_exec, system_commands};
 use std::sync::{Arc, OnceLock};
 
 /// The quicklinks of the live settings: the settings load and every hot reload `set` them.
@@ -25,6 +26,7 @@ pub fn set_quicklinks(links: Vec<Quicklink>) {
 
 pub fn register(m: &mut Modules) {
     m.register_source(Box::new(CalcSource));
+    m.register_source(Box::new(DevSource::new(Box::new(WinDevEnv))));
     m.register_source(Box::new(QuicklinkSource::new(quicklinks().clone())));
     m.register_source(Box::new(SystemSource::new(Arc::new(AppOps))));
     m.register_source(Box::new(RunSource::new(
@@ -32,6 +34,22 @@ pub fn register(m: &mut Modules) {
         Box::new(WinLookup),
         Box::new(now_ms),
     )));
+}
+
+struct WinDevEnv;
+
+impl DevEnv for WinDevEnv {
+    fn clipboard_text(&self) -> Option<String> {
+        clipboard_marker::read_text()
+    }
+
+    fn random16(&self) -> Option<[u8; 16]> {
+        random::random16().ok()
+    }
+
+    fn now_ms(&self) -> i64 {
+        now_ms()
+    }
 }
 
 fn now_ms() -> i64 {

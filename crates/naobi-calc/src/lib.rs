@@ -2,6 +2,8 @@
 
 mod format;
 mod parse;
+mod time;
+mod tz;
 mod units;
 
 /// What kind of result `CalcOutcome::text` holds.
@@ -10,6 +12,7 @@ pub enum Kind {
     Number,
     Conversion,
     Base,
+    DateTime,
 }
 
 /// A displayable result; `text` is the string Enter copies.
@@ -19,8 +22,23 @@ pub struct CalcOutcome {
     pub kind: Kind,
 }
 
-/// Evaluate launcher input. `None` means "show no calculator row".
+/// Evaluate launcher input using the system clock for relative time/date queries.
+/// `None` means "show no calculator row".
 pub fn evaluate(input: &str) -> Option<CalcOutcome> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64);
+    evaluate_at(input, now_ms)
+}
+
+/// Evaluate launcher input at an explicit `now_ms` (Unix milliseconds) for deterministic tests.
+pub fn evaluate_at(input: &str, now_ms: i64) -> Option<CalcOutcome> {
+    if let Some(done) = time::evaluate(input, now_ms) {
+        return done.map(|text| CalcOutcome {
+            text,
+            kind: Kind::DateTime,
+        });
+    }
     let words: Vec<&str> = input.split_whitespace().collect();
     let n = words.len();
     if n >= 3 && words[n - 2].eq_ignore_ascii_case("to") {

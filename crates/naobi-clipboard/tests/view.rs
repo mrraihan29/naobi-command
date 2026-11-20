@@ -202,7 +202,7 @@ fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
     assert_eq!(s.footer.secondary.as_deref(), Some("Copy"));
     // Ctrl+K lists every action with its key.
     l.handle(key(Key::K, true));
-    let panel = l.screen().action_panel.expect("panel");
+    let panel = l.screen().action_panel.unwrap_or_else(|| panic!("panel"));
     let keys: Vec<_> = panel
         .actions
         .iter()
@@ -320,7 +320,7 @@ fn r015_ctrl_shift_enter_pastes_text_entry_and_skips_non_text_cleanly() {
             flags: Flags::default(),
             marker: false,
             owner_exe: None,
-            content: Content::Files(vec![r"C:.txt".into()]),
+            content: Content::Files(vec![r"C:\a.txt".into()]),
         })
         .unwrap_or_else(|e| panic!("on_change: {e}"));
     open(&mut l);
@@ -330,19 +330,21 @@ fn r015_ctrl_shift_enter_pastes_text_entry_and_skips_non_text_cleanly() {
     );
 
     l.handle(key(Key::K, true));
-    let panel = l.screen().action_panel.expect("panel");
+    let panel = l.screen().action_panel.unwrap_or_else(|| panic!("panel"));
     let plain = panel
         .actions
         .iter()
         .find(|a| a.label == "Paste as Plain Text")
-        .expect("Paste as Plain Text action");
+        .unwrap_or_else(|| panic!("Paste as Plain Text action"));
     assert!(plain.reason.is_some(), "disabled on non-text entry");
 }
 
 fn run_panel_action(l: &mut Launcher, label: &str) -> Vec<Effect> {
     l.handle(key(Key::K, true));
     l.handle(UiEvent::PanelFilter(label.into()));
-    let panel = l.screen().action_panel.expect("panel open");
+    let Some(panel) = l.screen().action_panel else {
+        panic!("panel open");
+    };
     assert_eq!(
         panel.actions.first().map(|a| a.label.as_str()),
         Some(label),
@@ -368,7 +370,7 @@ fn r015_paste_queue_actions_add_paste_next_and_clear_in_order() {
     let labels: Vec<String> = l
         .screen()
         .action_panel
-        .expect("panel")
+        .unwrap_or_else(|| panic!("panel"))
         .actions
         .iter()
         .map(|a| a.label.clone())
@@ -417,10 +419,10 @@ fn r015_paste_queue_actions_add_paste_next_and_clear_in_order() {
     let next_action = l
         .screen()
         .action_panel
-        .expect("panel")
+        .unwrap_or_else(|| panic!("panel"))
         .actions
         .into_iter()
         .find(|a| a.label == "Paste next in queue")
-        .expect("Paste next in queue");
+        .unwrap_or_else(|| panic!("Paste next in queue"));
     assert!(next_action.reason.is_some(), "disabled after clear");
 }

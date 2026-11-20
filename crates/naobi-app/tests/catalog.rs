@@ -90,6 +90,7 @@ fn r005_no_dynamic_loading_no_ai_calls() {
     }
 
     // The bans that keep HTTP, AI and loader crates out are in the policy file.
+    // ADR-0008 permits Win32_Networking_WinHttp solely inside naobi-win32.
     let deny = std::fs::read_to_string(root().join("deny.toml"))
         .unwrap_or_else(|e| panic!("deny.toml: {e}"));
     for banned in [
@@ -102,11 +103,37 @@ fn r005_no_dynamic_loading_no_ai_calls() {
         "attohttpc",
         "libloading",
         "dlopen2",
-        "Win32_Networking_WinHttp",
         "Win32_Networking_WinInet",
         "Win32_Networking_WinSock",
     ] {
         assert!(deny.contains(banned), "deny.toml does not ban {banned}");
+    }
+    assert!(
+        !deny.contains("\"Win32_Networking_WinHttp\""),
+        "deny.toml must allow Win32_Networking_WinHttp per ADR-0008"
+    );
+    let win32_manifest = std::fs::read_to_string(root().join("crates/naobi-win32/Cargo.toml"))
+        .unwrap_or_else(|e| panic!("naobi-win32/Cargo.toml: {e}"));
+    assert!(
+        win32_manifest.contains("Win32_Networking_WinHttp"),
+        "crates/naobi-win32/Cargo.toml must enable Win32_Networking_WinHttp"
+    );
+    for entry in std::fs::read_dir(root().join("crates"))
+        .unwrap_or_else(|e| panic!("crates/: {e}"))
+        .flatten()
+    {
+        let p = entry.path();
+        if p.file_name().is_some_and(|n| n == "naobi-win32") {
+            continue;
+        }
+        let manifest = p.join("Cargo.toml");
+        if let Ok(text) = std::fs::read_to_string(&manifest) {
+            assert!(
+                !text.contains("Win32_Networking_WinHttp"),
+                "{} must not enable Win32_Networking_WinHttp",
+                manifest.display()
+            );
+        }
     }
 
     // And the lockfile holds none of the network or AI client crates. `libloading` is in the lockfile

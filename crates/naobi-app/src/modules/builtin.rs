@@ -1,13 +1,16 @@
 //! The built-in rows (NCMD-18): system commands, quicklinks and the calculator. The commands run
 //! through `AppOps`, which logs each one by id (T-009) and calls Windows.
 use super::clipboard_capture::DpapiCipher;
-use super::Modules;
+use super::{EventKind, Modules};
 use crate::logging;
+use naobi_core::command::Outcome;
 use naobi_core::db::Db;
+use naobi_core::event::AppEvent;
 use naobi_core::quicklink::Quicklink;
 use naobi_launcher::calc_history::CalcHistory;
 use naobi_launcher::providers::calc::{
-    CalcConfig, CalcHistoryCommands, CalcHistoryView, CalcSource,
+    refresh_rates, should_auto_refresh, CalcConfig, CalcHistoryCommands, CalcHistoryView,
+    CalcSource, FxFeed, FxRefreshCommands, FX_REFRESH_INTERVAL,
 };
 use naobi_launcher::providers::color::ColorSource;
 use naobi_launcher::providers::dev::{DevEnv, DevSource};
@@ -15,8 +18,9 @@ use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
 use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
 use naobi_launcher::providers::system::{SystemCommand, SystemOps, SystemSource};
 use naobi_launcher::run_history::RunHistory;
-use naobi_win32::{clipboard_marker, platform, random, run, shell_exec, system_commands};
+use naobi_win32::{clipboard_marker, fx, platform, random, run, shell_exec, system_commands};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 
 /// The quicklinks of the live settings: the settings load and every hot reload `set` them.
 fn quicklinks() -> &'static QuicklinkSet {
@@ -37,13 +41,137 @@ pub fn set_calc_rem_base_px(px: f64) {
     calc_config().set_rem_base_px(px);
 }
 
+const FX_TIMER: usize = 0xB1;
+
+#[derive(Default)]
+struct FxScheduler {
+    auto_refresh: bool,
+    in_flight: bool,
+    last_auto_attempt: Option<SystemTime>,
+}
+
+fn fx_scheduler() -> &'static Mutex<FxScheduler> {
+    static SCHED: OnceLock<Mutex<FxScheduler>> = OnceLock::new();
+    SCHED.get_or_init(|| {
+        Mutex::new(FxScheduler {
+            auto_refresh: true,
+            in_flight: false,
+            last_auto_attempt: None,
+        })
+    })
+}
+
+struct WinHttpFxFeed;
+
+impl FxFeed for WinHttpFxFeed {
+    fn fetch(&self, url: &str) -> Result<String, String> {
+        fx::fetch_https(url).map_err(|e| e.to_string())
+    }
+}
+
+struct InFlightGuard;
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        fx_scheduler()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .in_flight = false;
+    }
+}
+
+fn fx_auto_enabled() -> bool {
+    !cfg!(feature = "perf") || std::env::var_os("NAOBI_TEST_FX_REFRESH").is_some()
+}
+
+fn ensure_fx_path() {
+    let cfg = calc_config();
+    if cfg.fx_path().is_none() {
+        cfg.set_fx_path(naobi_core::paths::data_dir().map(|d| d.join("fx-rates.json")));
+    }
+}
+
 pub fn set_currency_config(cfg: &naobi_core::settings::Currency) {
     calc_config().set_currency(&cfg.default_currency, &cfg.number_format);
+    fx_scheduler()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .auto_refresh = cfg.auto_refresh;
+}
+
+fn spawn_fx_refresh(is_auto: bool) {
+    ensure_fx_path();
+    {
+        let mut sched = fx_scheduler().lock().unwrap_or_else(|e| e.into_inner());
+        if sched.in_flight {
+            return;
+        }
+        sched.in_flight = true;
+        if is_auto {
+            sched.last_auto_attempt = Some(SystemTime::now());
+        }
+    }
+    let cfg = calc_config().clone();
+    if std::thread::Builder::new()
+        .name("fx-refresh".into())
+        .spawn(move || {
+            let _guard = InFlightGuard;
+            match refresh_rates(&WinHttpFxFeed, &cfg) {
+                Ok(_) => {
+                    tracing::info!("currency rates refreshed");
+                    crate::to_modules(|c, h| c.refresh(h));
+                }
+                Err(notice) => {
+                    tracing::warn!("currency rates refresh failed");
+                    crate::to_modules(move |c, h| c.on_notice(notice, h));
+                }
+            }
+        })
+        .is_err()
+    {
+        fx_scheduler()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .in_flight = false;
+    }
+}
+
+/// Checks 24h cache freshness and triggers a background refresh if due and enabled.
+pub fn maybe_auto_refresh_fx() {
+    if !fx_auto_enabled() {
+        return;
+    }
+    ensure_fx_path();
+    let (auto_refresh, in_flight, last_attempt) = {
+        let s = fx_scheduler().lock().unwrap_or_else(|e| e.into_inner());
+        (s.auto_refresh, s.in_flight, s.last_auto_attempt)
+    };
+    if in_flight {
+        return;
+    }
+    let path = calc_config().fx_path();
+    if should_auto_refresh(
+        path.as_deref(),
+        auto_refresh,
+        last_attempt,
+        SystemTime::now(),
+    ) {
+        spawn_fx_refresh(true);
+    }
+}
+
+/// Starts the daily FX auto-refresh timer and runs the initial freshness check.
+pub fn start_fx_scheduler() {
+    ensure_fx_path();
+    if fx_auto_enabled() {
+        platform::set_timer(FX_TIMER, Some(FX_REFRESH_INTERVAL.as_millis() as u64));
+        maybe_auto_refresh_fx();
+    }
 }
 
 pub fn register(m: &mut Modules) {
+    ensure_fx_path();
     let cfg = calc_config().clone();
-    cfg.set_fx_path(naobi_core::paths::data_dir().map(|d| d.join("fx-rates.json")));
     let calc_history = open_data_db("calculation history")
         .map(|db| Arc::new(Mutex::new(CalcHistory::open(db, Box::new(DpapiCipher)))));
     m.register_source(Box::new(CalcSource::new(
@@ -51,6 +179,21 @@ pub fn register(m: &mut Modules) {
         cfg,
         Box::new(now_ms),
     )));
+    m.register_source(Box::new(FxRefreshCommands::new(Arc::new(|| {
+        spawn_fx_refresh(false);
+        Outcome::Done
+    }))));
+    m.subscribe_event(
+        EventKind::Timer,
+        Box::new(|ev, _| {
+            if let AppEvent::Timer(id) = ev {
+                if id.0 == FX_TIMER {
+                    maybe_auto_refresh_fx();
+                }
+            }
+        }),
+    );
+    m.subscribe_event(EventKind::Resume, Box::new(|_, _| maybe_auto_refresh_fx()));
     m.register_source(Box::new(ColorSource));
     m.register_source(Box::new(DevSource::new(Box::new(WinDevEnv))));
     if let Some(history) = calc_history {

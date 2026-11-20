@@ -11,6 +11,7 @@ pub mod dwm;
 pub mod edit_window;
 pub mod fonts;
 pub mod foreground;
+pub mod fx;
 pub mod hotkeys;
 pub mod icons;
 #[cfg(feature = "perf")]

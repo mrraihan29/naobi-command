@@ -16,10 +16,11 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostMessageW, RegisterClassW,
-    RegisterWindowMessageW, MSG, PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND, SW_SHOWNORMAL,
-    WINDOW_STYLE, WM_APP, WM_CLIPBOARDUPDATE, WM_CONTEXTMENU, WM_DISPLAYCHANGE, WM_HOTKEY,
-    WM_POWERBROADCAST, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, PostMessageW,
+    RegisterClassW, RegisterWindowMessageW, SetTimer, MSG, PBT_APMRESUMEAUTOMATIC,
+    PBT_APMRESUMESUSPEND, SW_SHOWNORMAL, WINDOW_STYLE, WM_APP, WM_CLIPBOARDUPDATE, WM_CONTEXTMENU,
+    WM_DISPLAYCHANGE, WM_HOTKEY, WM_POWERBROADCAST, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER,
+    WNDCLASSW, WS_EX_TOOLWINDOW,
 };
 
 use crate::hotkeys::{self, Registry, Win32};
@@ -130,6 +131,21 @@ pub fn post_to_p1(job: Job) -> bool {
 /// Pauses or resumes every global hotkey (R-022). Any thread may call it.
 pub fn set_hotkeys_paused(paused: bool) -> bool {
     post_to_p1(Box::new(move || apply_pause(paused)))
+}
+
+/// Arms (`Some(ms)`) or stops (`None`) a timer on the platform window.
+pub fn set_timer(id: usize, ms: Option<u64>) -> bool {
+    const MAX_TIMER_MS: u64 = 0x7FFF_FFFF;
+    post_to_p1(Box::new(move || {
+        let hwnd = hwnd_of(p1_hwnd());
+        // SAFETY: timers belong to the platform window and are updated on its own thread.
+        unsafe {
+            let _ = KillTimer(Some(hwnd), id);
+            if let Some(ms) = ms {
+                let _ = SetTimer(Some(hwnd), id, ms.clamp(1, MAX_TIMER_MS) as u32, None);
+            }
+        }
+    }))
 }
 
 /// Removes the tray icon and ends the app, as the tray's Quit does. Any thread may call it.

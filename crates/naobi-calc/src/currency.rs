@@ -103,6 +103,142 @@ impl FxRates {
         }
         Some(Self { base, date, rates })
     }
+
+    /// Parses ECB `eurofxref-daily.xml` (`<Cube time='YYYY-MM-DD'><Cube currency='USD' rate='...'/>...`).
+    pub fn from_ecb_xml(src: &str) -> Option<Self> {
+        let mut date: Option<String> = None;
+        let mut rates = BTreeMap::new();
+        let mut rest = src;
+
+        while let Some(lt) = rest.find('<') {
+            rest = &rest[lt + 1..];
+            if let Some(comment) = rest.strip_prefix("!--") {
+                let end = comment.find("-->")?;
+                rest = &comment[end + 3..];
+                continue;
+            }
+            if rest.starts_with('?') {
+                let end = rest.find("?>")?;
+                rest = &rest[end + 2..];
+                continue;
+            }
+            let gt = find_tag_end(rest)?;
+            let tag_body = rest[..gt].trim();
+            rest = &rest[gt + 1..];
+            if tag_body.is_empty() || tag_body.starts_with('/') {
+                continue;
+            }
+            let tag_body = tag_body.strip_suffix('/').unwrap_or(tag_body).trim_end();
+            let (raw_name, attrs_str) = match tag_body.find(char::is_whitespace) {
+                Some(i) => (&tag_body[..i], &tag_body[i..]),
+                None => (tag_body, ""),
+            };
+            let local_name = raw_name
+                .rsplit_once(':')
+                .map_or(raw_name, |(_, local)| local);
+            if local_name != "Cube" {
+                continue;
+            }
+            let (mut time_attr, mut cur_attr, mut rate_attr) = (None, None, None);
+            parse_xml_attrs(attrs_str, |k, v| match k {
+                "time" => time_attr = Some(v),
+                "currency" => cur_attr = Some(v),
+                "rate" => rate_attr = Some(v),
+                _ => {}
+            })?;
+            if let Some(t) = time_attr {
+                let t = t.trim();
+                if t.is_empty() || t.bytes().any(|b| b.is_ascii_control()) {
+                    return None;
+                }
+                if date.is_none() {
+                    date = Some(t.to_owned());
+                }
+            }
+            if cur_attr.is_some() || rate_attr.is_some() {
+                let code = cur_attr?.trim().to_ascii_uppercase();
+                let rate: f64 = rate_attr?.trim().parse().ok()?;
+                if !is_currency_code(&code) || !rate.is_finite() || rate <= 0.0 {
+                    return None;
+                }
+                rates.insert(code, rate);
+            }
+        }
+
+        let date = date?;
+        if rates.is_empty() {
+            return None;
+        }
+        Some(Self {
+            base: "EUR".to_owned(),
+            date,
+            rates,
+        })
+    }
+
+    /// Serializes this snapshot to the `fx-rates.json` cache schema.
+    pub fn to_json(&self) -> String {
+        use std::fmt::Write;
+        let mut out = String::with_capacity(64 + self.rates.len() * 16);
+        out.push_str("{\"base\":\"");
+        push_json_escaped(&mut out, &self.base);
+        out.push_str("\",\"date\":\"");
+        push_json_escaped(&mut out, &self.date);
+        out.push_str("\",\"rates\":{");
+        for (i, (code, rate)) in self.rates.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, "\"{code}\":{rate}");
+        }
+        out.push_str("}}");
+        out
+    }
+}
+
+fn push_json_escaped(out: &mut String, s: &str) {
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c => out.push(c),
+        }
+    }
+}
+
+fn find_tag_end(s: &str) -> Option<usize> {
+    let mut quote: Option<u8> = None;
+    for (i, b) in s.bytes().enumerate() {
+        match (quote, b) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, b'\'' | b'"') => quote = Some(b),
+            (None, b'>') => return Some(i),
+            (None, b'<') => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn parse_xml_attrs<'a>(mut s: &'a str, mut on_attr: impl FnMut(&'a str, &'a str)) -> Option<()> {
+    loop {
+        s = s.trim_start();
+        if s.is_empty() {
+            return Some(());
+        }
+        let eq = s.find('=')?;
+        let key = s[..eq].trim();
+        if key.is_empty() {
+            return None;
+        }
+        let after_eq = s[eq + 1..].trim_start();
+        let quote = after_eq.chars().next().filter(|&c| c == '\'' || c == '"')?;
+        let rest = &after_eq[quote.len_utf8()..];
+        let end = rest.find(quote)?;
+        on_attr(key, &rest[..end]);
+        s = &rest[end + quote.len_utf8()..];
+    }
 }
 
 /// Result of evaluating a currency conversion query.

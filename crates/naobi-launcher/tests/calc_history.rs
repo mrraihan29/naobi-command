@@ -10,8 +10,9 @@ use naobi_core::ui::{Key, KeyChord, PreviewView, Screen, UiEvent};
 use naobi_launcher::calc_history::{CalcHistory, KEEP};
 use naobi_launcher::frecency::Frecency;
 use naobi_launcher::providers::calc::{
-    CalcConfig, CalcHistoryCommands, CalcHistoryView, CalcSource, HISTORY_CMD_ID, ROW_PREFIX,
-    VIEW_ID,
+    refresh_rates, should_auto_refresh, CalcConfig, CalcHistoryCommands, CalcHistoryView,
+    CalcSource, FxFeed, FxRefreshCommands, ECB_URL, FRANKFURTER_URL, HISTORY_CMD_ID,
+    REFRESH_CMD_ID, ROW_PREFIX, VIEW_ID,
 };
 use naobi_launcher::{Clock, Launcher};
 use std::path::PathBuf;
@@ -366,6 +367,177 @@ fn currency_missing_cache_shows_helper_row_and_notice_without_failing_silently()
     l.show_root();
     type_text(&mut l, "53 usd");
     assert_eq!(titles(&l.screen()), vec!["962,374.00 IDR"]);
+
+    let _ = std::fs::remove_file(&fx_path);
+}
+
+struct FakeFeed {
+    frankfurter: Result<String, String>,
+    ecb: Result<String, String>,
+    calls: Mutex<Vec<String>>,
+}
+
+impl FakeFeed {
+    fn new(frankfurter: Result<&str, &str>, ecb: Result<&str, &str>) -> Self {
+        Self {
+            frankfurter: frankfurter.map(str::to_owned).map_err(str::to_owned),
+            ecb: ecb.map(str::to_owned).map_err(str::to_owned),
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl FxFeed for FakeFeed {
+    fn fetch(&self, url: &str) -> Result<String, String> {
+        self.calls.lock().unwrap().push(url.to_owned());
+        if url == FRANKFURTER_URL {
+            self.frankfurter.clone()
+        } else if url == ECB_URL {
+            self.ecb.clone()
+        } else {
+            Err(format!("unexpected url: {url}"))
+        }
+    }
+}
+
+#[test]
+fn fx_refresh_command_updates_calc_config_and_cache_from_frankfurter() {
+    let tmp = TempDb::new("fx-refresh-ok");
+    let fx_path =
+        std::env::temp_dir().join(format!("naobi-fx-refresh-ok-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&fx_path);
+
+    let cfg = CalcConfig::default();
+    cfg.set_fx_path(Some(fx_path.clone()));
+
+    let feed = Arc::new(FakeFeed::new(
+        Ok(r#"{"amount":1.0,"base":"EUR","date":"2026-11-20","rates":{"USD":1.05,"IDR":19065.9}}"#),
+        Err("should not hit ecb"),
+    ));
+
+    let db = Db::open(&tmp.0, || [7; 16]).unwrap();
+    let frecency = Frecency::open(Db::open(&tmp.0, || [7; 16]).unwrap(), T0 / 1000).unwrap();
+    let shared = Arc::new(Mutex::new(CalcHistory::open(db, Box::new(TaggedCipher))));
+    let clock = Arc::new(AtomicI64::new(T0));
+    let c1 = clock.clone();
+    let cfg_cmd = cfg.clone();
+    let feed_cmd = feed.clone();
+    let mut l = Launcher::new(
+        vec![
+            Box::new(CalcSource::new(
+                Some(shared),
+                cfg.clone(),
+                Box::new(move || c1.load(Ordering::SeqCst)),
+            )),
+            Box::new(FxRefreshCommands::new(Arc::new(
+                move || match refresh_rates(&*feed_cmd, &cfg_cmd) {
+                    Ok(_) => naobi_core::command::Outcome::Done,
+                    Err(n) => naobi_core::command::Outcome::Failed(n),
+                },
+            ))),
+        ],
+        vec![],
+        frecency,
+        Box::new(FakeClock(clock)),
+    );
+
+    type_text(&mut l, "refresh currency rates");
+    let s = l.screen();
+    assert_eq!(titles(&s), vec!["Refresh currency rates"]);
+    assert_eq!(
+        s.sections[0].rows[0].icon_key.as_deref(),
+        Some("g:calc.refresh_rates")
+    );
+    assert_eq!(REFRESH_CMD_ID, "calc.refresh_rates");
+
+    assert_eq!(press(&mut l, Key::Enter, false), vec![Effect::Hide]);
+    assert_eq!(feed.calls(), vec![FRANKFURTER_URL.to_owned()]);
+    assert!(fx_path.exists(), "fx-rates.json written");
+
+    // CalcConfig was updated immediately so currency queries convert right away.
+    l.show_root();
+    type_text(&mut l, "53 usd");
+    assert_eq!(titles(&l.screen()), vec!["962,374.00 IDR"]);
+
+    let _ = std::fs::remove_file(&fx_path);
+}
+
+#[test]
+fn fx_refresh_falls_back_to_ecb_xml_and_emits_notice_on_dual_failure() {
+    let fx_path =
+        std::env::temp_dir().join(format!("naobi-fx-fallback-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&fx_path);
+
+    let cfg = CalcConfig::default();
+    cfg.set_fx_path(Some(fx_path.clone()));
+
+    let ecb_xml = r#"<Cube><Cube time='2026-11-20'><Cube currency='USD' rate='1.05'/><Cube currency='IDR' rate='19065.9'/></Cube></Cube>"#;
+    let fallback_feed = FakeFeed::new(Err("timeout"), Ok(ecb_xml));
+    let rates = refresh_rates(&fallback_feed, &cfg).expect("ECB fallback succeeds");
+    assert_eq!(rates.date, "2026-11-20");
+    assert_eq!(
+        fallback_feed.calls(),
+        vec![FRANKFURTER_URL.to_owned(), ECB_URL.to_owned()]
+    );
+    let saved = std::fs::read_to_string(&fx_path).expect("saved json");
+
+    // Dual failure emits a Notice and leaves the existing cache file and CalcConfig intact.
+    let failing_feed = FakeFeed::new(Err("dns error"), Ok("<broken xml"));
+    let notice = refresh_rates(&failing_feed, &cfg).expect_err("dual failure emits Notice");
+    assert_eq!(notice.kind, naobi_core::notice::NoticeKind::Warning);
+    assert_eq!(std::fs::read_to_string(&fx_path).unwrap(), saved);
+
+    let _ = std::fs::remove_file(&fx_path);
+}
+
+#[test]
+fn fx_cache_freshness_respects_24h_ttl_and_auto_refresh_flag() {
+    use std::time::{Duration, SystemTime};
+
+    let fx_path = std::env::temp_dir().join(format!("naobi-fx-fresh-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&fx_path);
+
+    let now = SystemTime::now();
+    // Missing cache -> needs refresh when auto_refresh = true, silent when false.
+    assert!(should_auto_refresh(Some(&fx_path), true, None, now));
+    assert!(!should_auto_refresh(Some(&fx_path), false, None, now));
+
+    // Recent attempt within 24h -> never retries automatically.
+    assert!(!should_auto_refresh(
+        Some(&fx_path),
+        true,
+        Some(now - Duration::from_secs(3600)),
+        now
+    ));
+    // Attempt >= 24h ago -> allowed again.
+    assert!(should_auto_refresh(
+        Some(&fx_path),
+        true,
+        Some(now - Duration::from_secs(24 * 60 * 60)),
+        now
+    ));
+
+    // Write valid fresh fx-rates.json -> fresh right now, stale after 24h.
+    std::fs::write(
+        &fx_path,
+        r#"{"base":"EUR","date":"2026-11-20","rates":{"USD":1.05,"IDR":19065.9}}"#,
+    )
+    .unwrap();
+    assert!(!should_auto_refresh(Some(&fx_path), true, None, now));
+    assert!(should_auto_refresh(
+        Some(&fx_path),
+        true,
+        None,
+        now + Duration::from_secs(24 * 60 * 60 + 1)
+    ));
+
+    // Corrupted cache file triggers refresh when auto_refresh = true.
+    std::fs::write(&fx_path, "{broken").unwrap();
+    assert!(should_auto_refresh(Some(&fx_path), true, None, now));
 
     let _ = std::fs::remove_file(&fx_path);
 }

@@ -95,7 +95,8 @@ deny = [
   { crate = "dlopen2" },
 ]
 
-# R-005 / CLAUDE.md: no socket APIs through the windows crate either.
+# R-005 / R-010 / ADR-0008: Win32_Networking_WinHttp is allowed solely in naobi-win32 for hardened
+# daily FX rate fetches; WinInet, WinSock, and all HTTP client crates remain banned.
 [[bans.features]]
 crate = "windows"
-deny = ["Win32_Networking_WinHttp", "Win32_Networking_WinInet", "Win32_Networking_WinSock"]
+deny = ["Win32_Networking_WinInet", "Win32_Networking_WinSock"]

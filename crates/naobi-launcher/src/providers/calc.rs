@@ -14,16 +14,25 @@ use naobi_core::view_source::{Fact, Preview, ViewSource};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use zeroize::Zeroizing;
 
 const ID_PREFIX: &str = "calc:";
 const FX_PREFIX: &str = "calc.fx:";
 const FX_MISSING_ID: &str = "calc.fx:missing";
 const MAX_FX_BYTES: u64 = 256 * 1024;
+pub const FRANKFURTER_URL: &str = "https://api.frankfurter.dev/v1/latest?base=EUR";
+pub const ECB_URL: &str = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml";
+pub const FX_REFRESH_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+pub const REFRESH_CMD_ID: &str = "calc.refresh_rates";
 pub const VIEW_ID: &str = "calc-history";
 pub const HISTORY_CMD_ID: &str = "calc.history";
 pub const ROW_PREFIX: &str = "calc.h:";
+
+/// Port for fetching raw FX rate payloads over hardened HTTPS.
+pub trait FxFeed: Send + Sync {
+    fn fetch(&self, url: &str) -> Result<String, String>;
+}
 
 pub type SharedCalcHistory = Arc<Mutex<CalcHistory>>;
 
@@ -84,6 +93,16 @@ impl CalcConfig {
 
     pub fn set_fx_rates(&self, rates: Option<FxRates>) {
         lock(&self.0).fx_rates = rates.map(Arc::new);
+    }
+
+    pub fn fx_path(&self) -> Option<PathBuf> {
+        lock(&self.0).fx_path.clone()
+    }
+
+    pub fn apply_fx_rates(&self, rates: FxRates, mtime: Option<SystemTime>) {
+        let mut s = lock(&self.0);
+        s.fx_rates = Some(Arc::new(rates));
+        s.fx_mtime = mtime;
     }
 
     pub fn set_fx_path(&self, path: Option<PathBuf>) {
@@ -147,6 +166,130 @@ fn read_fx_file(path: &Path) -> (Option<FxRates>, Option<SystemTime>) {
         return (None, mtime);
     };
     (FxRates::from_json(text), mtime)
+}
+
+fn write_fx_atomic(path: &Path, json: &str) -> std::io::Result<Option<SystemTime>> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json.as_bytes())?;
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(std::fs::metadata(path).and_then(|m| m.modified()).ok())
+}
+
+/// Fetches latest currency rates from Frankfurter (primary) with ECB XML fallback,
+/// atomically updates `fx-rates.json`, and updates `CalcConfig` immediately on success.
+pub fn refresh_rates(feed: &dyn FxFeed, config: &CalcConfig) -> Result<FxRates, Notice> {
+    let rates = feed
+        .fetch(FRANKFURTER_URL)
+        .ok()
+        .and_then(|body| FxRates::from_json(&body))
+        .or_else(|| {
+            feed.fetch(ECB_URL)
+                .ok()
+                .and_then(|body| FxRates::from_ecb_xml(&body))
+        })
+        .ok_or_else(|| Notice {
+            subject: "Currency rates".into(),
+            message: "Could not refresh currency rates from Frankfurter or ECB.".into(),
+            kind: NoticeKind::Warning,
+        })?;
+
+    let mtime = if let Some(path) = config.fx_path() {
+        match write_fx_atomic(&path, &rates.to_json()) {
+            Ok(m) => m,
+            Err(_) => {
+                config.apply_fx_rates(rates, None);
+                return Err(Notice {
+                    subject: "Currency rates".into(),
+                    message: "Fetched currency rates, but could not save fx-rates.json.".into(),
+                    kind: NoticeKind::Warning,
+                });
+            }
+        }
+    } else {
+        None
+    };
+    config.apply_fx_rates(rates.clone(), mtime);
+    Ok(rates)
+}
+
+/// True when `auto_refresh` is enabled, no automatic refresh attempt occurred in the last 24h,
+/// and `fx-rates.json` is missing, invalid, or older than 24 hours.
+pub fn should_auto_refresh(
+    fx_path: Option<&Path>,
+    auto_refresh: bool,
+    last_attempt: Option<SystemTime>,
+    now: SystemTime,
+) -> bool {
+    if !auto_refresh {
+        return false;
+    }
+    if last_attempt.is_some_and(|t| {
+        now.duration_since(t)
+            .is_ok_and(|age| age < FX_REFRESH_INTERVAL)
+    }) {
+        return false;
+    }
+    let Some(path) = fx_path else {
+        return false;
+    };
+    match read_fx_file(path) {
+        (Some(_), Some(mtime)) => match now.duration_since(mtime) {
+            Ok(age) => age >= FX_REFRESH_INTERVAL,
+            // Treat future mtimes (clock skew) as fresh to avoid hammering endpoints.
+            Err(_) => false,
+        },
+        _ => true,
+    }
+}
+
+/// Root command to refresh cached currency exchange rates on demand.
+pub struct FxRefreshCommands {
+    run: Arc<dyn Fn() -> Outcome + Send + Sync>,
+}
+
+impl FxRefreshCommands {
+    pub fn new(run: Arc<dyn Fn() -> Outcome + Send + Sync>) -> Self {
+        Self { run }
+    }
+}
+
+impl CommandSource for FxRefreshCommands {
+    fn items(&self, _q: &Query) -> Arc<[Item]> {
+        vec![Item {
+            id: ItemId(REFRESH_CMD_ID.into()),
+            title: "Refresh currency rates".into(),
+            subtitle: String::new(),
+            keywords: vec!["currency".into(), "exchange rates".into(), "rates".into()],
+            alias: None,
+            kind: ItemKind::Command,
+            primary: ActionId("run".into()),
+            secondary: None,
+        }]
+        .into()
+    }
+
+    fn actions(&self, _id: &ItemId) -> Vec<Action> {
+        vec![Action {
+            id: ActionId("run".into()),
+            label: "Refresh".into(),
+            shortcut: None,
+            enabled: Ok(()),
+        }]
+    }
+
+    fn run(&self, id: &ItemId, _action: ActionId, _cx: &mut Cx) -> Outcome {
+        if id.0 == REFRESH_CMD_ID {
+            (self.run)()
+        } else {
+            Outcome::Done
+        }
+    }
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {

@@ -625,3 +625,53 @@ fn currency_conversion_triangulates_formats_and_detects_missing_cache() {
         );
     }
 }
+
+#[test]
+fn fx_rates_parses_ecb_xml_and_roundtrips_cache_json() {
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
+  <gesmes:subject>Reference rates</gesmes:subject>
+  <gesmes:Sender><gesmes:name>European Central Bank</gesmes:name></gesmes:Sender>
+  <Cube>
+    <Cube time='2026-11-20'>
+      <Cube currency='USD' rate='1.05'/>
+      <Cube currency="JPY" rate="162.75" />
+      <Cube currency='IDR' rate='19065.9'/>
+    </Cube>
+  </Cube>
+</gesmes:Envelope>"#;
+
+    let parsed = FxRates::from_ecb_xml(xml).expect("valid ECB XML");
+    assert_eq!(parsed.base, "EUR");
+    assert_eq!(parsed.date, "2026-11-20");
+    assert_eq!(parsed.rate("USD"), Some(1.05));
+    assert_eq!(parsed.rate("IDR"), Some(19065.9));
+    assert_eq!(parsed.rate("EUR"), Some(1.0));
+
+    let json = parsed.to_json();
+    let roundtrip = FxRates::from_json(&json).expect("roundtrip JSON");
+    assert_eq!(roundtrip, parsed);
+
+    match evaluate_currency("53 usd", "IDR", NumberFormat::Us, Some(&roundtrip)) {
+        Some(CurrencyOutcome::Converted(c)) => {
+            assert_eq!(c.display, "962,374.00 IDR");
+            assert_eq!(c.subtitle, "53 USD to IDR · Rates 2026-11-20");
+        }
+        other => panic!("expected Converted, got {other:?}"),
+    }
+
+    // Malformed, missing date, empty rates, negative/zero/NaN rates, bad currency codes all fail cleanly.
+    for bad in [
+        "",
+        "<Cube></Cube>",
+        "<Cube><Cube currency='USD' rate='1.05'/></Cube>",
+        "<Cube><Cube time='2026-11-20'></Cube></Cube>",
+        "<Cube><Cube time='2026-11-20'><Cube currency='USD' rate='-1.0'/></Cube></Cube>",
+        "<Cube><Cube time='2026-11-20'><Cube currency='USD' rate='0'/></Cube></Cube>",
+        "<Cube><Cube time='2026-11-20'><Cube currency='USD' rate='NaN'/></Cube></Cube>",
+        "<Cube><Cube time='2026-11-20'><Cube currency='US' rate='1.05'/></Cube></Cube>",
+        "<Cube><Cube time='2026-11-20'><Cube currency='USD' rate='1.05'",
+    ] {
+        assert_eq!(FxRates::from_ecb_xml(bad), None, "{bad:?}");
+    }
+}

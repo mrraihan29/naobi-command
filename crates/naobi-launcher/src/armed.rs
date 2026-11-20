@@ -27,6 +27,14 @@ impl Armed {
         }
     }
 
+    /// The action armed for `item` and still inside its window, if any.
+    pub fn armed_action(&self, item: &ItemId, now_ms: i64) -> Option<&ActionId> {
+        match &self.pending {
+            Some(p) if now_ms < p.until_ms && p.item == *item => Some(&p.action),
+            _ => None,
+        }
+    }
+
     /// True when `action` on `item` was armed and is still in time. The arming is used up either
     /// way, so a second confirm needs a fresh arm.
     pub fn confirm(&mut self, item: &ItemId, action: &ActionId, now_ms: i64) -> bool {

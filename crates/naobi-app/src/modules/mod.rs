@@ -10,6 +10,7 @@ pub mod files;
 pub mod icons;
 pub mod picker;
 pub mod themes;
+pub mod windows;
 
 use naobi_core::command::{CommandSource, Cx};
 use naobi_core::event::AppEvent;
@@ -159,6 +160,7 @@ pub fn register_all(modules: &mut Modules) {
     picker::register(modules);
     files::register(modules);
     themes::register(modules);
+    windows::register(modules);
 }
 
 #[cfg(test)]
@@ -298,7 +300,14 @@ mod catalog {
                 "", "2+2", "awake", "color", "lock", "clip", "snippet", "ocr",
             ] {
                 for i in source.items(&Query { text: text.into() }).iter() {
-                    items.insert((i.id.0.clone(), i.title.clone()));
+                    if !matches!(
+                        i.kind,
+                        naobi_core::item::ItemKind::App
+                            | naobi_core::item::ItemKind::File
+                            | naobi_core::item::ItemKind::Window
+                    ) {
+                        items.insert((i.id.0.clone(), i.title.clone()));
+                    }
                 }
             }
         }
@@ -335,7 +344,7 @@ mod catalog {
             .map(|s| &**s)
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
             .collect();
-        let table: [(&str, &str); 28] = [
+        let table: [(&str, &str); 29] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -343,6 +352,7 @@ mod catalog {
             ("color history", "picker.history"),
             ("paste history", "clipboard.open"),
             ("clipboard", "clipboard.open"),
+            ("switch windows", "win.open"),
             ("shutdown", "sys.shut_down"),
             ("power off", "sys.shut_down"),
             ("reboot", "sys.restart"),
@@ -366,11 +376,11 @@ mod catalog {
             ("topmost", "aot.toggle"),
         ];
         let first = |q: &str| {
-            // Apps and files depend on the Owner's machine; leave them out.
+            // Apps, files and live open windows depend on the Owner's machine; leave them out.
             let pool: Vec<_> = sources
                 .iter()
                 .flat_map(|s| s.items(&Query { text: q.into() }).to_vec())
-                .filter(|i| !matches!(i.kind, ItemKind::App | ItemKind::File))
+                .filter(|i| !matches!(i.kind, ItemKind::App | ItemKind::File | ItemKind::Window))
                 .collect();
             let hits =
                 Ranker::default().rank(q, pool.iter().map(|i| (Source::Root(0), i)), |_| 0.0, 50);
@@ -405,6 +415,12 @@ mod catalog {
         assert!(item("aot.toggle") && hotkey("topmost"), "always on top");
         assert!(item("awake.on"), "awake");
         assert!(naobi_ui::has_own_glyph("dev"), "dev micro-tools glyph");
+        assert!(
+            item("win.open")
+                && c.views
+                    .contains(naobi_launcher::providers::windows::VIEW_ID),
+            "window switcher"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
             let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];

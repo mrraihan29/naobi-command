@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use naobi_core::chord::KeyChord;
 use naobi_core::event::AppEvent;
 use naobi_core::ids::HotkeyId;
-use naobi_core::settings::Settings;
+use naobi_core::settings::{Settings, OPTIONAL_HOTKEYS};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_NOREPEAT,
@@ -14,7 +14,13 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 /// Hotkey names in id order: id = position + 1. The settings parser accepts only these names.
 fn names() -> &'static [String] {
     static NAMES: OnceLock<Vec<String>> = OnceLock::new();
-    NAMES.get_or_init(|| Settings::default().hotkeys.into_keys().collect())
+    NAMES.get_or_init(|| {
+        Settings::default()
+            .hotkeys
+            .into_keys()
+            .chain(OPTIONAL_HOTKEYS.into_iter().map(str::to_owned))
+            .collect()
+    })
 }
 
 /// The hotkey a `WM_HOTKEY` id stands for.
@@ -188,6 +194,25 @@ mod tests {
         assert_eq!((*id, name.0.as_str()), (1, "clipboard"));
         assert_eq!(*chord, Settings::default().hotkeys["clipboard"]);
         assert_eq!(name_for_id(1), Some(HotkeyId("clipboard".into())));
+    }
+
+    #[test]
+    fn optional_window_switcher_hotkey_registers_when_configured() {
+        let mut fake = Fake::default();
+        let parsed = Settings::parse("[hotkeys]\nwindow_switcher = \"Alt+Shift+W\"\n").unwrap();
+        let mut reg = Registry::new(&parsed.settings);
+        assert!(reg.register_all(&mut fake).is_empty());
+        assert_eq!(fake.live.len(), 5);
+        let id = reg
+            .entries
+            .iter()
+            .find(|(_, name, _)| name.0 == "window_switcher")
+            .map(|(id, _, _)| *id)
+            .expect("window_switcher registered");
+        assert_eq!(
+            name_for_id(id as usize),
+            Some(HotkeyId("window_switcher".into()))
+        );
     }
 
     // @R-008

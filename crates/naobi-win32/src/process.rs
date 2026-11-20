@@ -1,7 +1,9 @@
+use std::path::Path;
 use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE};
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    GetCurrentProcessId, GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 /// One reading of a process: memory in bytes, CPU time in 100 ns units (kernel + user).
@@ -12,13 +14,42 @@ pub struct ProcessMetrics {
     pub cpu_100ns: u64,
 }
 
-struct Owned(HANDLE);
+pub(crate) struct Owned(pub(crate) HANDLE);
 
 impl Drop for Owned {
     fn drop(&mut self) {
         // SAFETY: the handle came from a successful OpenProcess and is closed once, here.
         let _ = unsafe { CloseHandle(self.0) };
     }
+}
+
+/// File name of `pid`'s executable, or None if Windows denies query access.
+pub(crate) fn exe_name(pid: u32) -> Option<String> {
+    if pid == 0 {
+        return None;
+    }
+    // SAFETY: plain query on a pid; `Owned` closes the handle once.
+    let process =
+        Owned(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()? });
+    let mut buf = [0u16; 1024];
+    let mut len = buf.len() as u32;
+    // SAFETY: `buf` is live and `len` carries its capacity in u16 elements.
+    let ok = unsafe {
+        QueryFullProcessImageNameW(
+            process.0,
+            PROCESS_NAME_WIN32,
+            windows::core::PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        )
+    }
+    .is_ok();
+    if !ok {
+        return None;
+    }
+    let full = String::from_utf16(buf.get(..len as usize)?).ok()?;
+    Path::new(&full)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
 }
 
 fn ticks(t: FILETIME) -> u64 {

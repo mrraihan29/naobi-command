@@ -359,8 +359,12 @@ impl Controller {
             self.pending_close = Some(restore);
             host.close_later(CONFIRM_MS);
         } else if hide {
-            // A paste gives focus to its target itself.
-            self.close(host, restore && !launched && paste.is_none());
+            // A paste gives focus to its target itself; focusing another Open window already moved foreground.
+            let focused_other = matches!(host.foreground(), Some(w) if Some(w) != self.previous);
+            self.close(
+                host,
+                restore && !launched && paste.is_none() && !focused_other,
+            );
         }
         if let Some(id) = paste {
             host.paste(id, target);
@@ -1087,5 +1091,104 @@ mod tests {
         assert!(h
             .log
             .contains(&"notice Run: Windows could not start that program.".to_string()));
+    }
+
+    #[test]
+    fn focusing_another_window_hides_without_restoring_previous_foreground() {
+        use naobi_launcher::providers::windows::{
+            OpenWindow, WindowActionError, WindowOps, WindowSource,
+        };
+        use std::sync::Mutex;
+
+        struct FocusOps(Arc<Mutex<Option<isize>>>);
+        impl WindowOps for FocusOps {
+            fn list(&self) -> Vec<OpenWindow> {
+                vec![OpenWindow {
+                    hwnd: 200,
+                    title: "Notepad".into(),
+                    process_name: "notepad.exe".into(),
+                }]
+            }
+            fn focus(&self, hwnd: isize) -> Result<(), WindowActionError> {
+                *self.0.lock().unwrap() = Some(hwnd);
+                Ok(())
+            }
+            fn minimize(&self, _hwnd: isize) -> Result<(), WindowActionError> {
+                Ok(())
+            }
+            fn close(&self, _hwnd: isize) -> Result<(), WindowActionError> {
+                Ok(())
+            }
+            fn force_quit(&self, _hwnd: isize) -> Result<(), WindowActionError> {
+                Ok(())
+            }
+        }
+
+        struct DynamicHost {
+            fg: Arc<Mutex<Option<isize>>>,
+            fake: Fake,
+        }
+        impl Host for DynamicHost {
+            fn hide(&mut self) {
+                self.fake.hide();
+            }
+            fn show(&mut self) {
+                self.fake.show();
+            }
+            fn is_visible(&self) -> bool {
+                self.fake.is_visible()
+            }
+            fn foreground(&self) -> Option<isize> {
+                *self.fg.lock().unwrap()
+            }
+            fn restore_focus(&mut self, w: isize) {
+                self.fake.restore_focus(w);
+            }
+            fn launch(&mut self, t: &LaunchTarget) -> std::io::Result<()> {
+                self.fake.launch(t)
+            }
+            fn copy_text(&mut self, text: &str) -> std::io::Result<()> {
+                self.fake.copy_text(text)
+            }
+            fn notice(&mut self, n: Notice) {
+                self.fake.notice(n);
+            }
+            fn post(&mut self, s: Screen) {
+                self.fake.post(s);
+            }
+            fn close_later(&mut self, ms: u64) {
+                self.fake.close_later(ms);
+            }
+            fn copy_entry(&mut self, id: EntryId) -> std::io::Result<()> {
+                self.fake.copy_entry(id)
+            }
+            fn paste(&mut self, id: EntryId, target: Option<isize>) {
+                self.fake.paste(id, target);
+            }
+            fn search_files(&mut self, generation: u64, query: &str) {
+                self.fake.search_files(generation, query);
+            }
+            fn load_icons(&mut self, keys: Vec<String>) {
+                self.fake.load_icons(keys);
+            }
+            fn apply_theme(&mut self, id: &str) -> Result<(), String> {
+                self.fake.apply_theme(id)
+            }
+        }
+
+        let fg = Arc::new(Mutex::new(Some(77)));
+        let mut c = controller_with(
+            Box::new(WindowSource::new(Arc::new(FocusOps(fg.clone())))),
+            Router::default(),
+        );
+        let mut h = DynamicHost {
+            fg: fg.clone(),
+            fake: Fake::default(),
+        };
+        c.show(&mut h);
+        h.fake.log.clear();
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(*fg.lock().unwrap(), Some(200));
+        assert_eq!(h.fake.log, vec!["hide".to_string()]);
     }
 }

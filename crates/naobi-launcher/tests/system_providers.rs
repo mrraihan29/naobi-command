@@ -59,7 +59,7 @@ fn rig_with(ops: FakeOps) -> Rig {
     let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
     let launcher = Launcher::new(
         vec![
-            Box::new(CalcSource),
+            Box::new(CalcSource::default()),
             Box::new(QuicklinkSource::new(links.clone())),
             Box::new(SystemSource::new(ops.clone())),
         ],

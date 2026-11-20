@@ -23,15 +23,17 @@ struct P<'a> {
     pos: usize,
     depth: u32,
     ops: u32,
+    ans: Option<f64>,
 }
 
 /// Evaluate a whole expression; also returns how many operators it used (0 = bare number).
-pub fn eval(src: &str) -> Option<(Val, u32)> {
+pub fn eval(src: &str, ans: Option<f64>) -> Option<(Val, u32)> {
     let mut p = P {
         s: src.as_bytes(),
         pos: 0,
         depth: 0,
         ops: 0,
+        ans: ans.filter(|v| v.is_finite()),
     };
     let v = p.expr()?;
     (p.peek().is_none() && v.f.is_finite()).then_some((v, p.ops))
@@ -169,6 +171,25 @@ impl P<'_> {
         Some((apply(b'^', norm(base), norm(e))?, false))
     }
 
+    fn try_ans(&mut self) -> Option<Option<Val>> {
+        self.peek();
+        let r = &self.s[self.pos..];
+        if r.len() >= 3
+            && r[..3].eq_ignore_ascii_case(b"ans")
+            && !r
+                .get(3)
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+        {
+            self.pos += 3;
+            Some(self.ans.map(|f| Val {
+                f,
+                i: (f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0).then_some(f as i128),
+            }))
+        } else {
+            None
+        }
+    }
+
     fn atom(&mut self) -> Option<Term> {
         let v = if self.eat(b'(') {
             let v = self.nest(Self::expr)?;
@@ -176,6 +197,8 @@ impl P<'_> {
                 return None;
             }
             v
+        } else if let Some(ans) = self.try_ans() {
+            ans?
         } else {
             self.number()?
         };
@@ -186,13 +209,39 @@ impl P<'_> {
         Some((v, false))
     }
 
-    fn number(&mut self) -> Option<Val> {
+    fn eat_currency(&mut self) -> bool {
         self.peek();
         let rest = &self.s[self.pos..];
-        let radix = match rest {
-            [b'0', b'x' | b'X', ..] => 16,
-            [b'0', b'b' | b'B', ..] => 2,
-            _ => 10,
+        let len = ["$", "€", "£", "¥"]
+            .into_iter()
+            .map(str::as_bytes)
+            .find(|p| rest.starts_with(p))
+            .map(<[u8]>::len)
+            .or_else(|| {
+                rest.get(..2)
+                    .filter(|b| b.eq_ignore_ascii_case(b"rp"))
+                    .map(|_| 2)
+            });
+        if let Some(n) = len {
+            self.pos += n;
+            self.peek();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn number(&mut self) -> Option<Val> {
+        let currency = self.eat_currency();
+        let rest = &self.s[self.pos..];
+        let radix = if currency {
+            10
+        } else {
+            match rest {
+                [b'0', b'x' | b'X', ..] => 16,
+                [b'0', b'b' | b'B', ..] => 2,
+                _ => 10,
+            }
         };
         let skip = if radix == 10 { 0 } else { 2 };
         let len = rest[skip..]

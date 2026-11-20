@@ -1,7 +1,17 @@
 //! Schema per REPORT 4.1. Content and preview columns are BLOB (DPAPI ciphertext, R-009).
 //! Migrations are append-only and expand-only (D-014): add tables or nullable/defaulted columns, never drop or rename.
 
-pub const MIGRATIONS: &[&str] = &[V1, V2];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
+
+/// Calculator history (issue #2): expressions and results are DPAPI blobs; `calculated_at` is Unix ms.
+const V3: &str = "
+CREATE TABLE calc_history (
+    id            INTEGER PRIMARY KEY,
+    expr_enc      BLOB NOT NULL,
+    result_enc    BLOB NOT NULL,
+    calculated_at INTEGER NOT NULL
+);
+";
 
 /// R-024: the `>` run history. Lines are DPAPI blobs (T-034); `last_run_at` is Unix milliseconds.
 const V2: &str = "

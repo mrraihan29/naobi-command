@@ -50,7 +50,7 @@ fn d014_wal_pragmas_and_schema() {
     assert_eq!(pragma(c, "synchronous"), "1"); // NORMAL
     assert_eq!(pragma(c, "cache_size"), "-2048"); // 2 MiB
     assert_eq!(pragma(c, "auto_vacuum"), "2"); // INCREMENTAL
-    assert_eq!(pragma(c, "user_version"), "2");
+    assert_eq!(pragma(c, "user_version"), "3");
     let names: Vec<String> = c
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .unwrap()
@@ -61,6 +61,7 @@ fn d014_wal_pragmas_and_schema() {
     assert_eq!(
         names,
         [
+            "calc_history",
             "clip_entry",
             "clip_payload",
             "color_history",
@@ -81,7 +82,7 @@ fn d014_schema_v2_adds_run_history_and_backs_up_v1() {
         db.record_open(42, 1000).unwrap();
     }
     let db = Db::open(&d.db(), || [9; 16]).unwrap();
-    assert_eq!(pragma(db.conn(), "user_version"), "2");
+    assert_eq!(pragma(db.conn(), "user_version"), "3");
     let bak = d.0.join("naobi.db.bak-v1");
     assert!(bak.exists());
     assert_eq!(
@@ -96,10 +97,41 @@ fn d014_schema_v2_adds_run_history_and_backs_up_v1() {
         )
         .unwrap();
     drop(db);
-    // A V1-only reader still opens the V2 file.
+    // A V1-only reader still opens the migrated file.
     let old = Db::open_with_migrations(&d.db(), || [9; 16], &schema::MIGRATIONS[..1]).unwrap();
     old.record_open(42, 2000).unwrap();
     assert_eq!(old.raw_rows().unwrap(), vec![(42, 2, 2000)]);
+}
+
+// @R-009
+#[test]
+fn d014_schema_v3_adds_calc_history_and_backs_up_v2() {
+    let d = Dir::new();
+    {
+        let db = Db::open_with_migrations(&d.db(), || [1; 16], &schema::MIGRATIONS[..2]).unwrap();
+        assert_eq!(pragma(db.conn(), "user_version"), "2");
+        db.record_open(7, 1000).unwrap();
+    }
+    let db = Db::open(&d.db(), || [9; 16]).unwrap();
+    assert_eq!(pragma(db.conn(), "user_version"), "3");
+    let bak = d.0.join("naobi.db.bak-v2");
+    assert!(bak.exists());
+    assert_eq!(
+        pragma(&Connection::open(&bak).unwrap(), "user_version"),
+        "2"
+    );
+    assert_eq!(db.raw_rows().unwrap(), vec![(7, 1, 1000)]);
+    db.conn()
+        .execute(
+            "INSERT INTO calc_history (expr_enc, result_enc, calculated_at) VALUES (x'00', x'01', 1)",
+            [],
+        )
+        .unwrap();
+    drop(db);
+    // A V2-only reader still opens the V3 file.
+    let old = Db::open_with_migrations(&d.db(), || [9; 16], &schema::MIGRATIONS[..2]).unwrap();
+    old.record_open(7, 2000).unwrap();
+    assert_eq!(old.raw_rows().unwrap(), vec![(7, 2, 2000)]);
 }
 
 #[test]
@@ -124,8 +156,9 @@ fn d014_migration_copies_backup_and_is_expand_contract() {
         "1"
     );
     drop(db);
-    // An older (v1) reader still opens the v2 file and uses its own v1 statements.
+    // An older (v2) reader still opens the v3 file and uses its own statements.
     let old = Db::open(&d.db(), || [9; 16]).unwrap();
+    assert_eq!(pragma(old.conn(), "user_version"), "3");
     old.record_open(42, 2000).unwrap();
     assert_eq!(old.raw_rows().unwrap(), vec![(42, 2, 2000)]);
 }

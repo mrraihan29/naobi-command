@@ -242,3 +242,22 @@ fn d043_slot_write_finds_the_key_when_another_section_follows() {
 fn d043_a_theme_file_is_capped_at_64_kib() {
     assert_eq!(naobi_core::theme_file::MAX_THEME_BYTES, 65_536);
 }
+
+#[test]
+fn calculator_rem_base_px_defaults_to_16_and_validates() {
+    let def = Settings::parse("").unwrap();
+    assert_eq!(def.settings.calculator.rem_base_px, 16.0);
+    assert!(def.reports.is_empty());
+
+    let custom = Settings::parse("[calculator]\nrem_base_px = 10.0\n").unwrap();
+    assert_eq!(custom.settings.calculator.rem_base_px, 10.0);
+    assert!(custom.reports.is_empty());
+
+    for bad in ["0.0", "-8.0", "nan", "inf"] {
+        let p = Settings::parse(&format!("[calculator]\nrem_base_px = {bad}\n")).unwrap();
+        assert_eq!(p.settings.calculator.rem_base_px, 16.0, "{bad}");
+        assert_eq!(p.reports.len(), 1, "{bad}");
+    }
+
+    assert!(Settings::parse("[calculator]\nunknown = 1\n").is_err());
+}

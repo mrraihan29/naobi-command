@@ -2,7 +2,7 @@
 //! typed in the root search shows its result, Enter copies it and records `(expr, result)` for
 //! `ans` chaining and searchable history.
 use crate::calc_history::{CalcEntry, CalcHistory};
-use naobi_calc::EvalOptions;
+use naobi_calc::{evaluate_currency, CurrencyOutcome, EvalOptions, FxRates, NumberFormat};
 use naobi_core::chord::{KeyChord, CTRL};
 use naobi_core::command::{CommandSource, Cx, Outcome, Query};
 use naobi_core::effect::Effect;
@@ -11,24 +11,51 @@ use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::DEFAULT_REM_BASE_PX;
 use naobi_core::view_source::{Fact, Preview, ViewSource};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::SystemTime;
 use zeroize::Zeroizing;
 
 const ID_PREFIX: &str = "calc:";
+const FX_PREFIX: &str = "calc.fx:";
+const FX_MISSING_ID: &str = "calc.fx:missing";
+const MAX_FX_BYTES: u64 = 256 * 1024;
 pub const VIEW_ID: &str = "calc-history";
 pub const HISTORY_CMD_ID: &str = "calc.history";
 pub const ROW_PREFIX: &str = "calc.h:";
 
 pub type SharedCalcHistory = Arc<Mutex<CalcHistory>>;
 
-/// Live calculator settings shared between settings hot-reload and `CalcSource`.
+struct CalcSettings {
+    rem_base_px: f64,
+    default_currency: String,
+    number_format: NumberFormat,
+    fx_rates: Option<Arc<FxRates>>,
+    fx_path: Option<PathBuf>,
+    fx_mtime: Option<SystemTime>,
+}
+
+impl Default for CalcSettings {
+    fn default() -> Self {
+        Self {
+            rem_base_px: DEFAULT_REM_BASE_PX,
+            default_currency: "IDR".to_owned(),
+            number_format: NumberFormat::Us,
+            fx_rates: None,
+            fx_path: None,
+            fx_mtime: None,
+        }
+    }
+}
+
+/// Live calculator and currency settings shared between settings hot-reload and `CalcSource`.
 #[derive(Clone)]
-pub struct CalcConfig(Arc<AtomicU64>);
+pub struct CalcConfig(Arc<Mutex<CalcSettings>>);
 
 impl Default for CalcConfig {
     fn default() -> Self {
-        Self(Arc::new(AtomicU64::new(DEFAULT_REM_BASE_PX.to_bits())))
+        Self(Arc::new(Mutex::new(CalcSettings::default())))
     }
 }
 
@@ -39,12 +66,87 @@ impl CalcConfig {
         } else {
             DEFAULT_REM_BASE_PX
         };
-        self.0.store(valid.to_bits(), Ordering::Relaxed);
+        lock(&self.0).rem_base_px = valid;
     }
 
     pub fn rem_base_px(&self) -> f64 {
-        f64::from_bits(self.0.load(Ordering::Relaxed))
+        lock(&self.0).rem_base_px
     }
+
+    pub fn set_currency(&self, default_currency: &str, number_format: &str) {
+        let mut s = lock(&self.0);
+        let code = default_currency.trim().to_ascii_uppercase();
+        if code.len() == 3 && code.bytes().all(|b| b.is_ascii_alphabetic()) {
+            s.default_currency = code;
+        }
+        s.number_format = NumberFormat::parse(number_format).unwrap_or(NumberFormat::Us);
+    }
+
+    pub fn set_fx_rates(&self, rates: Option<FxRates>) {
+        lock(&self.0).fx_rates = rates.map(Arc::new);
+    }
+
+    pub fn set_fx_path(&self, path: Option<PathBuf>) {
+        {
+            let mut s = lock(&self.0);
+            s.fx_path = path;
+            s.fx_mtime = None;
+            s.fx_rates = None;
+        }
+        self.reload_fx_rates();
+    }
+
+    /// Loads `fx-rates.json` from `fx_path` cleanly without any network call.
+    pub fn reload_fx_rates(&self) {
+        let path = lock(&self.0).fx_path.clone();
+        let Some(path) = path else {
+            return;
+        };
+        let (rates, mtime) = read_fx_file(&path);
+        let mut s = lock(&self.0);
+        s.fx_rates = rates.map(Arc::new);
+        s.fx_mtime = mtime;
+    }
+
+    fn reload_if_changed(&self) {
+        let (path, prev_mtime) = {
+            let s = lock(&self.0);
+            (s.fx_path.clone(), s.fx_mtime)
+        };
+        let Some(path) = path else {
+            return;
+        };
+        let cur_mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        if cur_mtime != prev_mtime {
+            self.reload_fx_rates();
+        }
+    }
+
+    fn currency_snapshot(&self) -> (String, NumberFormat, Option<Arc<FxRates>>) {
+        let s = lock(&self.0);
+        (
+            s.default_currency.clone(),
+            s.number_format,
+            s.fx_rates.clone(),
+        )
+    }
+}
+
+fn read_fx_file(path: &Path) -> (Option<FxRates>, Option<SystemTime>) {
+    let Ok(file) = std::fs::File::open(path) else {
+        return (None, None);
+    };
+    let mtime = file.metadata().and_then(|m| m.modified()).ok();
+    let mut bytes = Vec::new();
+    if file.take(MAX_FX_BYTES + 1).read_to_end(&mut bytes).is_err()
+        || bytes.len() as u64 > MAX_FX_BYTES
+    {
+        return (None, mtime);
+    }
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return (None, mtime);
+    };
+    (FxRates::from_json(text), mtime)
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -97,6 +199,19 @@ impl CalcSource {
     }
 }
 
+impl CalcSource {
+    fn record_history(&self, result: &str) {
+        if let Some(h) = &self.history {
+            let expr = lock(&self.last)
+                .as_ref()
+                .filter(|(_, r)| r.as_str() == result)
+                .map(|(e, _)| e.to_string())
+                .unwrap_or_else(|| result.to_owned());
+            let _ = lock(h).record(&expr, result, (self.now_ms)());
+        }
+    }
+}
+
 impl CommandSource for CalcSource {
     fn items(&self, q: &Query) -> Arc<[Item]> {
         let ans = if contains_ans(&q.text) {
@@ -108,50 +223,113 @@ impl CommandSource for CalcSource {
             ans,
             rem_base_px: self.config.rem_base_px(),
         };
-        let Some(out) = naobi_calc::evaluate_at_with(&q.text, opts, (self.now_ms)()) else {
-            *lock(&self.last) = None;
-            return Arc::from(Vec::new());
-        };
-        *lock(&self.last) = Some((
-            Zeroizing::new(q.text.clone()),
-            Zeroizing::new(out.text.clone()),
-        ));
-        vec![Item {
-            id: ItemId(format!("{ID_PREFIX}{}", out.text)),
-            title: out.text,
-            subtitle: q.text.clone(),
-            keywords: Vec::new(),
-            // The query is this row's alias, so ranking always keeps it and puts it first.
-            alias: Some(q.text.clone()),
-            kind: ItemKind::Calculator,
-            primary: ActionId("copy".into()),
-            secondary: None,
-        }]
-        .into()
+        if let Some(out) = naobi_calc::evaluate_at_with(&q.text, opts, (self.now_ms)()) {
+            *lock(&self.last) = Some((
+                Zeroizing::new(q.text.clone()),
+                Zeroizing::new(out.text.clone()),
+            ));
+            return vec![Item {
+                id: ItemId(format!("{ID_PREFIX}{}", out.text)),
+                title: out.text,
+                subtitle: q.text.clone(),
+                keywords: Vec::new(),
+                // The query is this row's alias, so ranking always keeps it and puts it first.
+                alias: Some(q.text.clone()),
+                kind: ItemKind::Calculator,
+                primary: ActionId("copy".into()),
+                secondary: None,
+            }]
+            .into();
+        }
+        if q.text.bytes().any(|b| b.is_ascii_digit()) {
+            self.config.reload_if_changed();
+            let (default_cur, fmt, rates) = self.config.currency_snapshot();
+            match evaluate_currency(&q.text, &default_cur, fmt, rates.as_deref()) {
+                Some(CurrencyOutcome::Converted(conv)) => {
+                    *lock(&self.last) = Some((
+                        Zeroizing::new(q.text.clone()),
+                        Zeroizing::new(conv.raw.clone()),
+                    ));
+                    return vec![Item {
+                        id: ItemId(format!("{FX_PREFIX}{}|{}", conv.raw, conv.display)),
+                        title: conv.display,
+                        subtitle: conv.subtitle,
+                        keywords: Vec::new(),
+                        alias: Some(q.text.clone()),
+                        kind: ItemKind::Calculator,
+                        primary: ActionId("copy".into()),
+                        secondary: Some(ActionId("copy_with_currency".into())),
+                    }]
+                    .into();
+                }
+                Some(CurrencyOutcome::MissingRates { from, to }) => {
+                    *lock(&self.last) = None;
+                    return vec![Item {
+                        id: ItemId(FX_MISSING_ID.into()),
+                        title: "No cached currency rates".into(),
+                        subtitle: format!(
+                            "Refresh currency rates to convert {from} to {to} (no local fx-rates.json)"
+                        ),
+                        keywords: Vec::new(),
+                        alias: Some(q.text.clone()),
+                        kind: ItemKind::Calculator,
+                        primary: ActionId("notice".into()),
+                        secondary: None,
+                    }]
+                    .into();
+                }
+                None => {}
+            }
+        }
+        *lock(&self.last) = None;
+        Arc::from(Vec::new())
     }
 
-    fn actions(&self, _id: &ItemId) -> Vec<Action> {
-        vec![Action {
-            id: ActionId("copy".into()),
-            label: "Copy".into(),
+    fn actions(&self, id: &ItemId) -> Vec<Action> {
+        let act = |aid: &str, label: &str| Action {
+            id: ActionId(aid.into()),
+            label: label.into(),
             shortcut: None,
             enabled: Ok(()),
-        }]
+        };
+        if id.0 == FX_MISSING_ID {
+            vec![act("notice", "How to refresh rates")]
+        } else if id.0.starts_with(FX_PREFIX) {
+            vec![
+                act("copy", "Copy"),
+                act("copy_with_currency", "Copy with currency"),
+            ]
+        } else {
+            vec![act("copy", "Copy")]
+        }
     }
 
-    fn run(&self, id: &ItemId, _action: ActionId, cx: &mut Cx) -> Outcome {
+    fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome {
+        if id.0 == FX_MISSING_ID {
+            return Outcome::Failed(Notice {
+                subject: "Currency rates".into(),
+                message: "No local rate cache (fx-rates.json) found in data folder. Run Refresh currency rates to fetch rates.".into(),
+                kind: NoticeKind::Warning,
+            });
+        }
+        if let Some(rest) = id.0.strip_prefix(FX_PREFIX) {
+            let Some((raw, display)) = rest.split_once('|') else {
+                return Outcome::Done;
+            };
+            let copied = if action.0 == "copy_with_currency" {
+                display
+            } else {
+                raw
+            };
+            cx.copy_text(copied.to_owned());
+            self.record_history(raw);
+            return Outcome::Done;
+        }
         let Some(result) = id.0.strip_prefix(ID_PREFIX) else {
             return Outcome::Done;
         };
         cx.copy_text(result.to_owned());
-        if let Some(h) = &self.history {
-            let expr = lock(&self.last)
-                .as_ref()
-                .filter(|(_, r)| r.as_str() == result)
-                .map(|(e, _)| e.to_string())
-                .unwrap_or_else(|| result.to_owned());
-            let _ = lock(h).record(&expr, result, (self.now_ms)());
-        }
+        self.record_history(result);
         Outcome::Done
     }
 }

@@ -37,12 +37,18 @@ pub fn set_calc_rem_base_px(px: f64) {
     calc_config().set_rem_base_px(px);
 }
 
+pub fn set_currency_config(cfg: &naobi_core::settings::Currency) {
+    calc_config().set_currency(&cfg.default_currency, &cfg.number_format);
+}
+
 pub fn register(m: &mut Modules) {
+    let cfg = calc_config().clone();
+    cfg.set_fx_path(naobi_core::paths::data_dir().map(|d| d.join("fx-rates.json")));
     let calc_history = open_data_db("calculation history")
         .map(|db| Arc::new(Mutex::new(CalcHistory::open(db, Box::new(DpapiCipher)))));
     m.register_source(Box::new(CalcSource::new(
         calc_history.clone(),
-        calc_config().clone(),
+        cfg,
         Box::new(now_ms),
     )));
     m.register_source(Box::new(ColorSource));

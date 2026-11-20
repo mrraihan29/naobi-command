@@ -108,6 +108,23 @@ impl Default for Calculator {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Currency {
+    pub default_currency: String,
+    pub number_format: String,
+    pub auto_refresh: bool,
+}
+impl Default for Currency {
+    fn default() -> Self {
+        Self {
+            default_currency: "IDR".into(),
+            number_format: "us".into(),
+            auto_refresh: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub general: General,
@@ -118,6 +135,7 @@ pub struct Settings {
     pub clipboard: Clipboard,
     pub aot: Aot,
     pub calculator: Calculator,
+    pub currency: Currency,
     pub quicklinks: Vec<Quicklink>,
 }
 
@@ -134,6 +152,7 @@ struct Raw {
     clipboard: Clipboard,
     aot: Aot,
     calculator: Calculator,
+    currency: Currency,
     quicklinks: Option<Vec<Quicklink>>,
 }
 
@@ -180,6 +199,7 @@ impl Default for Settings {
             clipboard: Clipboard::default(),
             aot: Aot::default(),
             calculator: Calculator::default(),
+            currency: Currency::default(),
             quicklinks: DEFAULT_QUICKLINKS
                 .iter()
                 .map(|&(name, alias, url)| Quicklink {
@@ -246,6 +266,7 @@ impl Settings {
             clipboard: raw.clipboard,
             aot: raw.aot,
             calculator: raw.calculator,
+            currency: raw.currency,
             ..Settings::default()
         };
         if !TEXT_SCALES.contains(&s.ui.text_scale) {
@@ -287,6 +308,20 @@ impl Settings {
         if !s.calculator.rem_base_px.is_finite() || s.calculator.rem_base_px <= 0.0 {
             note("calculator.rem_base_px must be a positive number; using 16.0".into());
             s.calculator = Calculator::default();
+        }
+        let currency_code = s.currency.default_currency.trim().to_ascii_uppercase();
+        if currency_code.len() == 3 && currency_code.bytes().all(|b| b.is_ascii_alphabetic()) {
+            s.currency.default_currency = currency_code;
+        } else {
+            note("currency.default_currency must be a 3-letter currency code; using IDR".into());
+            s.currency.default_currency = Currency::default().default_currency;
+        }
+        let number_format = s.currency.number_format.trim().to_ascii_lowercase();
+        if matches!(number_format.as_str(), "us" | "id") {
+            s.currency.number_format = number_format;
+        } else {
+            note("currency.number_format must be \"us\" or \"id\"; using us".into());
+            s.currency.number_format = Currency::default().number_format;
         }
 
         if let Some(list) = raw.quicklinks {
@@ -416,6 +451,11 @@ border_color = "auto" # or "#RRGGBB"
 
 [calculator]
 rem_base_px = 16.0 # root font size in pixels for px <-> rem conversions
+
+[currency]
+default_currency = "IDR" # target currency when none is typed (e.g. "53 usd")
+number_format = "us"     # "us" (1,234.56) or "id" (1.234,56)
+auto_refresh = true      # refresh cached rates at most once every 24h
 
 # Defining any [[quicklinks]] replaces the four below. {query} is required and must not be in the host.
 [[quicklinks]]

@@ -261,3 +261,36 @@ fn calculator_rem_base_px_defaults_to_16_and_validates() {
 
     assert!(Settings::parse("[calculator]\nunknown = 1\n").is_err());
 }
+
+#[test]
+fn currency_settings_default_validate_and_fallback_with_report() {
+    let def = Settings::parse("").unwrap();
+    assert_eq!(def.settings.currency.default_currency, "IDR");
+    assert_eq!(def.settings.currency.number_format, "us");
+    assert!(def.settings.currency.auto_refresh);
+    assert!(def.reports.is_empty());
+    assert!(Settings::default_toml().contains("[currency]"));
+
+    let custom = Settings::parse(
+        "[currency]\ndefault_currency = \"eur\"\nnumber_format = \"id\"\nauto_refresh = false\n",
+    )
+    .unwrap();
+    assert_eq!(custom.settings.currency.default_currency, "EUR");
+    assert_eq!(custom.settings.currency.number_format, "id");
+    assert!(!custom.settings.currency.auto_refresh);
+    assert!(custom.reports.is_empty());
+
+    for bad in ["", "US", "USDD", "123", "usd1"] {
+        let p = Settings::parse(&format!("[currency]\ndefault_currency = \"{bad}\"\n")).unwrap();
+        assert_eq!(p.settings.currency.default_currency, "IDR", "{bad}");
+        assert_eq!(p.reports.len(), 1, "{bad}");
+    }
+
+    for bad in ["", "eu", "de"] {
+        let p = Settings::parse(&format!("[currency]\nnumber_format = \"{bad}\"\n")).unwrap();
+        assert_eq!(p.settings.currency.number_format, "us", "{bad}");
+        assert_eq!(p.reports.len(), 1, "{bad}");
+    }
+
+    assert!(Settings::parse("[currency]\nunknown = 1\n").is_err());
+}

@@ -1,4 +1,7 @@
-use naobi_calc::{evaluate, evaluate_at, evaluate_with, parse_ans, EvalOptions, Kind};
+use naobi_calc::{
+    evaluate, evaluate_at, evaluate_currency, evaluate_with, parse_ans, CurrencyConversion,
+    CurrencyOutcome, EvalOptions, FxRates, Kind, NumberFormat,
+};
 
 /// 2026-11-20T17:02:32Z in Unix milliseconds.
 const NOW_2026_11_20_MS: i64 = 1_795_194_152_000;
@@ -520,4 +523,105 @@ fn css_px_and_rem_convert_using_configurable_base() {
     assert_eq!(custom("16 px to rem", 0.0, None), None);
     assert_eq!(custom("16 px to rem", -16.0, None), None);
     assert_eq!(custom("16 px to rem", f64::NAN, None), None);
+}
+
+#[test]
+fn currency_conversion_triangulates_formats_and_detects_missing_cache() {
+    let json = r#"{
+        "amount": 1.0,
+        "base": "EUR",
+        "date": "2026-11-19",
+        "rates": {
+            "USD": 1.05,
+            "IDR": 19065.9,
+            "JPY": 162.75,
+            "GBP": 0.84
+        }
+    }"#;
+    let rates = FxRates::from_json(json).expect("valid fx json");
+    assert_eq!(rates.base, "EUR");
+    assert_eq!(rates.date, "2026-11-19");
+    assert_eq!(FxRates::from_json("{}"), None);
+    assert_eq!(
+        FxRates::from_json(r#"{"base":"EUR","date":"2026-11-19","rates":{"USD":-1.0}}"#),
+        None
+    );
+
+    let conv = |q: &str, default: &str, fmt: NumberFormat| -> CurrencyConversion {
+        match evaluate_currency(q, default, fmt, Some(&rates)) {
+            Some(CurrencyOutcome::Converted(c)) => c,
+            other => panic!("expected Converted for {q:?}, got {other:?}"),
+        }
+    };
+
+    // Bare currency amounts -> default_currency ("IDR")
+    let c = conv("53 usd", "IDR", NumberFormat::Us);
+    assert_eq!(c.display, "962,374.00 IDR");
+    assert_eq!(c.raw, "962374.00");
+    assert_eq!(c.subtitle, "53 USD to IDR · Rates 2026-11-19");
+
+    let sym = conv("$53", "IDR", NumberFormat::Us);
+    assert_eq!(sym.display, "962,374.00 IDR");
+    assert_eq!(sym.raw, "962374.00");
+    assert_eq!(sym.subtitle, "53 USD to IDR · Rates 2026-11-19");
+
+    let k = conv("53k usd", "IDR", NumberFormat::Us);
+    assert_eq!(k.display, "962,374,000.00 IDR");
+    assert_eq!(k.raw, "962374000.00");
+
+    let m = conv("1.5m usd", "IDR", NumberFormat::Us);
+    assert_eq!(m.display, "27,237,000,000.00 IDR");
+    assert_eq!(m.raw, "27237000000.00");
+
+    // Base currency ("EUR") has implicit rate 1.0
+    let eur = conv("€10", "IDR", NumberFormat::Us);
+    assert_eq!(eur.display, "190,659.00 IDR");
+    assert_eq!(eur.subtitle, "10 EUR to IDR · Rates 2026-11-19");
+
+    // Explicit pairs
+    let pair = conv("53 usd to eur", "IDR", NumberFormat::Us);
+    assert_eq!(pair.display, "50.48 EUR");
+    assert_eq!(pair.raw, "50.48");
+    assert_eq!(pair.subtitle, "53 USD to EUR · Rates 2026-11-19");
+
+    let jpy = conv("53k usd in jpy", "IDR", NumberFormat::Us);
+    assert_eq!(jpy.display, "8,215,000.00 JPY");
+    assert_eq!(jpy.raw, "8215000.00");
+    assert_eq!(jpy.subtitle, "53000 USD to JPY · Rates 2026-11-19");
+
+    let rp = conv("Rp 19065.9 to usd", "IDR", NumberFormat::Us);
+    assert_eq!(rp.display, "1.05 USD");
+    assert_eq!(rp.raw, "1.05");
+
+    // Indonesian number format ("id")
+    let id_idr = conv("53 usd", "IDR", NumberFormat::Id);
+    assert_eq!(id_idr.display, "962.374,00 IDR");
+    assert_eq!(id_idr.raw, "962374.00");
+
+    let id_eur = conv("53 usd to eur", "IDR", NumberFormat::Id);
+    assert_eq!(id_eur.display, "50,48 EUR");
+    assert_eq!(id_eur.raw, "50.48");
+
+    // Missing cache returns MissingRates only for currency queries
+    for q in ["53 usd", "$53", "53k usd", "53 usd to eur"] {
+        assert!(
+            matches!(
+                evaluate_currency(q, "IDR", NumberFormat::Us, None),
+                Some(CurrencyOutcome::MissingRates { .. })
+            ),
+            "{q:?}"
+        );
+    }
+    for non_currency in ["42", "hello", "5 km to mi", "$120 + $45", "53 xyz", "53k"] {
+        assert_eq!(
+            evaluate_currency(non_currency, "IDR", NumberFormat::Us, None),
+            None,
+            "{non_currency:?}"
+        );
+        assert_eq!(
+            evaluate_currency(non_currency, "IDR", NumberFormat::Us, Some(&rates)),
+            None,
+            "{non_currency:?}"
+        );
+    }
 }

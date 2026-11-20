@@ -2,19 +2,14 @@
 //! formats, and the exe that owns the clipboard. Reads are bounded (T-018) and never log content.
 //! The change listener is installed on P1 through `post_to_p1`; P1 only forwards the event, and the
 //! read runs on the caller's own worker thread (T-021).
-use std::path::Path;
-
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HGLOBAL, HWND};
+use windows::Win32::Foundation::{HGLOBAL, HWND};
 use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, GetClipboardData, GetClipboardOwner,
     GetClipboardSequenceNumber, IsClipboardFormatAvailable, RegisterClipboardFormatW,
 };
 use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::System::Ole::{CF_DIB, CF_HDROP, CF_UNICODETEXT};
-use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-};
 use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
 use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
 
@@ -135,32 +130,12 @@ fn read_files() -> Vec<String> {
 /// asks for it as soon as the change event arrives, before a short-lived program (a script that
 /// copies and exits) is gone.
 pub fn owner_exe() -> Option<String> {
-    // SAFETY: plain queries on the owner window and its process; the process handle is closed below.
+    // SAFETY: plain queries on the owner window; `exe_name` opens and closes the process handle.
     unsafe {
         let owner = GetClipboardOwner().ok()?;
         let mut pid = 0u32;
         GetWindowThreadProcessId(owner, Some(&mut pid));
-        if pid == 0 {
-            return None;
-        }
-        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-        let mut buf = [0u16; 1024];
-        let mut len = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(
-            process,
-            PROCESS_NAME_WIN32,
-            windows::core::PWSTR(buf.as_mut_ptr()),
-            &mut len,
-        )
-        .is_ok();
-        let _ = CloseHandle(HANDLE(process.0));
-        if !ok {
-            return None;
-        }
-        let full = String::from_utf16(buf.get(..len as usize)?).ok()?;
-        Path::new(&full)
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
+        crate::process::exe_name(pid)
     }
 }
 

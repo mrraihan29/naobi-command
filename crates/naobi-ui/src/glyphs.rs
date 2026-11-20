@@ -33,6 +33,7 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("picker.history", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM12 7v5l3 2", ""),
     ("clipboard.open", "M8 4h8v3H8zM6 6v14h12V6", ""),
     ("clipboard.clear", "M8 4h8v3H8zM6 6v14h12V6M9 11l6 6M15 11l-6 6", ""),
+    ("win.open", "M4 8h11v10H4zM9 8V5h11v10h-5", ""),
     // Rows that are not commands of a module.
     ("run", "M3 5h18v14H3zM7 10l3 2-3 2M12 15h5", ""),
     ("run.history", "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2", ""),
@@ -53,6 +54,8 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("action.copy", "M9 9h11v11H9zM5 15V4h11", ""),
     ("action.folder", "M3 6h6l2 3h10v10H3z", ""),
     ("action.pin", "M14 4l6 6-5 1-4 4-1 5-3-3-4 4 4-4-3-3 5-1 4-4z", ""),
+    ("action.minimize", "M6 17h12", ""),
+    ("action.close", "M4 4h16v16H4zM9 9l6 6M15 9l-6 6", ""),
     ("action.delete", "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13", ""),
 ];
 
@@ -104,5 +107,10 @@ mod tests {
         assert_eq!(glyph("sys.lock").0, GLYPHS[0].1);
         assert_eq!(glyph("module.unknown"), GENERIC);
         assert!(has_own_glyph("aot.toggle") && !has_own_glyph("module.unknown"));
+        assert!(
+            has_own_glyph("win.open")
+                && has_own_glyph("action.minimize")
+                && has_own_glyph("action.close")
+        );
     }
 }

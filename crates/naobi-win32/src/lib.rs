@@ -37,3 +37,4 @@ pub mod theme;
 pub mod token;
 pub mod topmost;
 pub mod tray;
+pub mod window_switcher;

@@ -155,6 +155,9 @@ const DEFAULT_HOTKEYS: [(&str, u8, u32); 4] = [
     ("topmost", WIN | CTRL, 0x54),
 ];
 
+/// Valid `[hotkeys]` slots that have no default global binding.
+pub const OPTIONAL_HOTKEYS: [&str; 1] = ["window_switcher"];
+
 /// D-024: Google, GitHub, YouTube, naobi.dev.
 const DEFAULT_QUICKLINKS: [(&str, &str, &str); 4] = [
     ("Google", "g", "https://www.google.com/search?q={query}"),
@@ -215,7 +218,8 @@ impl Settings {
             .retain(|k, _| !RETIRED_HOTKEYS.contains(&k.as_str()));
         // Hotkey ids must be known, and a global hotkey needs a modifier.
         for (k, c) in &raw.hotkeys {
-            let known = DEFAULT_HOTKEYS.iter().any(|d| d.0 == k);
+            let known =
+                DEFAULT_HOTKEYS.iter().any(|d| d.0 == k) || OPTIONAL_HOTKEYS.contains(&k.as_str());
             if !known || c.mods == 0 {
                 let why = if known {
                     "needs a modifier"
@@ -397,6 +401,7 @@ launcher = "Ctrl+Space"
 clipboard = "Alt+Shift+V"
 color_picker = "Win+Shift+C"
 topmost = "Win+Ctrl+T"
+# window_switcher = "Alt+Shift+W" # optional, off by default
 
 [ui]
 text_scale = 1.0 # 1.0, 1.125 or 1.25

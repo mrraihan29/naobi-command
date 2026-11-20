@@ -143,6 +143,9 @@ impl Launcher {
                 {
                     return vec![];
                 }
+                if self.selected != i {
+                    self.armed.disarm();
+                }
                 self.selected = i;
                 self.run_selected(false)
             }
@@ -161,6 +164,7 @@ impl Launcher {
                 vec![]
             }
             UiEvent::PanelFilter(text) => {
+                self.armed.disarm();
                 if let Some(p) = &mut self.panel {
                     let wanted = text.to_lowercase();
                     p.actions = p
@@ -568,6 +572,8 @@ impl Launcher {
                 Some(a) => a,
                 None => return vec![],
             }
+        } else if let Some(armed) = self.armed.armed_action(hit.id(), self.clock.now_ms()) {
+            armed.clone()
         } else {
             hit.item.primary.clone()
         };
@@ -611,7 +617,9 @@ impl Launcher {
         // R-020: this is the one gate. Enter, Ctrl+Enter and the action panel all end here, so an
         // armed command runs only on the second press of the same action within 5 s.
         let now = self.clock.now_ms();
-        if self.armed_ids.contains(hit.id()) && !self.armed.confirm(hit.id(), &action, now) {
+        let needs_arm = self.armed_ids.contains(hit.id())
+            || self.source(hit.src).needs_confirm(hit.id(), &action);
+        if needs_arm && !self.armed.confirm(hit.id(), &action, now) {
             self.armed.arm(hit.id().clone(), action, now);
             return vec![];
         }
@@ -643,6 +651,7 @@ impl Launcher {
                 | ItemKind::Quicklink
                 | ItemKind::File
                 | ItemKind::CommandLine
+                | ItemKind::Window
         );
         if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
@@ -826,14 +835,16 @@ struct ActionStyle {
 fn action_style(id: &str) -> ActionStyle {
     let (glyph, group, destructive) = match id {
         "apply" => ("action.apply", 0, false),
-        "open" => ("action.open", 0, false),
+        "open" | "focus" => ("action.open", 0, false),
         "run" => ("action.run", 0, false),
         "paste" => ("action.paste", 0, false),
         "folder" => ("action.folder", 1, false),
         "duplicate" => ("action.copy", 1, false),
         "edit" => ("action.edit", 1, false),
         "pin" => ("action.pin", 1, false),
-        "delete" => ("action.delete", 2, true),
+        "minimize" => ("action.minimize", 1, false),
+        "close" => ("action.close", 1, false),
+        "delete" | "force_quit" => ("action.delete", 2, true),
         _ => ("action.copy", 0, false),
     };
     ActionStyle {
@@ -891,6 +902,7 @@ fn icon_key_of(item: &Item) -> Option<String> {
         // Drawn by the UI, never asked of the icon child (`askable` refuses it).
         ItemKind::Command => Some(format!("g:{}", item.id.0)),
         ItemKind::Theme => Some("g:themes.open".to_owned()),
+        ItemKind::Window => Some("g:win.open".to_owned()),
         ItemKind::Quicklink => Some("g:quicklink".to_owned()),
         ItemKind::Calculator => Some("g:calc".to_owned()),
         // Never the line: the key must not carry command text.
@@ -936,6 +948,7 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::Color => "Color",
         ItemKind::CommandLine => "Command line",
         ItemKind::Theme => "Theme",
+        ItemKind::Window => "Open window",
     }
 }
 
@@ -949,13 +962,17 @@ mod tests {
         for (id, glyph, group, destructive) in [
             ("apply", "action.apply", 0, false),
             ("open", "action.open", 0, false),
+            ("focus", "action.open", 0, false),
             ("run", "action.run", 0, false),
             ("paste", "action.paste", 0, false),
             ("folder", "action.folder", 1, false),
             ("duplicate", "action.copy", 1, false),
             ("edit", "action.edit", 1, false),
             ("pin", "action.pin", 1, false),
+            ("minimize", "action.minimize", 1, false),
+            ("close", "action.close", 1, false),
             ("delete", "action.delete", 2, true),
+            ("force_quit", "action.delete", 2, true),
             ("hex", "action.copy", 0, false),
         ] {
             let s = action_style(id);

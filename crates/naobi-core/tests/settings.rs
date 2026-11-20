@@ -261,3 +261,19 @@ fn calculator_rem_base_px_defaults_to_16_and_validates() {
 
     assert!(Settings::parse("[calculator]\nunknown = 1\n").is_err());
 }
+
+#[test]
+fn window_switcher_hotkey_is_optional_with_no_default_binding() {
+    let def = Settings::parse("").unwrap();
+    assert!(!def.settings.hotkeys.contains_key("window_switcher"));
+    assert!(!Settings::default().hotkeys.contains_key("window_switcher"));
+
+    let bound = Settings::parse("[hotkeys]\nwindow_switcher = \"Alt+Shift+W\"\n").unwrap();
+    assert!(bound.reports.is_empty());
+    assert_eq!(
+        bound.settings.hotkeys.get("window_switcher"),
+        Some(&chord(ALT | SHIFT, b'W'.into()))
+    );
+
+    assert!(Settings::parse("[hotkeys]\nwindow_switcher = \"W\"\n").is_err());
+}

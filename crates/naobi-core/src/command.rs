@@ -73,6 +73,10 @@ pub trait CommandSource: Send + Sync {
     fn armed(&self) -> Vec<ItemId> {
         Vec::new()
     }
+    /// True when running `action` on `id` needs a second Enter confirmation (R-020).
+    fn needs_confirm(&self, id: &ItemId, _action: &ActionId) -> bool {
+        self.armed().contains(id)
+    }
     /// True for the source whose actions run the file rows the search hands in (R-013).
     fn takes_files(&self) -> bool {
         false

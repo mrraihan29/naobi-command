@@ -183,7 +183,7 @@ A named set of colors, corner radii, list density and font families that the app
 _Avoid_: skin, mode, dark mode (dark mode names the system command)
 
 **Built-in theme**:
-`paper` (light) or `stone` (dark); read-only, shipped in the app, and always meets WCAG 2.2 AA.
+`paper` (light), `stone`, `tokyo-haze` or `neon-night` (all dark); read-only, shipped in the app, and always meets WCAG 2.2 AA.
 _Avoid_: default skin, system theme
 
 **Custom theme**:
@@ -191,7 +191,7 @@ A Theme the Owner keeps as one TOML file in the themes folder; it starts from a 
 _Avoid_: user theme, profile
 
 **Base theme**:
-The Built-in theme that supplies every value a Custom theme does not set or sets wrongly.
+The `paper` or `stone` Built-in theme that supplies every value a Custom theme does not set or sets wrongly.
 _Avoid_: parent, template
 
 **Theme slot**:

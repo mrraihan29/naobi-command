@@ -1,11 +1,12 @@
 //! Token contrast (R-007): every text and component pair in DESIGN_SYSTEM.md meets WCAG 2.2 AA.
-use naobi_core::tokens::{contrast, contrast_failures, PAPER, STONE};
+use naobi_core::theme_file::builtins;
+use naobi_core::tokens::{contrast, contrast_failures, PAPER};
 
 // @R-007
 #[test]
 fn r007_token_pairs_meet_wcag_aa() {
-    for (theme, p) in [("paper", PAPER), ("stone", STONE)] {
-        assert_eq!(contrast_failures(&p), [], "{theme}");
+    for t in builtins() {
+        assert_eq!(contrast_failures(&t.palette), [], "{}", t.id);
     }
 }
 

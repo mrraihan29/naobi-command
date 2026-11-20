@@ -8,7 +8,7 @@ use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::settings::ThemeSlots;
 use naobi_core::theme_file::{
-    self, builtin, color_tokens, is_custom_id, Catalog, Density, FileContent, ResolvedTheme,
+    self, builtins, color_tokens, is_custom_id, Catalog, Density, FileContent, ResolvedTheme,
     MAX_THEMES, MAX_THEME_BYTES,
 };
 use naobi_core::tokens::contrast_failures;
@@ -140,7 +140,7 @@ pub struct ThemesView {
 
 impl ThemesView {
     fn all(&self) -> Vec<ResolvedTheme> {
-        let mut themes = vec![builtin(Theme::Paper), builtin(Theme::Stone)];
+        let mut themes = builtins();
         themes.extend(self.host.catalog().themes);
         themes
     }
@@ -364,11 +364,15 @@ mod tests {
     use super::*;
     use crate::index_worker;
     use naobi_core::db::Db;
+    use naobi_core::tokens::TOKYO_HAZE;
     use naobi_core::ui::{Key, KeyChord, UiEvent};
     use naobi_launcher::frecency::Frecency;
     use naobi_launcher::{Clock, Launcher};
     use std::sync::{mpsc, Mutex};
     use std::time::Duration;
+
+    /// Paper, Stone, Tokyo Haze and Neon Night come before the first Custom theme.
+    const BUILTIN_ROWS: usize = 4;
 
     struct Dir(PathBuf);
 
@@ -535,10 +539,11 @@ mod tests {
         assert!(dir.0.join("paper-copy.toml").is_file());
         let s = l.screen();
         assert_eq!(s.theme_preview.as_deref(), Some("paper-copy"));
-        assert_eq!(s.sections[0].rows[2].title, "Paper copy");
+        assert_eq!(s.sections[0].rows[BUILTIN_ROWS].title, "Paper copy");
         // A second copy never replaces the first.
-        press(&mut l, Key::Up, false);
-        press(&mut l, Key::Up, false);
+        for _ in 0..BUILTIN_ROWS {
+            press(&mut l, Key::Up, false);
+        }
         assert!(run_panel_action(&mut l, "Duplicate").is_empty());
         assert!(dir.0.join("paper-copy-2.toml").is_file());
     }
@@ -550,8 +555,9 @@ mod tests {
         fs::write(dir.0.join("harbor.toml"), "base = \"stone\"\n").expect("write");
         let mut l = engine(&dir.0);
         open(&mut l);
-        press(&mut l, Key::Down, false);
-        press(&mut l, Key::Down, false);
+        for _ in 0..BUILTIN_ROWS {
+            press(&mut l, Key::Down, false);
+        }
         let expected = dir.0.join("harbor.toml").to_string_lossy().into_owned();
         assert_eq!(
             run_panel_action(&mut l, "Edit"),
@@ -578,6 +584,89 @@ mod tests {
             .map(|a| a.label)
             .collect();
         assert_eq!(labels, ["Use theme", "Duplicate"]);
+    }
+
+    // @R-032
+    #[test]
+    fn r032_new_builtins_have_no_edit_action() {
+        let dir = Dir::new("newedit");
+        let mut l = engine(&dir.0);
+        open(&mut l);
+        for _ in 0..2 {
+            press(&mut l, Key::Down, false);
+        }
+        for row in 2..BUILTIN_ROWS {
+            press(&mut l, Key::K, true);
+            let labels: Vec<String> = l
+                .screen()
+                .action_panel
+                .expect("panel")
+                .actions
+                .into_iter()
+                .map(|a| a.label)
+                .collect();
+            assert_eq!(labels, ["Use theme", "Duplicate"], "row {row}");
+            press(&mut l, Key::Escape, false);
+            press(&mut l, Key::Down, false);
+        }
+    }
+
+    // @R-031
+    #[test]
+    fn r031_new_builtins_preview_apply_and_duplicate() {
+        let dir = Dir::new("newbuiltins");
+        let mut l = engine(&dir.0);
+        open(&mut l);
+        let rows: Vec<(String, Option<String>)> = l.screen().sections[0]
+            .rows
+            .iter()
+            .map(|r| (r.title.clone(), r.right.clone()))
+            .collect();
+        let note = |t: &str, r: &str| (t.to_owned(), Some(r.to_owned()));
+        assert_eq!(
+            rows,
+            [
+                note("Paper", "Light"),
+                note("Stone", "Dark"),
+                note("Tokyo Haze", "Built-in"),
+                note("Neon Night", "Built-in"),
+            ]
+        );
+        for (id, effect) in [("tokyo-haze", "tokyo-haze"), ("neon-night", "neon-night")] {
+            press(&mut l, Key::Down, false);
+            press(&mut l, Key::Down, false);
+            if id == "neon-night" {
+                press(&mut l, Key::Down, false);
+            }
+            let s = l.screen();
+            assert_eq!(s.theme_preview.as_deref(), Some(id));
+            assert_eq!(s.facts[0].value, "Stone");
+            assert_eq!(s.facts[3].value, "Passes WCAG AA");
+            assert_eq!(
+                press(&mut l, Key::Enter, false),
+                [Effect::ApplyTheme(effect.into())]
+            );
+            press(&mut l, Key::Escape, false);
+            assert_eq!(l.screen().theme_preview, None, "the applied theme returns");
+            open(&mut l);
+        }
+        // Duplicate keeps the palette and names the family as base.
+        press(&mut l, Key::Down, false);
+        press(&mut l, Key::Down, false);
+        assert!(run_panel_action(&mut l, "Duplicate").is_empty());
+        let text = fs::read_to_string(dir.0.join("tokyo-haze-copy.toml")).expect("copy");
+        assert!(text.starts_with(
+            "name = \"Tokyo Haze copy\"
+base = \"stone\"
+"
+        ));
+        let parsed = theme_file::parse("tokyo-haze-copy", &text).expect("parses");
+        assert!(parsed.reports.is_empty(), "{:?}", parsed.reports);
+        assert_eq!(parsed.theme.palette, TOKYO_HAZE);
+        assert_eq!(
+            l.screen().sections[0].rows[BUILTIN_ROWS].title,
+            "Tokyo Haze copy"
+        );
     }
 
     // @R-031

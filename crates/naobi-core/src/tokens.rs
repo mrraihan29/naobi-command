@@ -88,6 +88,42 @@ pub const STONE: Palette = Palette {
     strong: Rgba::rgb(0x5A5249),
 };
 
+/// A dark built-in theme: green-grey surfaces, cream ink, amber accent, teal focus (D-046).
+pub const TOKYO_HAZE: Palette = Palette {
+    window: Rgba::rgb(0x1B221F),
+    raised: Rgba::rgb(0x2A312D),
+    selected: Rgba::rgb(0x333B37),
+    well: Rgba::rgb(0x0D0F0E),
+    text_primary: Rgba::rgb(0xF0E6B8),
+    text_secondary: Rgba::rgb(0xD6CDA4),
+    subtitle_selected: Rgba::rgb(0xD6CDA4),
+    text_muted: Rgba::rgb(0x9DB0A6),
+    accent: Rgba::rgb(0xE8A33D),
+    focus: Rgba::rgb(0x7CC9B3),
+    danger: Rgba::rgb(0xF89A8B),
+    success: Rgba::rgb(0x93BD82),
+    hair: Rgba::rgb(0x3B4641),
+    strong: Rgba::rgb(0x505D57),
+};
+
+/// A dark built-in theme: near-black surfaces, cream ink, orange accent, red focus (D-046).
+pub const NEON_NIGHT: Palette = Palette {
+    window: Rgba::rgb(0x0D0F0E),
+    raised: Rgba::rgb(0x171A18),
+    selected: Rgba::rgb(0x222623),
+    well: Rgba::rgb(0x050605),
+    text_primary: Rgba::rgb(0xF0E6B8),
+    text_secondary: Rgba::rgb(0xD6CDA4),
+    subtitle_selected: Rgba::rgb(0xD6CDA4),
+    text_muted: Rgba::rgb(0xA3A08B),
+    accent: Rgba::rgb(0xD9772B),
+    focus: Rgba::rgb(0xF0634F),
+    danger: Rgba::rgb(0xFF7B6B),
+    success: Rgba::rgb(0x8FC47A),
+    hair: Rgba::rgb(0x2B302D),
+    strong: Rgba::rgb(0x434944),
+};
+
 fn luminance(c: Rgba) -> f64 {
     let lin = |v: u8| {
         let s = f64::from(v) / 255.0;

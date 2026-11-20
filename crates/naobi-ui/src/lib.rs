@@ -819,7 +819,8 @@ mod ui_check {
             .expect("platform is set once per test process");
         let ui = AppWindow::new().expect("window");
         ui.show().expect("show");
-        for (theme, palette) in [("paper", &tokens::PAPER), ("stone", &tokens::STONE)] {
+        for built in naobi_core::theme_file::builtins() {
+            let (theme, palette) = (built.id.as_str(), &built.palette);
             set_palette(&ui, palette);
             for (name, s) in views() {
                 apply(&ui, s);

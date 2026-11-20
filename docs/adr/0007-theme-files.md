@@ -25,3 +25,7 @@ The Owner wants themes that can be edited freely, while the Launcher must keep i
 - `naobi-core::tokens` stays the source of the built-in values, and the contrast check moves out of the test into code the app can call.
 - A custom theme may be hard to read. Its Notice also goes through the tray and the Windows balloon, which do not use theme colors (T-039).
 - Installed-font support is the one part that may be dropped: it ships only if the idle budget of R-006 still passes with it (R-030).
+
+## Amendment 2026-11-20
+
+- There are four Built-in themes: `paper`, `stone`, `tokyo-haze` and `neon-night` (D-046, R-032 v2). All are read-only consts in `naobi-core`, meet WCAG 2.2 AA, and their ids are reserved against theme files (D-043 v2). `base` in a theme file stays `paper` or `stone`; the two new themes are not bases, and Duplicate writes `base = "stone"` for them.

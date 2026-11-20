@@ -1,7 +1,7 @@
 //! Theme files (ADR-0007, D-043): a Custom theme is plain data over a read-only Built-in theme. This
 //! module parses and resolves themes and touches no file, so every rule is tested with strings.
 use crate::settings::{Report, ThemeSlots};
-use crate::tokens::{contrast_failures, Palette, Rgba, PAPER, STONE};
+use crate::tokens::{contrast_failures, Palette, Rgba, NEON_NIGHT, PAPER, STONE, TOKYO_HAZE};
 use crate::ui::Theme;
 
 /// Larger theme files are refused before they are parsed (T-038).
@@ -79,16 +79,22 @@ fn base_name(theme: Theme) -> &'static str {
     }
 }
 
-/// A Built-in theme.
-pub fn builtin(theme: Theme) -> ResolvedTheme {
-    let (name, palette) = match theme {
-        Theme::Paper => ("Paper", PAPER),
-        Theme::Stone => ("Stone", STONE),
-    };
+type BuiltinEntry = (&'static str, &'static str, Theme, Palette);
+
+/// Built-in themes in Themes-view order: id, name, Windows-mode family, palette (D-046). The family is
+/// what Duplicate writes as `base`.
+const BUILTINS: [BuiltinEntry; 4] = [
+    ("paper", "Paper", Theme::Paper, PAPER),
+    ("stone", "Stone", Theme::Stone, STONE),
+    ("tokyo-haze", "Tokyo Haze", Theme::Stone, TOKYO_HAZE),
+    ("neon-night", "Neon Night", Theme::Stone, NEON_NIGHT),
+];
+
+fn resolved(&(id, name, base, palette): &BuiltinEntry) -> ResolvedTheme {
     ResolvedTheme {
-        id: base_name(theme).to_owned(),
+        id: id.to_owned(),
         name: name.to_owned(),
-        base: theme,
+        base,
         builtin: true,
         palette,
         shape: Shape::default(),
@@ -97,12 +103,23 @@ pub fn builtin(theme: Theme) -> ResolvedTheme {
     }
 }
 
+/// The Built-in theme of Windows mode `theme`.
+pub fn builtin(theme: Theme) -> ResolvedTheme {
+    resolved(
+        &BUILTINS[match theme {
+            Theme::Paper => 0,
+            Theme::Stone => 1,
+        }],
+    )
+}
+
+/// Every Built-in theme, in Themes-view order.
+pub fn builtins() -> Vec<ResolvedTheme> {
+    BUILTINS.iter().map(resolved).collect()
+}
+
 fn builtin_named(id: &str) -> Option<ResolvedTheme> {
-    match id {
-        "paper" => Some(builtin(Theme::Paper)),
-        "stone" => Some(builtin(Theme::Stone)),
-        _ => None,
-    }
+    BUILTINS.iter().find(|b| b.0 == id).map(resolved)
 }
 
 /// The Theme named `id`: a Built-in theme or one in `catalog`.
@@ -469,8 +486,10 @@ impl Catalog {
     fn add(&mut self, file: &str, content: FileContent) {
         let id = file.strip_suffix(".toml").unwrap_or(file);
         if !is_custom_id(id) {
+            let reserved: Vec<&str> = BUILTINS.iter().map(|b| b.0).collect();
             self.problems.push(format!(
-                "{file}: a theme file name uses a-z, 0-9 and -, and cannot be paper or stone"
+                "{file}: a theme file name uses a-z, 0-9 and -; these names are reserved: {}",
+                reserved.join(", ")
             ));
             return;
         }
@@ -722,6 +741,68 @@ mod tests {
         );
     }
 
+    // @R-032
+    #[test]
+    fn r032_new_builtins_fill_a_slot_without_notice() {
+        let s = slots("tokyo-haze", "neon-night");
+        let empty = Catalog::new();
+        let (light, light_notes) = resolve(&s, Theme::Paper, &empty);
+        assert_eq!(
+            (light.id.as_str(), light.palette),
+            ("tokyo-haze", TOKYO_HAZE)
+        );
+        let (dark, dark_notes) = resolve(&s, Theme::Stone, &empty);
+        assert_eq!((dark.id.as_str(), dark.palette), ("neon-night", NEON_NIGHT));
+        assert!(light.builtin && dark.builtin);
+        assert!(light_notes.is_empty() && dark_notes.is_empty());
+        assert_eq!(contrast_message(&light), None);
+        let parsed = Settings::parse("[theme]\nlight = \"tokyo-haze\"\ndark = \"neon-night\"\n")
+            .expect("parses");
+        assert!(parsed.reports.is_empty(), "{:?}", parsed.reports);
+        assert_eq!(parsed.settings.theme, s);
+    }
+
+    // @R-032
+    #[test]
+    fn r032_builtin_registry_is_consistent() {
+        let all = builtins();
+        assert_eq!(all[0], builtin(Theme::Paper));
+        assert_eq!(all[1], builtin(Theme::Stone));
+        for (i, t) in all.iter().enumerate() {
+            assert!(t.builtin, "{}", t.id);
+            assert!(
+                t.id.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                    && !t.id.is_empty()
+                    && t.id.len() <= MAX_ID_CHARS,
+                "{}",
+                t.id
+            );
+            assert!(all[..i].iter().all(|o| o.id != t.id), "duplicate {}", t.id);
+            assert!(is_theme_name(&t.id) && !is_custom_id(&t.id), "{}", t.id);
+        }
+    }
+
+    // @D-043
+    #[test]
+    fn d043_new_builtin_ids_are_reserved_against_files() {
+        for id in ["tokyo-haze", "neon-night"] {
+            let file = format!("{id}.toml");
+            let c = catalog(&[(file.as_str(), "")]);
+            assert!(c.themes.is_empty(), "{id}");
+            assert_eq!(c.problems.len(), 1, "{:?}", c.problems);
+            assert!(
+                c.problems[0].starts_with(&format!("{file}:")),
+                "{:?}",
+                c.problems
+            );
+            assert!(c.problems[0].contains("reserved"), "{:?}", c.problems);
+            for b in builtins() {
+                assert!(c.problems[0].contains(&b.id), "{}: {:?}", b.id, c.problems);
+            }
+        }
+    }
+
     // @R-033
     #[test]
     fn r033_invalid_values_use_base_and_name_the_line() {
@@ -854,6 +935,8 @@ mod tests {
             "",
             "paper",
             "stone",
+            "tokyo-haze",
+            "neon-night",
             "..",
             r"..\x",
             "a/b",

@@ -13,6 +13,7 @@ pub const MAX_FILE_BYTES: usize = 256 * 1024;
 /// D-015: the file may lower retention, never raise it.
 pub const MAX_RETENTION_DAYS: u32 = 30;
 pub const MAX_ENTRIES: u32 = 1000;
+pub const DEFAULT_REM_BASE_PX: f64 = 16.0;
 const TEXT_SCALES: [f32; 3] = [1.0, 1.125, 1.25];
 
 /// One line of the parse report. `line` is 1-based when known.
@@ -94,6 +95,19 @@ impl Default for ThemeSlots {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Calculator {
+    pub rem_base_px: f64,
+}
+impl Default for Calculator {
+    fn default() -> Self {
+        Self {
+            rem_base_px: DEFAULT_REM_BASE_PX,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub general: General,
@@ -103,6 +117,7 @@ pub struct Settings {
     pub theme: ThemeSlots,
     pub clipboard: Clipboard,
     pub aot: Aot,
+    pub calculator: Calculator,
     pub quicklinks: Vec<Quicklink>,
 }
 
@@ -118,6 +133,7 @@ struct Raw {
     window: Option<toml::Table>,
     clipboard: Clipboard,
     aot: Aot,
+    calculator: Calculator,
     quicklinks: Option<Vec<Quicklink>>,
 }
 
@@ -163,6 +179,7 @@ impl Default for Settings {
             theme: ThemeSlots::default(),
             clipboard: Clipboard::default(),
             aot: Aot::default(),
+            calculator: Calculator::default(),
             quicklinks: DEFAULT_QUICKLINKS
                 .iter()
                 .map(|&(name, alias, url)| Quicklink {
@@ -228,6 +245,7 @@ impl Settings {
             theme: raw.theme,
             clipboard: raw.clipboard,
             aot: raw.aot,
+            calculator: raw.calculator,
             ..Settings::default()
         };
         if !TEXT_SCALES.contains(&s.ui.text_scale) {
@@ -265,6 +283,10 @@ impl Settings {
                 "clipboard.max_entries cannot be raised above {MAX_ENTRIES}; using {MAX_ENTRIES}"
             ));
             s.clipboard.max_entries = MAX_ENTRIES;
+        }
+        if !s.calculator.rem_base_px.is_finite() || s.calculator.rem_base_px <= 0.0 {
+            note("calculator.rem_base_px must be a positive number; using 16.0".into());
+            s.calculator = Calculator::default();
         }
 
         if let Some(list) = raw.quicklinks {
@@ -391,6 +413,9 @@ ignored_apps = ["ProtonPass.exe"]
 [aot]
 border = true
 border_color = "auto" # or "#RRGGBB"
+
+[calculator]
+rem_base_px = 16.0 # root font size in pixels for px <-> rem conversions
 
 # Defining any [[quicklinks]] replaces the four below. {query} is required and must not be in the host.
 [[quicklinks]]

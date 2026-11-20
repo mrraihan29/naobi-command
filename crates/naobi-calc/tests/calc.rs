@@ -1,4 +1,4 @@
-use naobi_calc::{evaluate, evaluate_at, Kind};
+use naobi_calc::{evaluate, evaluate_at, evaluate_with, parse_ans, EvalOptions, Kind};
 
 /// 2026-11-20T17:02:32Z in Unix milliseconds.
 const NOW_2026_11_20_MS: i64 = 1_795_194_152_000;
@@ -430,4 +430,95 @@ fn t4_timezone_and_dst_conversions() {
         evaluate_at("time in tokyo", NOW_2026_11_20_MS).map(|o| o.kind),
         Some(Kind::DateTime)
     );
+}
+
+#[test]
+fn currency_symbols_strip_cleanly() {
+    assert_eq!(text("$120 + $45").as_deref(), Some("165"));
+    assert_eq!(text("€19.99 + €0.01").as_deref(), Some("20"));
+    assert_eq!(text("£100 - £25%").as_deref(), Some("75"));
+    assert_eq!(text("¥1000 / 4").as_deref(), Some("250"));
+    assert_eq!(text("Rp50000 * 2").as_deref(), Some("100000"));
+    assert_eq!(text("Rp 50000 + Rp 25000").as_deref(), Some("75000"));
+    assert_eq!(text("-$50 + $100").as_deref(), Some("50"));
+    assert_eq!(text("($10 + $20) * 2").as_deref(), Some("60"));
+    assert_eq!(text("$100 to hex").as_deref(), Some("0x64"));
+    // Bare currency numbers and malformed symbols still show nothing.
+    for s in [
+        "$120", "Rp50000", "$", "Rp", "$$10 + 1", "Rp + 5", "rpn + 1",
+    ] {
+        assert_eq!(text(s), None, "{s:?}");
+    }
+}
+
+#[test]
+fn ans_reuses_previous_result_and_parses_outcomes() {
+    let with_ans = |input: &str, ans: Option<f64>| {
+        evaluate_with(
+            input,
+            EvalOptions {
+                ans,
+                ..EvalOptions::default()
+            },
+        )
+        .map(|o| o.text)
+    };
+    assert_eq!(with_ans("ans + 10", Some(5.0)).as_deref(), Some("15"));
+    assert_eq!(with_ans("ANS * 2", Some(5.0)).as_deref(), Some("10"));
+    assert_eq!(with_ans("ans%", Some(25.0)).as_deref(), Some("0.25"));
+    assert_eq!(with_ans("200 + ans%", Some(10.0)).as_deref(), Some("220"));
+    assert_eq!(with_ans("ans to hex", Some(255.0)).as_deref(), Some("0xFF"));
+    assert_eq!(
+        with_ans("ans km to mi", Some(5.0)).as_deref(),
+        Some("3.106855961 mi")
+    );
+    // Bare ans and non-word prefixes must not hijack search.
+    assert_eq!(with_ans("ans", Some(5.0)), None);
+    assert_eq!(with_ans("answer + 1", Some(5.0)), None);
+    assert_eq!(with_ans("ansi + 1", Some(5.0)), None);
+    assert_eq!(with_ans("ans + 1", None), None);
+    assert_eq!(with_ans("ans + 1", Some(f64::NAN)), None);
+
+    assert_eq!(parse_ans("1177.6"), Some(1177.6));
+    assert_eq!(parse_ans("0xFF"), Some(255.0));
+    assert_eq!(parse_ans("-0xFF"), Some(-255.0));
+    assert_eq!(parse_ans("0b1010"), Some(10.0));
+    assert_eq!(parse_ans("3.106855961 mi"), Some(3.106855961));
+    assert_eq!(parse_ans("bad"), None);
+}
+
+#[test]
+fn css_px_and_rem_convert_using_configurable_base() {
+    assert_eq!(text("32 px to rem").as_deref(), Some("2 rem"));
+    assert_eq!(text("1.5 rem to px").as_deref(), Some("24 px"));
+    assert_eq!(text("16px to rem").as_deref(), Some("1 rem"));
+    assert_eq!(text("2rem in px").as_deref(), Some("32 px"));
+    assert_eq!(text("24 PX TO REM").as_deref(), Some("1.5 REM"));
+    assert_eq!(text("16 px to px").as_deref(), Some("16 px"));
+    assert_eq!(
+        evaluate("32 px to rem").map(|o| o.kind),
+        Some(Kind::Conversion)
+    );
+    assert_eq!(text("16 px to km"), None, "cross-category");
+    assert_eq!(text("1 rem to m"), None, "cross-category");
+
+    let custom = |input: &str, rem_base_px: f64, ans: Option<f64>| {
+        evaluate_with(input, EvalOptions { ans, rem_base_px }).map(|o| o.text)
+    };
+    assert_eq!(
+        custom("25 px to rem", 10.0, None).as_deref(),
+        Some("2.5 rem")
+    );
+    assert_eq!(
+        custom("2.5 rem to px", 10.0, None).as_deref(),
+        Some("25 px")
+    );
+    assert_eq!(
+        custom("ans px to rem", 16.0, Some(32.0)).as_deref(),
+        Some("2 rem")
+    );
+    assert_eq!(custom("16 px to rem", 0.0, None), None);
+    assert_eq!(custom("16 px to rem", -16.0, None), None);
+    assert_eq!(custom("16 px to rem", f64::NAN, None), None);
+}
 }

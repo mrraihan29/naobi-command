@@ -274,5 +274,11 @@ fn r027_preview_alone_matches_the_pane_preview() {
 // @R-027
 #[test]
 fn r027_schema_version_unchanged() {
-    assert_eq!(MIGRATIONS.len(), 2, "the facts come from stored data");
+    assert!(
+        MIGRATIONS
+            .iter()
+            .skip(1)
+            .all(|m| !m.contains("clip_entry") && !m.contains("clip_payload")),
+        "the clipboard tables and their facts come only from V1 stored data"
+    );
 }

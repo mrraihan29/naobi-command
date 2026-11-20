@@ -2,6 +2,7 @@
 //! A functional core: `Launcher::handle` returns `Effect`s, and nothing here touches Win32 or Slint.
 #![forbid(unsafe_code)]
 pub mod armed;
+pub mod calc_history;
 pub mod engine;
 pub mod esc;
 pub mod frecency;

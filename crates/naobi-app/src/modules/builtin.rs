@@ -136,29 +136,50 @@ fn windows_failed(command: SystemCommand, e: &std::io::Error) -> String {
 }
 
 impl SystemOps for AppOps {
-    fn run(&self, command: SystemCommand) -> Result<(), String> {
+    fn run(&self, command: SystemCommand) -> Result<Option<String>, String> {
         logging::system_command(command.id());
-        let done = |r: std::io::Result<()>| r.map_err(|e| windows_failed(command, &e));
+        let done =
+            |r: std::io::Result<()>| r.map(|()| None).map_err(|e| windows_failed(command, &e));
+        let open_settings = |uri: &str| {
+            shell_exec::open(uri)
+                .map(|()| None)
+                .map_err(|_| "Windows could not open Settings.".to_owned())
+        };
         match command {
             SystemCommand::Lock => done(system_commands::lock()),
             SystemCommand::Sleep => done(system_commands::suspend(false)),
+            SystemCommand::SleepDisplays => done(system_commands::sleep_displays()),
             SystemCommand::Hibernate => done(system_commands::suspend(true)),
             SystemCommand::Restart => done(system_commands::restart()),
             SystemCommand::ShutDown => done(system_commands::shut_down()),
             SystemCommand::SignOut => done(system_commands::sign_out()),
             SystemCommand::EmptyRecycleBin => done(system_commands::empty_recycle_bin()),
             SystemCommand::ToggleDarkMode => done(system_commands::toggle_dark_mode()),
-            SystemCommand::OpenWindowsSettings => shell_exec::open("ms-settings:")
-                .map_err(|_| "Windows could not open Settings.".to_owned()),
+            SystemCommand::ToggleMute => done(system_commands::toggle_mute()),
+            SystemCommand::Volume0 => done(system_commands::set_volume(0)),
+            SystemCommand::Volume25 => done(system_commands::set_volume(25)),
+            SystemCommand::Volume50 => done(system_commands::set_volume(50)),
+            SystemCommand::Volume75 => done(system_commands::set_volume(75)),
+            SystemCommand::Volume100 => done(system_commands::set_volume(100)),
+            SystemCommand::CopyLocalIp => match system_commands::local_ip() {
+                Ok(Some(ip)) => Ok(Some(ip)),
+                Ok(None) => Err("No active local IP address found.".to_owned()),
+                Err(e) => Err(windows_failed(command, &e)),
+            },
+            SystemCommand::OpenWindowsSettings => open_settings("ms-settings:"),
+            SystemCommand::OpenNightLightSettings => open_settings("ms-settings:nightlight"),
+            SystemCommand::OpenSoundSettings => open_settings("ms-settings:sound"),
+            SystemCommand::OpenWifiSettings => open_settings("ms-settings:network-wifi"),
+            SystemCommand::OpenBluetoothSettings => open_settings("ms-settings:bluetooth"),
             SystemCommand::OpenSettingsFile => platform::open_settings()
-                .then_some(())
+                .then_some(None)
                 .ok_or_else(|| "Windows could not open the settings file.".to_owned()),
             // Resuming is in the tray menu: the Launcher hotkey is off while they are paused.
             SystemCommand::PauseHotkeys => platform::set_hotkeys_paused(true)
-                .then_some(())
+                .then_some(None)
                 .ok_or_else(|| "The hotkeys could not be paused.".to_owned()),
             SystemCommand::Quit => platform::quit()
-                .then_some(())
+                .then_some(None)
                 .ok_or_else(|| "The app could not quit.".to_owned()),
         }
     }

@@ -6,17 +6,45 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     // System commands.
     ("sys.lock", "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3", ""),
     ("sys.sleep", "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z", ""),
+    ("sys.sleep_displays", "M3 5h18v11H3zM9 20h6M12 16v4M10 9h4l-4 4h4", ""),
     ("sys.hibernate", "M12 3v18M4.5 7.5l15 9M19.5 7.5l-15 9", ""),
     ("sys.restart", "M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5", ""),
     ("sys.shut_down", "M12 3v9M6.5 6.5a8 8 0 1 0 11 0", ""),
     ("sys.sign_out", "M10 4H5v16h5M14 8l4 4-4 4M18 12H9", ""),
     ("sys.empty_recycle_bin", "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v6M14 11v6", ""),
     ("sys.toggle_dark_mode", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z", "M12 3a9 9 0 0 0 0 18z"),
+    ("sys.toggle_mute", "M4 10h4l5-4v12l-5-4H4zM16 9l5 6M21 9l-5 6", ""),
+    ("sys.volume_0", "M4 10h4l5-4v12l-5-4H4zM16 12h4", ""),
+    ("sys.volume_25", "M4 10h4l5-4v12l-5-4H4zM16 10a3 3 0 0 1 0 4", ""),
+    ("sys.volume_50", "M4 10h4l5-4v12l-5-4H4zM16 10a3 3 0 0 1 0 4M18 8a6 6 0 0 1 0 8", ""),
+    (
+        "sys.volume_75",
+        "M4 10h4l5-4v12l-5-4H4zM16 10a3 3 0 0 1 0 4M18 8a6 6 0 0 1 0 8M20 6a9 9 0 0 1 0 12",
+        "",
+    ),
+    (
+        "sys.volume_100",
+        "M4 10h4l5-4v12l-5-4H4zM16 10a3 3 0 0 1 0 4M18 8a6 6 0 0 1 0 8M20 6a9 9 0 0 1 0 12",
+        "M4 10h4l5-4v12l-5-4H4z",
+    ),
+    ("sys.copy_local_ip", "M12 4v6M8 10h8v4H8zM6 18h12M9 14v4M15 14v4", ""),
     (
         "sys.open_windows_settings",
         "M12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1",
         "",
     ),
+    (
+        "sys.open_night_light_settings",
+        "M12 4v2M5.6 6.6l1.4 1.4M18.4 6.6l-1.4 1.4M3 14h18M7 14a5 5 0 0 1 10 0M6 18h12",
+        "",
+    ),
+    ("sys.open_sound_settings", "M6 8v8M10 5v14M14 9v6M18 6v12", ""),
+    (
+        "sys.open_wifi_settings",
+        "M4 9a11 11 0 0 1 16 0M7 12.5a7 7 0 0 1 10 0M10 16a3 3 0 0 1 4 0M12 19h.01",
+        "",
+    ),
+    ("sys.open_bluetooth_settings", "M12 3v18l5-4.5-10-9M7 16.5l10-9L12 3", ""),
     ("sys.open_settings_file", "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6", ""),
     ("sys.pause_hotkeys", "M8 5v14M16 5v14", ""),
     ("sys.quit", "M6 6l12 12M18 6L6 18", ""),
@@ -105,5 +133,21 @@ mod tests {
         assert_eq!(glyph("sys.lock").0, GLYPHS[0].1);
         assert_eq!(glyph("module.unknown"), GENERIC);
         assert!(has_own_glyph("aot.toggle") && !has_own_glyph("module.unknown"));
+        for id in [
+            "sys.sleep_displays",
+            "sys.toggle_mute",
+            "sys.volume_0",
+            "sys.volume_25",
+            "sys.volume_50",
+            "sys.volume_75",
+            "sys.volume_100",
+            "sys.copy_local_ip",
+            "sys.open_night_light_settings",
+            "sys.open_sound_settings",
+            "sys.open_wifi_settings",
+            "sys.open_bluetooth_settings",
+        ] {
+            assert!(has_own_glyph(id), "missing glyph for {id}");
+        }
     }
 }

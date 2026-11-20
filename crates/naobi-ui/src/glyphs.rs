@@ -140,7 +140,6 @@ mod tests {
         assert_eq!(glyph("sys.lock").0, GLYPHS[0].1);
         assert_eq!(glyph("module.unknown"), GENERIC);
         assert!(has_own_glyph("aot.toggle") && !has_own_glyph("module.unknown"));
-<<<<<<< HEAD
         for id in [
             "sys.sleep_displays",
             "sys.toggle_mute",
@@ -157,12 +156,10 @@ mod tests {
         ] {
             assert!(has_own_glyph(id), "missing glyph for {id}");
         }
-=======
         assert!(
             has_own_glyph("win.open")
                 && has_own_glyph("action.minimize")
                 && has_own_glyph("action.close")
         );
->>>>>>> ticket/7-window-switcher
     }
 }

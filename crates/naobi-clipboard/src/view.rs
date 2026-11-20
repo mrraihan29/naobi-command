@@ -2,7 +2,7 @@
 //! `ViewSource` over the shared `History`: newest first, search inside the text, and the actions
 //! Paste, Copy, Pin and Delete. It only produces data; pasting is an `Effect` the app executes.
 use crate::history::{EntryMeta, History, Kind};
-use naobi_core::chord::{KeyChord, CTRL};
+use naobi_core::chord::{KeyChord, CTRL, SHIFT};
 use naobi_core::command::{CommandSource, Cx, Outcome, Query};
 use naobi_core::effect::Effect;
 use naobi_core::ids::{ActionId, EntryId, ItemId, ViewId};
@@ -134,6 +134,9 @@ impl ClipboardView {
         if m.pinned {
             subtitle.push_str(" · Pinned");
         }
+        if let Some(pos) = h.queue().position(EntryId(m.id)) {
+            subtitle.push_str(&format!(" · Queue #{}", pos + 1));
+        }
         Some(Item {
             id: ItemId(format!("clip:{}", m.id)),
             title,
@@ -168,9 +171,12 @@ impl CommandSource for ClipboardView {
     }
 
     fn actions(&self, id: &ItemId) -> Vec<Action> {
-        let pinned = entry_id(id)
-            .and_then(|n| lock(&self.history).get(n).ok().flatten())
-            .is_some_and(|m| m.pinned);
+        let h = lock(&self.history);
+        let meta = entry_id(id).and_then(|n| h.get(n).ok().flatten());
+        let pinned = meta.as_ref().is_some_and(|m| m.pinned);
+        let is_text = meta.as_ref().is_some_and(|m| m.kind == Kind::Text);
+        let has_queued = !h.queue().is_empty();
+        drop(h);
         let action = |id: &str, label: &str, shortcut: Option<KeyChord>| Action {
             id: ActionId(id.into()),
             label: label.into(),
@@ -180,6 +186,40 @@ impl CommandSource for ClipboardView {
         vec![
             action("paste", "Paste", None),
             action("copy", "Copy", None),
+            Action {
+                id: ActionId("paste_plain".into()),
+                label: "Paste as Plain Text".into(),
+                shortcut: Some(KeyChord {
+                    mods: CTRL | SHIFT,
+                    vk: 0x0D,
+                }),
+                enabled: if is_text {
+                    Ok(())
+                } else {
+                    Err("Only text entries can be pasted as plain text.".into())
+                },
+            },
+            action("queue_add", "Add to paste queue", None),
+            Action {
+                id: ActionId("queue_next".into()),
+                label: "Paste next in queue".into(),
+                shortcut: None,
+                enabled: if has_queued {
+                    Ok(())
+                } else {
+                    Err("Paste queue is empty.".into())
+                },
+            },
+            Action {
+                id: ActionId("queue_clear".into()),
+                label: "Clear paste queue".into(),
+                shortcut: None,
+                enabled: if has_queued {
+                    Ok(())
+                } else {
+                    Err("Paste queue is empty.".into())
+                },
+            },
             action(
                 "pin",
                 if pinned { "Unpin" } else { "Pin" },
@@ -206,6 +246,17 @@ impl CommandSource for ClipboardView {
         let mut h = lock(&self.history);
         match action.0.as_str() {
             "paste" => Outcome::Effects(vec![Effect::Paste(EntryId(n))]),
+            "paste_plain" => {
+                if h.get(n)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|m| m.kind == Kind::Text)
+                {
+                    Outcome::Effects(vec![Effect::Paste(EntryId(n))])
+                } else {
+                    Outcome::Done
+                }
+            }
             "copy" => Outcome::Effects(vec![Effect::CopyEntry(EntryId(n))]),
             "pin" => {
                 let pinned = h.get(n).ok().flatten().is_some_and(|m| m.pinned);
@@ -214,6 +265,28 @@ impl CommandSource for ClipboardView {
                     Ok(()) => Outcome::Refresh,
                     Err(crate::Error::PinLimit) => failed("At most 100 entries can be pinned."),
                     Err(_) => failed("The history could not be changed."),
+                }
+            }
+            "queue_add" => {
+                if h.get(n).ok().flatten().is_some() {
+                    h.queue_mut().push(EntryId(n));
+                    Outcome::Stay {
+                        effects: vec![],
+                        select: Some(id.clone()),
+                    }
+                } else {
+                    Outcome::Done
+                }
+            }
+            "queue_next" => match h.pop_next_queued() {
+                Some(next) => Outcome::Effects(vec![Effect::Paste(next)]),
+                None => failed("The paste queue is empty."),
+            },
+            "queue_clear" => {
+                h.queue_mut().clear();
+                Outcome::Stay {
+                    effects: vec![],
+                    select: Some(id.clone()),
                 }
             }
             "delete" => match h.delete(n) {

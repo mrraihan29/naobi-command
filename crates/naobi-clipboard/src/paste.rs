@@ -3,6 +3,8 @@
 //! foreground and not elevated, send Ctrl+V, and about 300 ms later put the previous clipboard back
 //! unless another copy happened or that clipboard was meant to stay out of history.
 use crate::ports::Content;
+use naobi_core::ids::EntryId;
+use std::collections::VecDeque;
 use zeroize::Zeroizing;
 
 /// What goes on the clipboard: text, a picture (the PNG and its bitmap form, so every program can
@@ -138,4 +140,56 @@ fn put_back(board: &mut impl Pasteboard, snapshot: &Snapshot, written: u32) {
     if let Some(content) = &snapshot.content {
         board.restore(content);
     }
+}
+
+/// In-memory FIFO queue of clipboard entries waiting to be pasted sequentially.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PasteQueue {
+    entries: VecDeque<EntryId>,
+}
+
+impl PasteQueue {
+    pub fn push(&mut self, id: EntryId) {
+        self.entries.push_back(id);
+    }
+
+    pub fn pop_next(&mut self) -> Option<EntryId> {
+        self.entries.pop_front()
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    pub fn remove(&mut self, id: EntryId) {
+        self.entries.retain(|&queued| queued != id);
+    }
+
+    pub fn position(&self, id: EntryId) -> Option<usize> {
+        self.entries.iter().position(|&queued| queued == id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// Removes and pastes the next available queued entry through the standard paste-and-restore flow.
+pub fn paste_next(
+    queue: &mut PasteQueue,
+    target: Option<isize>,
+    board: &mut impl Pasteboard,
+    fg: &mut impl ForegroundOps,
+    mut resolve: impl FnMut(EntryId) -> Option<Payload>,
+) -> Option<(EntryId, Outcome)> {
+    while let Some(id) = queue.pop_next() {
+        if let Some(payload) = resolve(id) {
+            return Some((id, paste(&payload, target, board, fg)));
+        }
+    }
+    None
 }

@@ -208,7 +208,16 @@ fn r015_view_names_its_search_and_shows_the_copy_and_action_keys() {
         .iter()
         .filter_map(|a| a.shortcut.clone())
         .collect();
-    assert_eq!(keys, vec!["Enter", "Ctrl+Enter", "Ctrl+.", "Ctrl+X"]);
+    assert_eq!(
+        keys,
+        vec![
+            "Enter",
+            "Ctrl+Enter",
+            "Ctrl+Shift+Enter",
+            "Ctrl+.",
+            "Ctrl+X"
+        ]
+    );
 }
 
 fn facts(s: &Screen) -> Vec<(String, String)> {
@@ -281,4 +290,137 @@ fn r027_schema_version_unchanged() {
             .all(|m| !m.contains("clip_entry") && !m.contains("clip_payload")),
         "the clipboard tables and their facts come only from V1 stored data"
     );
+}
+
+fn ctrl_shift_enter() -> UiEvent {
+    UiEvent::Key(KeyChord {
+        key: Key::Enter,
+        ctrl: true,
+        alt: false,
+        shift: true,
+    })
+}
+
+// @R-015
+#[test]
+fn r015_ctrl_shift_enter_pastes_text_entry_and_skips_non_text_cleanly() {
+    let (mut l, h, _) = setup();
+    copy(&h, "plain text note");
+    let text_id = ids(&h)[0];
+    open(&mut l);
+    assert_eq!(
+        l.handle(ctrl_shift_enter()),
+        vec![Effect::Paste(EntryId(text_id)), Effect::Hide],
+        "Ctrl+Shift+Enter on text entry emits Paste and Hide"
+    );
+
+    h.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .on_change(Captured {
+            flags: Flags::default(),
+            marker: false,
+            owner_exe: None,
+            content: Content::Files(vec![r"C:.txt".into()]),
+        })
+        .unwrap_or_else(|e| panic!("on_change: {e}"));
+    open(&mut l);
+    assert!(
+        l.handle(ctrl_shift_enter()).is_empty(),
+        "Ctrl+Shift+Enter on non-text entry behaves cleanly without pasting or crashing"
+    );
+
+    l.handle(key(Key::K, true));
+    let panel = l.screen().action_panel.expect("panel");
+    let plain = panel
+        .actions
+        .iter()
+        .find(|a| a.label == "Paste as Plain Text")
+        .expect("Paste as Plain Text action");
+    assert!(plain.reason.is_some(), "disabled on non-text entry");
+}
+
+fn run_panel_action(l: &mut Launcher, label: &str) -> Vec<Effect> {
+    l.handle(key(Key::K, true));
+    l.handle(UiEvent::PanelFilter(label.into()));
+    let panel = l.screen().action_panel.expect("panel open");
+    assert_eq!(
+        panel.actions.first().map(|a| a.label.as_str()),
+        Some(label),
+        "expected action {label:?} in panel"
+    );
+    l.handle(key(Key::Enter, false))
+}
+
+// @R-015
+#[test]
+fn r015_paste_queue_actions_add_paste_next_and_clear_in_order() {
+    let (mut l, h, _) = setup();
+    copy(&h, "first queued");
+    copy(&h, "second queued");
+    // List is newest-first: [second, first].
+    let list_ids = ids(&h);
+    let second_id = list_ids[0];
+    let first_id = list_ids[1];
+    open(&mut l);
+
+    // Before queuing, the panel exposes all three queue actions (next/clear disabled).
+    l.handle(key(Key::K, true));
+    let labels: Vec<String> = l
+        .screen()
+        .action_panel
+        .expect("panel")
+        .actions
+        .iter()
+        .map(|a| a.label.clone())
+        .collect();
+    assert!(labels.contains(&"Add to paste queue".to_owned()));
+    assert!(labels.contains(&"Paste next in queue".to_owned()));
+    assert!(labels.contains(&"Clear paste queue".to_owned()));
+    l.handle(key(Key::Escape, false));
+
+    // Queue "first queued" (row 1), then "second queued" (row 0).
+    l.handle(key(Key::Down, false));
+    assert!(run_panel_action(&mut l, "Add to paste queue").is_empty());
+    l.handle(key(Key::Up, false));
+    assert!(run_panel_action(&mut l, "Add to paste queue").is_empty());
+
+    let subs: Vec<String> = l.screen().sections[0]
+        .rows
+        .iter()
+        .map(|r| r.subtitle.clone())
+        .collect();
+    assert!(subs[1].ends_with("Queue #1"), "{}", subs[1]);
+    assert!(subs[0].ends_with("Queue #2"), "{}", subs[0]);
+
+    // Paste next removes first_id and emits Paste(first_id) + Hide.
+    assert_eq!(
+        run_panel_action(&mut l, "Paste next in queue"),
+        vec![Effect::Paste(EntryId(first_id)), Effect::Hide]
+    );
+
+    // Re-open and verify second_id is now Queue #1 and pastes next.
+    open(&mut l);
+    assert!(l.screen().sections[0].rows[0]
+        .subtitle
+        .ends_with("Queue #1"));
+    assert_eq!(
+        run_panel_action(&mut l, "Paste next in queue"),
+        vec![Effect::Paste(EntryId(second_id)), Effect::Hide]
+    );
+
+    // Queue again and clear.
+    open(&mut l);
+    assert!(run_panel_action(&mut l, "Add to paste queue").is_empty());
+    assert!(run_panel_action(&mut l, "Clear paste queue").is_empty());
+    assert!(!l.screen().sections[0].rows[0].subtitle.contains("Queue"));
+    l.handle(key(Key::K, true));
+    let next_action = l
+        .screen()
+        .action_panel
+        .expect("panel")
+        .actions
+        .into_iter()
+        .find(|a| a.label == "Paste next in queue")
+        .expect("Paste next in queue");
+    assert!(next_action.reason.is_some(), "disabled after clear");
 }

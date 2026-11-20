@@ -111,6 +111,7 @@ pub struct History {
     index: Option<TextIndex>,
     /// When the index was last searched (T-014).
     used_ms: Option<i64>,
+    queue: crate::paste::PasteQueue,
 }
 
 fn clip(text: &str, max: usize) -> &str {
@@ -187,6 +188,7 @@ impl History {
             ignored: DEFAULT_IGNORED.iter().map(|s| (*s).to_owned()).collect(),
             index: None,
             used_ms: None,
+            queue: crate::paste::PasteQueue::default(),
         }
     }
 
@@ -561,6 +563,7 @@ impl History {
             .conn()
             .execute("DELETE FROM clip_entry WHERE id = ?1", [id])?;
         self.index = None;
+        self.queue.remove(naobi_core::ids::EntryId(id));
         Ok(())
     }
 
@@ -568,8 +571,27 @@ impl History {
     pub fn clear(&mut self) -> Result<usize, Error> {
         let n = self.db.conn().execute("DELETE FROM clip_entry", [])?;
         self.index = None;
+        self.queue.clear();
         // Give the freed pages back to the file.
         self.db.conn().execute_batch("PRAGMA incremental_vacuum;")?;
         Ok(n)
+    }
+
+    pub fn queue(&self) -> &crate::paste::PasteQueue {
+        &self.queue
+    }
+
+    pub fn queue_mut(&mut self) -> &mut crate::paste::PasteQueue {
+        &mut self.queue
+    }
+
+    /// Removes and returns the next existing queued entry, skipping entries evicted since queuing.
+    pub fn pop_next_queued(&mut self) -> Option<naobi_core::ids::EntryId> {
+        while let Some(id) = self.queue.pop_next() {
+            if self.get(id.0).ok().flatten().is_some() {
+                return Some(id);
+            }
+        }
+        None
     }
 }

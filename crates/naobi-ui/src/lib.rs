@@ -852,6 +852,42 @@ mod ui_check {
         r028_held_backspace_stays_in_the_view(&ui);
         r028_alt_number_runs_the_nth_visible_row(&ui, &window);
         r026_filter_is_last_and_keeps_focus(&ui, &window);
+        ctrl_shift_enter_forwards_chord(&ui);
+    }
+
+    fn ctrl_shift_enter_forwards_chord(ui: &AppWindow) {
+        use slint::platform::WindowEvent;
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let out = seen.clone();
+        wire_keys(ui, Rc::new(move |ev| out.borrow_mut().push(ev)));
+        ui.set_panel_open(false);
+        ui.set_query("".into());
+        ui.invoke_focus_input();
+        let ctrl: slint::SharedString = SlintKey::Control.into();
+        let shift: slint::SharedString = SlintKey::Shift.into();
+        let ret: slint::SharedString = SlintKey::Return.into();
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ctrl.clone() });
+        ui.window().dispatch_event(WindowEvent::KeyPressed {
+            text: shift.clone(),
+        });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ret.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ret });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: shift });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ctrl });
+        assert_eq!(
+            *seen.borrow(),
+            vec![UiEvent::Key(KeyChord {
+                key: Key::Enter,
+                ctrl: true,
+                alt: false,
+                shift: true,
+            })]
+        );
     }
 
     // @R-026

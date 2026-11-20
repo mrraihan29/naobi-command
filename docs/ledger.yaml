@@ -139,18 +139,19 @@ entries:
 
   - id: R-010
     type: requirement
-    version: 2
+    version: 3
     status: active
     topic: 7
-    answer: "setuju dengan semuanya!"
-    recommendation: "Tanpa login/akun; tidak ada koneksi keluar kecuali aksi eksplisit (buka URL di browser); jalan sebagai user biasa; modul yang butuh admin (fase 2, mis. Hosts editor) lewat helper terpisah yang minta elevasi hanya saat dipakai; OWASP ASVS 5.0 Level 1 untuk bab yang relevan + threat model STRIDE."
-    statement: "The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model."
+    answer: "setuju dengan semuanya! Version 3 (ADR-0008): hardened WinHttp in naobi-win32 permitted exclusively for daily / on-demand FX rate refresh over HTTPS to api.frankfurter.dev and www.ecb.europa.eu."
+    recommendation: "Tanpa login/akun; tidak ada koneksi keluar kecuali aksi eksplisit (buka URL di browser) atau refresh kurs harian via WinHttp HTTPS tervalidasi (ADR-0008); jalan sebagai user biasa; modul yang butuh admin (fase 2, mis. Hosts editor) lewat helper terpisah yang minta elevasi hanya saat dipakai; OWASP ASVS 5.0 Level 1 untuk bab yang relevan + threat model STRIDE."
+    statement: "The app has no accounts, runs at medium integrity as the signed-in user, makes no outbound network connection except when the owner explicitly opens a URL (a program the owner starts with a '>' command line is the owner's own process, not the app's) or for hardened WinHttp HTTPS FX rate fetches in naobi-win32 to the hardcoded host allowlist (api.frankfurter.dev, www.ecb.europa.eu) at most once per 24 hours or on an explicit refresh command (ADR-0008), and any phase-2 module needing admin rights runs in a separate helper elevated on demand. Security bar: OWASP ASVS 5.0 Level 1 where applicable, plus a STRIDE threat model."
     acceptance:
       - "The main process token is not elevated"
-      - "No socket is opened by the app or its own child processes during a 10-minute idle-and-use session without an explicit URL action; the session runs no '>' command line"
+      - "No socket is opened by the app or its own child processes during a 10-minute idle-and-use session without an explicit URL action when the FX cache is fresh or currency.auto_refresh is false; the session runs no '>' command line"
+      - "WinHttp FX fetches enforce HTTPS (TLS 1.2+ with OS cert validation), hardcoded host allowlist (api.frankfurter.dev, www.ecb.europa.eu), zero cookies or user data, 5 s timeout, and 256 KB max response size"
       - "STRIDE threats in the design report each have a mitigation, test or accepted risk"
     links:
-      tickets: ["NCMD-5@2", "NCMD-17@2", "NCMD-25@2", "NCMD-36@2"]
+      tickets: ["NCMD-5@3", "NCMD-17@3", "NCMD-25@3", "NCMD-36@3"]
 
   - id: D-001
     type: decision

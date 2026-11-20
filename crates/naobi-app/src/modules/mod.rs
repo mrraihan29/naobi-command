@@ -335,7 +335,7 @@ mod catalog {
             .map(|s| &**s)
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
             .collect();
-        let table: [(&str, &str); 16] = [
+        let table: [(&str, &str); 17] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -343,6 +343,7 @@ mod catalog {
             ("color history", "picker.history"),
             ("paste history", "clipboard.open"),
             ("clipboard", "clipboard.open"),
+            ("refresh currency rates", "calc.refresh_rates"),
             ("shutdown", "sys.shut_down"),
             ("power off", "sys.shut_down"),
             ("reboot", "sys.restart"),
@@ -392,7 +393,12 @@ mod catalog {
         );
         assert!(item("aot.toggle") && hotkey("topmost"), "always on top");
         assert!(item("awake.on"), "awake");
+        assert!(item("calc.refresh_rates"), "refresh currency rates");
         assert!(naobi_ui::has_own_glyph("dev"), "dev micro-tools glyph");
+        assert!(
+            naobi_ui::has_own_glyph("calc.refresh_rates"),
+            "refresh currency rates glyph"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
             let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];

@@ -39,6 +39,11 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("quicklink", "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18", ""),
     ("calc", "M5 9h14M5 15h14", ""),
     ("calc.history", "M5 9h14M5 15h14M12 4v3M12 17v3", ""),
+    (
+        "calc.refresh_rates",
+        "M4 12a8 8 0 0 1 13.7-5.7M20 4v5h-5M20 12a8 8 0 0 1-13.7 5.7M4 20v-5h5",
+        "",
+    ),
     ("dev", "M8 6L4 12l4 6M16 6l4 6-4 6M13 4l-2 16", ""),
     (
         "themes.open",
@@ -105,5 +110,6 @@ mod tests {
         assert_eq!(glyph("sys.lock").0, GLYPHS[0].1);
         assert_eq!(glyph("module.unknown"), GENERIC);
         assert!(has_own_glyph("aot.toggle") && !has_own_glyph("module.unknown"));
+        assert!(has_own_glyph("calc.refresh_rates"));
     }
 }

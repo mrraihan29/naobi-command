@@ -24,7 +24,7 @@ pub fn set_quicklinks(links: Vec<Quicklink>) {
 }
 
 pub fn register(m: &mut Modules) {
-    m.register_source(Box::new(CalcSource));
+    m.register_source(Box::new(CalcSource::with_now(now_ms)));
     m.register_source(Box::new(QuicklinkSource::new(quicklinks().clone())));
     m.register_source(Box::new(SystemSource::new(Arc::new(AppOps))));
     m.register_source(Box::new(RunSource::new(

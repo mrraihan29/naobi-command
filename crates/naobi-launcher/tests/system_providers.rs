@@ -59,7 +59,7 @@ fn rig_with(ops: FakeOps) -> Rig {
     let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
     let launcher = Launcher::new(
         vec![
-            Box::new(CalcSource),
+            Box::new(CalcSource::default()),
             Box::new(QuicklinkSource::new(links.clone())),
             Box::new(SystemSource::new(ops.clone())),
         ],
@@ -351,4 +351,42 @@ fn r020_a_click_while_the_action_panel_is_open_does_not_run_the_row_under_it() {
     assert!(r.launcher.screen().action_panel.is_some());
     assert_eq!(r.launcher.handle(UiEvent::RowActivated(0)), vec![]);
     assert!(r.ops.ran().is_empty());
+}
+
+// @R-014
+#[test]
+fn t4_timezone_date_and_epoch_copy_on_enter() {
+    // 2026-11-20T17:02:32Z
+    const NOW_MS: i64 = 1_795_194_152_000;
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+    let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+    let mut l = Launcher::new(
+        vec![Box::new(CalcSource::with_now(|| NOW_MS))],
+        Vec::new(),
+        frecency,
+        Box::new(Zero),
+    );
+
+    for (query, expected) in [
+        ("5pm est in wib", "05:00 WIB (+1d, UTC+7)"),
+        ("time in tokyo", "2026-11-21 02:02 JST (UTC+9)"),
+        ("days until 31 dec", "41 days"),
+        ("today + 14 days", "2026-12-04"),
+        ("1700000000", "2023-11-14T22:13:20Z"),
+        ("2023-11-14T22:13:20Z", "1700000000"),
+    ] {
+        type_text(&mut l, query);
+        let s = l.screen();
+        assert_eq!(titles(&s)[0], expected, "query {query:?}");
+        assert!(s.sections[0].rows[0].calculator, "query {query:?}");
+        assert_eq!(
+            l.handle(enter()),
+            vec![Effect::CopyText(expected.into()), Effect::Hide],
+            "enter on {query:?}"
+        );
+        l.show_root();
+    }
+
+    type_text(&mut l, "42");
+    assert!(titles(&l.screen()).is_empty(), "bare 42 shows no calc row");
 }

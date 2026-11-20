@@ -88,7 +88,11 @@ fn history(lines: &[&str]) -> RunHistory {
 fn launcher(history: Option<RunHistory>, frecency: Frecency) -> Launcher {
     let run = RunSource::new(history, lookup(), Box::new(|| T0 + 100 * SECOND));
     Launcher::new(
-        vec![Box::new(Decoy), Box::new(CalcSource), Box::new(run)],
+        vec![
+            Box::new(Decoy),
+            Box::new(CalcSource::default()),
+            Box::new(run),
+        ],
         vec![],
         frecency,
         Box::new(Clk),

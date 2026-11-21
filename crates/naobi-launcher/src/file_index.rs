@@ -183,11 +183,12 @@ impl FileIndex {
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
-             PRAGMA cache_size = -1024;
-             PRAGMA temp_store = MEMORY;
+             PRAGMA cache_size = -512;
+             PRAGMA temp_store = DEFAULT;
              PRAGMA mmap_size = 0;",
         )?;
         conn.execute_batch(SCHEMA_SQL)?;
+        let _ = conn.execute_batch("PRAGMA shrink_memory;");
         Ok(Self { conn })
     }
 
@@ -196,8 +197,8 @@ impl FileIndex {
         let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
         let conn = Connection::open_with_flags(path, flags)?;
         conn.execute_batch(
-            "PRAGMA cache_size = -1024;
-             PRAGMA temp_store = MEMORY;
+            "PRAGMA cache_size = -512;
+             PRAGMA temp_store = DEFAULT;
              PRAGMA mmap_size = 0;
              PRAGMA busy_timeout = 50;",
         )?;

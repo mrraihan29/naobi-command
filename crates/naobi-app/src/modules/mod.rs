@@ -9,6 +9,7 @@ pub mod clipboard_capture;
 pub mod files;
 pub mod icons;
 pub mod picker;
+pub mod scratchpad;
 pub mod themes;
 pub mod windows;
 
@@ -161,6 +162,7 @@ pub fn register_all(modules: &mut Modules) {
     files::register(modules);
     themes::register(modules);
     windows::register(modules);
+    scratchpad::register(modules);
 }
 
 #[cfg(test)]
@@ -344,7 +346,7 @@ mod catalog {
             .map(|s| &**s)
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
             .collect();
-        let table: [(&str, &str); 29] = [
+        let table: [(&str, &str); 30] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -374,6 +376,7 @@ mod catalog {
             ("recycle bin", "sys.empty_recycle_bin"),
             ("always on top", "aot.toggle"),
             ("topmost", "aot.toggle"),
+            ("scratchpad", "scratchpad.open"),
         ];
         let first = |q: &str| {
             // Apps, files and live open windows depend on the Owner's machine; leave them out.
@@ -421,9 +424,23 @@ mod catalog {
                     .contains(naobi_launcher::providers::windows::VIEW_ID),
             "window switcher"
         );
+        assert!(
+            item("scratchpad.open")
+                && c.views
+                    .contains(naobi_launcher::providers::scratchpad::VIEW_ID),
+            "scratchpad"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
-            let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];
+            let module = [
+                "sys.",
+                "win.",
+                "awake.",
+                "aot.",
+                "picker.",
+                "clipboard.",
+                "scratchpad.",
+            ];
             if module.iter().any(|p| id.starts_with(p)) {
                 assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");
             }

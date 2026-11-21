@@ -62,6 +62,7 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("clipboard.open", "M8 4h8v3H8zM6 6v14h12V6", ""),
     ("clipboard.clear", "M8 4h8v3H8zM6 6v14h12V6M9 11l6 6M15 11l-6 6", ""),
     ("win.open", "M4 8h11v10H4zM9 8V5h11v10h-5", ""),
+    ("scratchpad.open", "M5 4h14v16H5zM9 9h6M9 13h6M9 17h3", ""),
     // Rows that are not commands of a module.
     ("run", "M3 5h18v14H3zM7 10l3 2-3 2M12 15h5", ""),
     ("run.history", "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2", ""),
@@ -158,6 +159,7 @@ mod tests {
         }
         assert!(
             has_own_glyph("win.open")
+                && has_own_glyph("scratchpad.open")
                 && has_own_glyph("action.minimize")
                 && has_own_glyph("action.close")
         );

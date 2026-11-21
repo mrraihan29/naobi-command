@@ -6,5 +6,6 @@ pub mod dev;
 pub mod files;
 pub mod quicklink;
 pub mod run;
+pub mod scratchpad;
 pub mod system;
 pub mod windows;

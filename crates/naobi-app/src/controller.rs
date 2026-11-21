@@ -45,6 +45,8 @@ pub trait Host {
     fn load_icons(&mut self, keys: Vec<String>);
     /// Uses this Theme for the current Windows mode. `Err` is the message for the Owner.
     fn apply_theme(&mut self, id: &str) -> Result<(), String>;
+    /// Schedules `Controller::on_scratchpad_save_timer` for `generation` after `ms` milliseconds.
+    fn schedule_scratchpad_save(&mut self, generation: u64, ms: u64);
 }
 
 pub struct SystemClock;
@@ -224,8 +226,25 @@ impl Controller {
             return;
         }
         self.execute(effects, restore, host);
+        if let Some(generation) = self.launcher.take_pending_scratchpad_save() {
+            host.schedule_scratchpad_save(
+                generation,
+                naobi_launcher::providers::scratchpad::AUTOSAVE_DEBOUNCE_MS,
+            );
+        }
         self.ask_files(host);
         self.present(host);
+    }
+
+    /// Runs a debounced scratchpad autosave if `generation` is still current.
+    pub fn on_scratchpad_save_timer(&mut self, generation: u64, host: &mut dyn Host) {
+        let effects = self.launcher.flush_scratchpad_if_gen(generation);
+        if !effects.is_empty() {
+            self.execute(effects, true, host);
+            if host.is_visible() {
+                self.present(host);
+            }
+        }
     }
 
     /// Asks for file results when the root shows a new query (R-013). The rows trail the others.
@@ -468,6 +487,9 @@ mod tests {
         fn apply_theme(&mut self, id: &str) -> Result<(), String> {
             self.log.push(format!("theme {id}"));
             Ok(())
+        }
+        fn schedule_scratchpad_save(&mut self, generation: u64, ms: u64) {
+            self.log.push(format!("save_later {generation} {ms}"));
         }
     }
 
@@ -1174,6 +1196,9 @@ mod tests {
             fn apply_theme(&mut self, id: &str) -> Result<(), String> {
                 self.fake.apply_theme(id)
             }
+            fn schedule_scratchpad_save(&mut self, generation: u64, ms: u64) {
+                self.fake.schedule_scratchpad_save(generation, ms);
+            }
         }
 
         let fg = Arc::new(Mutex::new(Some(77)));
@@ -1294,5 +1319,122 @@ mod tests {
             h.log,
             vec!["hide".to_string(), format!("paste {second_id} Some(77)")]
         );
+    }
+
+    // @R-029
+    #[test]
+    fn r029_scratchpad_autosave_esc_copy_all_and_armed_clear_flow_through_controller() {
+        use naobi_core::ids::HotkeyId;
+        use naobi_launcher::providers::scratchpad::{
+            FileScratchpadStore, ScratchpadCommands, ScratchpadView, VIEW_ID,
+        };
+        use std::sync::Arc;
+
+        let dir = std::env::temp_dir().join(format!(
+            "naobi-controller-scratchpad-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("scratchpad.md");
+
+        let fdb = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(fdb, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        let launcher = Launcher::new(
+            vec![Box::new(ScratchpadCommands)],
+            vec![Box::new(ScratchpadView::new(Arc::new(
+                FileScratchpadStore::new(path.clone()),
+            )))],
+            frecency,
+            Box::new(Zero),
+        );
+        let mut m = crate::modules::Modules::new();
+        m.subscribe(
+            HotkeyId("scratchpad".into()),
+            Box::new(|_, cx| cx.open_view(ViewId(VIEW_ID.into()))),
+        );
+        let crate::modules::Parts { router, .. } = m.into_parts();
+        let mut c = Controller::new(launcher, router);
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
+
+        // 1) Open via optional hotkey -> shows single Launcher window in Scratchpad editor mode.
+        assert!(c.on_hotkey(&HotkeyId("scratchpad".into()), &mut h));
+        assert!(h.visible);
+        assert_eq!(
+            h.last_post.as_ref().and_then(|s| s.editor.as_deref()),
+            Some("")
+        );
+        h.log.clear();
+
+        // 2) Typing schedules debounced 500 ms save; stale timer is ignored, latest persists.
+        c.on_ui_event(UiEvent::ScratchpadChanged("draft 1".into()), &mut h);
+        c.on_ui_event(
+            UiEvent::ScratchpadChanged("draft 1\ndraft 2".into()),
+            &mut h,
+        );
+        let scheduled: Vec<u64> = h
+            .log
+            .iter()
+            .filter_map(|line| {
+                let rest = line.strip_prefix("save_later ")?;
+                rest.split_whitespace().next()?.parse::<u64>().ok()
+            })
+            .collect();
+        assert_eq!(scheduled.len(), 2);
+        c.on_scratchpad_save_timer(scheduled[0], &mut h);
+        assert!(!path.exists(), "stale timer must not save");
+        c.on_scratchpad_save_timer(scheduled[1], &mut h);
+        assert_eq!(
+            std::fs::read_to_string(&path).ok().as_deref(),
+            Some("draft 1\ndraft 2")
+        );
+
+        // 3) Esc saves immediate edit and hides hotkey-opened view with focus restore.
+        h.log.clear();
+        c.on_ui_event(UiEvent::ScratchpadChanged("saved on esc".into()), &mut h);
+        c.on_ui_event(key(Key::Escape, false), &mut h);
+        assert_eq!(h.log.last().map(String::as_str), Some("restore 77"));
+        assert!(!h.visible);
+        assert_eq!(
+            std::fs::read_to_string(&path).ok().as_deref(),
+            Some("saved on esc")
+        );
+
+        // 4) Re-open from root search (pushed view): Copy all copies full text, Armed Clear needs 2 Enters.
+        c.show(&mut h);
+        c.on_ui_event(UiEvent::TextChanged("scratchpad".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.last_post.as_ref().and_then(|s| s.editor.as_deref()),
+            Some("saved on esc")
+        );
+        h.log.clear();
+        c.on_ui_event(key(Key::K, true), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert!(h.log.contains(&"copy saved on esc".to_string()));
+        assert!(h.log.contains(&"close_later 120".to_string()));
+        c.finish_close(&mut h);
+
+        // Armed Clear scratchpad requires 2 Enters and clears both buffer and scratchpad.md.
+        c.show(&mut h);
+        c.on_ui_event(UiEvent::TextChanged("scratchpad".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        c.on_ui_event(key(Key::K, true), &mut h);
+        c.on_ui_event(key(Key::Down, false), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            std::fs::read_to_string(&path).ok().as_deref(),
+            Some("saved on esc")
+        );
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(std::fs::read_to_string(&path).ok().as_deref(), Some(""));
+        assert_eq!(
+            h.last_post.as_ref().and_then(|s| s.editor.as_deref()),
+            Some("")
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

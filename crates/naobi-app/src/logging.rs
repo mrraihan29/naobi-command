@@ -266,6 +266,71 @@ mod tests {
     }
 
     #[test]
+    fn d020_snippets_never_log_content_or_clipboard_payloads() {
+        use naobi_core::command::{CommandSource, Cx, Query};
+        use naobi_core::ids::ActionId;
+        use naobi_core::snippet::Snippet;
+        use naobi_launcher::providers::snippets::{
+            LocalDateTime, SnippetEnv, SnippetSet, SnippetSource,
+        };
+        use std::sync::Arc;
+
+        struct FakeSnippetEnv;
+        impl SnippetEnv for FakeSnippetEnv {
+            fn clipboard_text(&self) -> Option<String> {
+                Some("zq-clip-snip-secret".to_owned())
+            }
+            fn random16(&self) -> Option<[u8; 16]> {
+                Some([0x11; 16])
+            }
+            fn local_now(&self) -> LocalDateTime {
+                LocalDateTime {
+                    year: 2026,
+                    month: 11,
+                    day: 21,
+                    hour: 10,
+                    minute: 0,
+                    second: 0,
+                }
+            }
+        }
+
+        let dir = temp("snip-log");
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join(naobi_core::snippet::FILE_NAME);
+        std::fs::write(
+            &path,
+            "[[snippets]]\nname = \"zq-snip-name\"\nalias = \"zqalias\"\ntext = \"zq-snip-body {clipboard}\"\n",
+        )
+        .expect("write");
+
+        let text = capture(|| {
+            let _ = crate::modules::snippets::reload_and_apply(&path);
+            let set = SnippetSet::default();
+            set.set(vec![Snippet {
+                name: "zq-snip-name".into(),
+                alias: Some("zqalias".into()),
+                text: "zq-snip-body {clipboard}".into(),
+            }]);
+            let src = SnippetSource::new(set, Arc::new(FakeSnippetEnv));
+            let items = src.items(&Query::default());
+            for item in items.iter() {
+                let mut cx = Cx::default();
+                let _ = src.run(&item.id, ActionId("paste".into()), &mut cx);
+            }
+        });
+        for secret in [
+            "zq-snip-name",
+            "zqalias",
+            "zq-snip-body",
+            "zq-clip-snip-secret",
+        ] {
+            assert!(!text.contains(secret), "log leaked {secret}: {text}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn d020_log_has_command_id_no_content() {
         let text = capture(|| command("clip.paste", 3));
         assert!(text.contains("clip.paste"), "{text}");

@@ -16,6 +16,7 @@ pub enum ItemKind {
     Utility,
     Window,
     Emoji,
+    Snippet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

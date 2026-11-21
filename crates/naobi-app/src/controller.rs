@@ -1362,4 +1362,28 @@ mod tests {
         c.finish_close(&mut h);
         assert_eq!(h.log, vec!["hide".to_string(), "restore 77".to_string()]);
     }
+
+    #[test]
+    fn paste_text_runs_after_the_launcher_is_hidden_and_does_not_restore_focus() {
+        let mut c = controller_with(
+            Box::new(One(Outcome::Effects(vec![Effect::PasteText(
+                "expanded snippet".into(),
+            )]))),
+            Router::default(),
+        );
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
+        c.show(&mut h);
+        h.log.clear();
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.log,
+            vec![
+                "hide".to_string(),
+                "paste_text expanded snippet Some(77)".to_string()
+            ]
+        );
+    }
 }

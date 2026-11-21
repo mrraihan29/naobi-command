@@ -15,6 +15,7 @@ pub mod notice;
 pub mod paths;
 pub mod quicklink;
 pub mod settings;
+pub mod snippet;
 pub mod theme;
 pub mod theme_file;
 pub mod tokens;

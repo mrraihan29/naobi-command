@@ -426,3 +426,98 @@ fn r015_paste_queue_actions_add_paste_next_and_clear_in_order() {
         .unwrap_or_else(|| panic!("Paste next in queue"));
     assert!(next_action.reason.is_some(), "disabled after clear");
 }
+
+#[test]
+fn save_as_snippet_persists_text_entry_notifies_and_disables_non_text() {
+    use naobi_core::notice::NoticeKind;
+    use naobi_core::snippet::{SnippetsFile, FILE_NAME};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let dir = std::env::temp_dir().join(format!("naobi-clip-snip-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dir");
+
+    let clock = FakeClock::at(1_700_000_000_000);
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+    let shared = share(History::new(
+        db,
+        Box::new(TaggedCipher),
+        Box::new(clock.clone()),
+    ));
+    let saved_count = Arc::new(AtomicUsize::new(0));
+    let saved_clone = saved_count.clone();
+    let view = ClipboardView::new(shared.clone())
+        .with_snippets_dir(dir.clone())
+        .with_on_saved(Arc::new(move || {
+            saved_clone.fetch_add(1, Ordering::SeqCst);
+        }));
+
+    let fdb = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+    let frecency = Frecency::open(fdb, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+    let mut l = Launcher::new(
+        vec![Box::new(ClipboardCommands::new(shared.clone()))],
+        vec![Box::new(view)],
+        frecency,
+        Box::new(Zero),
+    );
+
+    copy(&shared, "SELECT * FROM users;\n-- {date}");
+    open(&mut l);
+
+    let effects = run_panel_action(&mut l, "Save as Snippet");
+    assert!(
+        matches!(
+            effects.as_slice(),
+            [Effect::Notice(n)] if n.kind == NoticeKind::Info && n.subject == "Snippets"
+        ),
+        "{effects:?}"
+    );
+    assert_eq!(saved_count.load(Ordering::SeqCst), 1);
+
+    let toml_path = dir.join(FILE_NAME);
+    let written = std::fs::read_to_string(&toml_path).expect("snippets.toml created");
+    let parsed = SnippetsFile::parse(&written).expect("valid snippets.toml");
+    assert_eq!(parsed.snippets.len(), 1);
+    assert_eq!(parsed.snippets[0].name, "SELECT * FROM users;");
+    assert_eq!(parsed.snippets[0].text, "SELECT * FROM users;\n-- {date}");
+
+    // Broken snippets.toml raises an Error notice and is not overwritten.
+    std::fs::write(&toml_path, "[[snippets]\nbad").expect("break");
+    let err_effects = run_panel_action(&mut l, "Save as Snippet");
+    assert!(
+        matches!(
+            err_effects.as_slice(),
+            [Effect::Notice(n)] if n.kind == NoticeKind::Error && n.subject == "Snippets"
+        ),
+        "{err_effects:?}"
+    );
+    assert_eq!(saved_count.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        std::fs::read_to_string(&toml_path).expect("kept"),
+        "[[snippets]\nbad"
+    );
+
+    // Non-text entry disables "Save as Snippet".
+    shared
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .on_change(Captured {
+            flags: Flags::default(),
+            marker: false,
+            owner_exe: None,
+            content: Content::Files(vec![r"C:\a.txt".into()]),
+        })
+        .unwrap_or_else(|e| panic!("on_change: {e}"));
+    open(&mut l);
+    l.handle(key(Key::K, true));
+    let panel = l.screen().action_panel.unwrap_or_else(|| panic!("panel"));
+    let save_action = panel
+        .actions
+        .iter()
+        .find(|a| a.label == "Save as Snippet")
+        .unwrap_or_else(|| panic!("Save as Snippet action"));
+    assert!(save_action.reason.is_some(), "disabled on non-text entry");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

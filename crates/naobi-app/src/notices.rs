@@ -56,6 +56,13 @@ impl NoticeCenter {
         self.active.len() != before
     }
 
+    /// Removes all active Notices with `subject`. True when any went.
+    pub fn clear_subject(&mut self, subject: &str) -> bool {
+        let before = self.active.len();
+        self.active.retain(|n| n.subject != subject);
+        self.active.len() != before
+    }
+
     /// Esc on the banner dismisses it. False when there is no banner, so Esc hides the Launcher instead.
     pub fn dismiss(&mut self) -> bool {
         self.active.pop_front().is_some()

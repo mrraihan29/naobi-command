@@ -11,11 +11,15 @@ use naobi_core::ids::{EntryId, HotkeyId, ViewId};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_win32::{clipboard, foreground, paste as win};
 use std::io;
+use std::sync::Arc;
+use zeroize::Zeroizing;
 
 pub fn register(m: &mut Modules) {
     let Some(history) = shared() else { return };
     m.register_source(Box::new(ClipboardCommands::new(history.clone())));
-    m.register_view(Box::new(ClipboardView::new(history)));
+    m.register_view(Box::new(
+        ClipboardView::new(history).with_on_saved(Arc::new(super::snippets::reload_now)),
+    ));
     // Alt+Shift+V opens the history; the controller shows the Launcher on it.
     m.subscribe(
         HotkeyId("clipboard".into()),
@@ -152,7 +156,7 @@ pub fn paste_entry(id: EntryId, target: Option<isize>, raise: fn(Notice)) {
     );
 }
 
-/// Pastes plain text (such as an emoji or symbol) via the D-019 snapshot-and-restore pipeline.
+/// Pastes plain text (from Snippets or Emoji) through the D-019 snapshot-and-restore pipeline.
 pub fn paste_text(text: String, target: Option<isize>, raise: fn(Notice)) {
     spawn_paste(
         move || Ok(Payload::Text(zeroize::Zeroizing::new(text))),
@@ -180,7 +184,7 @@ fn spawn_paste(
                 }
             };
             if let Outcome::Aborted(why) = paste(&payload, target, &mut Board, &mut Foreground) {
-                // The reason only (T-010): never the entry.
+                // The reason only (T-010): never the entry or snippet text.
                 tracing::info!(reason = ?why, "paste aborted");
                 raise(notice(abort_message(why), NoticeKind::Warning));
             }

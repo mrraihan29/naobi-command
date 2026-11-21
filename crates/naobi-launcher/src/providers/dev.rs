@@ -259,7 +259,7 @@ fn error_item(q: &Query, subject: &str, message: &str) -> Item {
     }
 }
 
-fn format_uuid_v4(mut bytes: [u8; 16]) -> String {
+pub(crate) fn format_uuid_v4(mut bytes: [u8; 16]) -> String {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     format!(

@@ -10,6 +10,7 @@ pub mod emoji;
 pub mod files;
 pub mod icons;
 pub mod picker;
+pub mod snippets;
 pub mod themes;
 pub mod windows;
 
@@ -163,6 +164,7 @@ pub fn register_all(modules: &mut Modules) {
     themes::register(modules);
     windows::register(modules);
     emoji::register(modules);
+    snippets::register(modules);
 }
 
 #[cfg(test)]
@@ -342,7 +344,7 @@ mod catalog {
         let parts = m.into_parts();
         // Root search ranks root sources only; pushed views are searched only after opening them.
         let sources: Vec<&dyn CommandSource> = parts.sources.iter().map(|s| &**s).collect();
-        let table: [(&str, &str); 32] = [
+        let table: [(&str, &str); 33] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -354,6 +356,7 @@ mod catalog {
             ("refresh currency rates", "calc.refresh_rates"),
             ("emoji", "emoji.open"),
             ("symbols", "emoji.open"),
+            ("snippets", "snip.open"),
             ("shutdown", "sys.shut_down"),
             ("power off", "sys.shut_down"),
             ("reboot", "sys.restart"),
@@ -431,6 +434,12 @@ mod catalog {
             item("emoji.open") && c.views.contains(naobi_launcher::providers::emoji::VIEW_ID),
             "emoji picker"
         );
+        assert!(
+            item("snip.open")
+                && c.views
+                    .contains(naobi_launcher::providers::snippets::VIEW_ID),
+            "snippets"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
             let module = [
@@ -441,6 +450,7 @@ mod catalog {
                 "picker.",
                 "clipboard.",
                 "emoji.",
+                "snip.",
             ];
             if module.iter().any(|p| id.starts_with(p)) {
                 assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");
@@ -448,7 +458,6 @@ mod catalog {
         }
         // Phase 2 (R-004): out-of-scope items remain absent from the build, by id or by title.
         let phase2 = [
-            "snippet",
             "ocr",
             "extractor",
             "remap",

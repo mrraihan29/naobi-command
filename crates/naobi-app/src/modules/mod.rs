@@ -9,6 +9,7 @@ pub mod clipboard_capture;
 pub mod files;
 pub mod icons;
 pub mod picker;
+pub mod snippets;
 pub mod themes;
 pub mod windows;
 
@@ -161,6 +162,7 @@ pub fn register_all(modules: &mut Modules) {
     files::register(modules);
     themes::register(modules);
     windows::register(modules);
+    snippets::register(modules);
 }
 
 #[cfg(test)]
@@ -344,7 +346,7 @@ mod catalog {
             .map(|s| &**s)
             .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
             .collect();
-        let table: [(&str, &str); 29] = [
+        let table: [(&str, &str); 30] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -353,6 +355,7 @@ mod catalog {
             ("paste history", "clipboard.open"),
             ("clipboard", "clipboard.open"),
             ("switch windows", "win.open"),
+            ("snippets", "snip.open"),
             ("shutdown", "sys.shut_down"),
             ("power off", "sys.shut_down"),
             ("reboot", "sys.restart"),
@@ -421,16 +424,29 @@ mod catalog {
                     .contains(naobi_launcher::providers::windows::VIEW_ID),
             "window switcher"
         );
+        assert!(
+            item("snip.open")
+                && c.views
+                    .contains(naobi_launcher::providers::snippets::VIEW_ID),
+            "snippets"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
-            let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];
+            let module = [
+                "sys.",
+                "win.",
+                "awake.",
+                "aot.",
+                "picker.",
+                "clipboard.",
+                "snip.",
+            ];
             if module.iter().any(|p| id.starts_with(p)) {
                 assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");
             }
         }
-        // Phase 2 (R-004): none of it is in the build, by id or by title.
+        // Phase 2 (R-004): none of the out-of-scope items are in the build, by id or by title.
         let phase2 = [
-            "snippet",
             "ocr",
             "extractor",
             "remap",

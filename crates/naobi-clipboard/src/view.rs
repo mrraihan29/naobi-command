@@ -9,6 +9,7 @@ use naobi_core::ids::{ActionId, EntryId, ItemId, ViewId};
 use naobi_core::item::{Action, Item, ItemKind};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::view_source::{Fact, Preview, ViewSource};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// The history is read by the Launcher and written by the capture thread.
@@ -37,6 +38,14 @@ fn failed(message: &str) -> Outcome {
         message: message.into(),
         kind: NoticeKind::Error,
     })
+}
+
+fn snippet_notice(message: &str, kind: NoticeKind) -> Notice {
+    Notice {
+        subject: "Snippets".into(),
+        message: message.into(),
+        kind,
+    }
 }
 
 fn entry_id(id: &ItemId) -> Option<i64> {
@@ -114,13 +123,31 @@ fn entry_facts(meta: &EntryMeta, payload: &[u8], now: i64) -> Vec<Fact> {
     ]
 }
 
+pub type OnSaved = Arc<dyn Fn() + Send + Sync>;
+
 pub struct ClipboardView {
     history: Shared,
+    snippets_dir: Option<PathBuf>,
+    on_saved: Option<OnSaved>,
 }
 
 impl ClipboardView {
     pub fn new(history: Shared) -> Self {
-        Self { history }
+        Self {
+            history,
+            snippets_dir: None,
+            on_saved: None,
+        }
+    }
+
+    pub fn with_snippets_dir(mut self, dir: PathBuf) -> Self {
+        self.snippets_dir = Some(dir);
+        self
+    }
+
+    pub fn with_on_saved(mut self, on_saved: OnSaved) -> Self {
+        self.on_saved = Some(on_saved);
+        self
     }
 
     fn row(h: &History, m: EntryMeta, now: i64) -> Option<Item> {
@@ -220,6 +247,16 @@ impl CommandSource for ClipboardView {
                     Err("Paste queue is empty.".into())
                 },
             },
+            Action {
+                id: ActionId("save_snippet".into()),
+                label: "Save as Snippet".into(),
+                shortcut: None,
+                enabled: if is_text {
+                    Ok(())
+                } else {
+                    Err("Only text entries can be saved as snippets.".into())
+                },
+            },
             action(
                 "pin",
                 if pinned { "Unpin" } else { "Pin" },
@@ -287,6 +324,57 @@ impl CommandSource for ClipboardView {
                 Outcome::Stay {
                     effects: vec![],
                     select: Some(id.clone()),
+                }
+            }
+            "save_snippet" => {
+                let text = match h.get(n) {
+                    Ok(Some(m)) if m.kind == Kind::Text => match h.payload(n) {
+                        Ok(Some(bytes)) => String::from_utf8_lossy(&bytes).into_owned(),
+                        Ok(None) => return Outcome::Done,
+                        Err(_) => {
+                            return Outcome::Failed(snippet_notice(UNREADABLE, NoticeKind::Error))
+                        }
+                    },
+                    Ok(Some(_)) => {
+                        return Outcome::Failed(snippet_notice(
+                            "Only text entries can be saved as snippets.",
+                            NoticeKind::Error,
+                        ))
+                    }
+                    Ok(None) => return Outcome::Done,
+                    Err(_) => {
+                        return Outcome::Failed(snippet_notice(
+                            "The history could not be read.",
+                            NoticeKind::Error,
+                        ))
+                    }
+                };
+                drop(h);
+                let Some(dir) = self
+                    .snippets_dir
+                    .clone()
+                    .or_else(naobi_core::paths::settings_dir)
+                else {
+                    return Outcome::Failed(snippet_notice(
+                        "The settings folder is not known.",
+                        NoticeKind::Error,
+                    ));
+                };
+                let path = dir.join(naobi_core::snippet::FILE_NAME);
+                match naobi_core::snippet::append_snippet(&path, &text) {
+                    Ok(_) => {
+                        if let Some(cb) = &self.on_saved {
+                            cb();
+                        }
+                        Outcome::Stay {
+                            effects: vec![Effect::Notice(snippet_notice(
+                                "Saved as snippet.",
+                                NoticeKind::Info,
+                            ))],
+                            select: Some(id.clone()),
+                        }
+                    }
+                    Err(msg) => Outcome::Failed(snippet_notice(&msg, NoticeKind::Error)),
                 }
             }
             "delete" => match h.delete(n) {

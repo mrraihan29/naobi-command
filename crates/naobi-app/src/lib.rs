@@ -135,6 +135,9 @@ impl Host for AppHost {
     fn paste(&mut self, id: naobi_core::ids::EntryId, target: Option<isize>) {
         modules::clipboard::paste_entry(id, target, |n| raise_notice(&mut state(), n));
     }
+    fn paste_text(&mut self, text: String, target: Option<isize>) {
+        modules::clipboard::paste_text(text, target, |n| raise_notice(&mut state(), n));
+    }
     fn search_files(&mut self, generation: u64, query: &str) {
         modules::files::request(generation, query);
     }
@@ -516,6 +519,26 @@ fn on_settings_changed(path: &Path) {
     to_modules(|c, h| c.refresh(h));
 }
 
+/// Runs on the index worker once the settings folder settled: reloads `snippets.toml`,
+/// clears resolved snippet notices, raises any new parse errors, and refreshes the Launcher.
+fn on_snippets_changed(path: &Path) {
+    let notices = modules::snippets::reload_and_apply(path);
+    {
+        let mut s = state();
+        let cleared = s.notices.clear_subject(modules::snippets::NOTICE_SUBJECT);
+        for n in notices {
+            raise_notice(&mut s, n);
+        }
+        if cleared {
+            sync_tray(&s.notices);
+            if let Some(ui) = s.ui.clone() {
+                post_view(&ui, &s);
+            }
+        }
+    }
+    to_modules(|c, h| c.refresh(h));
+}
+
 /// A module's catalog was rebuilt on the index worker: a failure raises its Notice, and the Launcher
 /// ranks the current query again. Before the window is ready the controller is not there; `on_ready`
 /// ranks once when it is, so nothing is lost.
@@ -633,7 +656,8 @@ pub fn run() -> anyhow::Result<()> {
         let _ = logging::init(&dir.join("logs"));
     }
     let settings_dir = naobi_core::paths::settings_dir();
-    let (settings, boot_notices) = match settings_dir.as_deref().map(settings_runtime::startup) {
+    let (settings, mut boot_notices) = match settings_dir.as_deref().map(settings_runtime::startup)
+    {
         Some(Ok((_, settings, notices))) => (settings, notices),
         Some(Err(e)) => {
             tracing::warn!(error = ?e.kind(), "settings file was not created");
@@ -641,6 +665,11 @@ pub fn run() -> anyhow::Result<()> {
         }
         None => (Settings::default(), Vec::new()),
     };
+    if let Some(dir) = settings_dir.as_deref() {
+        boot_notices.extend(modules::snippets::reload_and_apply(
+            &dir.join(naobi_core::snippet::FILE_NAME),
+        ));
+    }
     sync_autostart(settings.general.autostart);
     modules::builtin::set_quicklinks(settings.quicklinks.clone());
     modules::builtin::set_calc_rem_base_px(settings.calculator.rem_base_px);
@@ -669,11 +698,15 @@ pub fn run() -> anyhow::Result<()> {
             run: Box::new(move || on_themes_changed(&themes)),
         });
         let path = dir.join(settings_runtime::FILE_NAME);
+        let snippets_path = dir.join(naobi_core::snippet::FILE_NAME);
         jobs.push(index_worker::Job {
             dirs: vec![(dir, false)],
             initial: false,
             settle: None,
-            run: Box::new(move || on_settings_changed(&path)),
+            run: Box::new(move || {
+                on_settings_changed(&path);
+                on_snippets_changed(&snippets_path);
+            }),
         });
     }
     jobs.extend(modules::apps::job(on_catalog));

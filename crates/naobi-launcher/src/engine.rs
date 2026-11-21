@@ -854,6 +854,7 @@ fn action_style(id: &str) -> ActionStyle {
         "queue_clear" => ("action.queue_clear", 1, false),
         "folder" => ("action.folder", 1, false),
         "duplicate" => ("action.copy", 1, false),
+        "save_snippet" => ("action.save_snippet", 1, false),
         "edit" => ("action.edit", 1, false),
         "pin" => ("action.pin", 1, false),
         "minimize" => ("action.minimize", 1, false),
@@ -917,6 +918,7 @@ fn icon_key_of(item: &Item) -> Option<String> {
         ItemKind::Command => Some(format!("g:{}", item.id.0)),
         ItemKind::Theme => Some("g:themes.open".to_owned()),
         ItemKind::Window => Some("g:win.open".to_owned()),
+        ItemKind::Snippet => Some("g:snip.open".to_owned()),
         ItemKind::Quicklink => Some("g:quicklink".to_owned()),
         ItemKind::Calculator => Some("g:calc".to_owned()),
         ItemKind::Utility => Some("g:dev".to_owned()),
@@ -965,6 +967,7 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::Theme => "Theme",
         ItemKind::Utility => "Utility",
         ItemKind::Window => "Open window",
+        ItemKind::Snippet => "Snippet",
     }
 }
 
@@ -987,6 +990,7 @@ mod tests {
             ("queue_clear", "action.queue_clear", 1, false),
             ("folder", "action.folder", 1, false),
             ("duplicate", "action.copy", 1, false),
+            ("save_snippet", "action.save_snippet", 1, false),
             ("edit", "action.edit", 1, false),
             ("pin", "action.pin", 1, false),
             ("minimize", "action.minimize", 1, false),

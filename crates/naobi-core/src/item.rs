@@ -15,6 +15,7 @@ pub enum ItemKind {
     Theme,
     Utility,
     Window,
+    Snippet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

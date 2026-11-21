@@ -62,6 +62,7 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("clipboard.open", "M8 4h8v3H8zM6 6v14h12V6", ""),
     ("clipboard.clear", "M8 4h8v3H8zM6 6v14h12V6M9 11l6 6M15 11l-6 6", ""),
     ("win.open", "M4 8h11v10H4zM9 8V5h11v10h-5", ""),
+    ("snip.open", "M9 4H6v6l-2 2 2 2v6h3M15 4h3v6l2 2-2 2v6h-3", ""),
     // Rows that are not commands of a module.
     ("run", "M3 5h18v14H3zM7 10l3 2-3 2M12 15h5", ""),
     ("run.history", "M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2", ""),
@@ -85,6 +86,7 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("action.queue_next", "M4 6h10M4 11h10M4 16h6M14 13l5 3-5 3z", ""),
     ("action.queue_clear", "M4 6h10M4 11h10M4 16h6M14 13l5 5M19 13l-5 5", ""),
     ("action.copy", "M9 9h11v11H9zM5 15V4h11", ""),
+    ("action.save_snippet", "M9 4H6v6l-2 2 2 2v6h3M15 4h3v6l2 2-2 2v6h-3M12 9v6M9 12h6", ""),
     ("action.folder", "M3 6h6l2 3h10v10H3z", ""),
     ("action.pin", "M14 4l6 6-5 1-4 4-1 5-3-3-4 4 4-4-3-3 5-1 4-4z", ""),
     ("action.minimize", "M6 17h12", ""),
@@ -160,6 +162,8 @@ mod tests {
             has_own_glyph("win.open")
                 && has_own_glyph("action.minimize")
                 && has_own_glyph("action.close")
+                && has_own_glyph("snip.open")
+                && has_own_glyph("action.save_snippet")
         );
     }
 }

@@ -11,11 +11,15 @@ use naobi_core::ids::{EntryId, HotkeyId, ViewId};
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_win32::{clipboard, foreground, paste as win};
 use std::io;
+use std::sync::Arc;
+use zeroize::Zeroizing;
 
 pub fn register(m: &mut Modules) {
     let Some(history) = shared() else { return };
     m.register_source(Box::new(ClipboardCommands::new(history.clone())));
-    m.register_view(Box::new(ClipboardView::new(history)));
+    m.register_view(Box::new(
+        ClipboardView::new(history).with_on_saved(Arc::new(super::snippets::reload_now)),
+    ));
     // Alt+Shift+V opens the history; the controller shows the Launcher on it.
     m.subscribe(
         HotkeyId("clipboard".into()),
@@ -141,21 +145,41 @@ pub fn copy_entry(id: EntryId) -> io::Result<()> {
 /// Enter: runs the paste sequence on a thread of its own, so the UI thread never waits for the
 /// target window or for the 300 ms before the restore. `raise` shows a Notice.
 pub fn paste_entry(id: EntryId, target: Option<isize>, raise: fn(Notice)) {
+    paste_with(target, raise, move || {
+        let payload = shared().and_then(|h| payload_of(&h, id));
+        if payload.is_none() {
+            raise(notice(
+                "That entry is no longer there.",
+                NoticeKind::Warning,
+            ));
+        }
+        payload
+    });
+}
+
+/// Pastes plain text (from Snippets or Emoji) through the same D-019 snapshot-and-restore flow.
+pub fn paste_text(text: String, target: Option<isize>, raise: fn(Notice)) {
+    paste_with(target, raise, move || {
+        Some(Payload::Text(Zeroizing::new(text)))
+    });
+}
+
+fn paste_with(
+    target: Option<isize>,
+    raise: fn(Notice),
+    resolve: impl FnOnce() -> Option<Payload> + Send + 'static,
+) {
     let spawned = std::thread::Builder::new()
         .name("paste".into())
         .spawn(move || {
             // One paste at a time: a second one would snapshot the first one's entry as "previous".
             static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
             let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-            let Some(payload) = shared().and_then(|h| payload_of(&h, id)) else {
-                raise(notice(
-                    "That entry is no longer there.",
-                    NoticeKind::Warning,
-                ));
+            let Some(payload) = resolve() else {
                 return;
             };
             if let Outcome::Aborted(why) = paste(&payload, target, &mut Board, &mut Foreground) {
-                // The reason only (T-010): never the entry.
+                // The reason only (T-010): never the entry or snippet text.
                 tracing::info!(reason = ?why, "paste aborted");
                 raise(notice(abort_message(why), NoticeKind::Warning));
             }

@@ -38,6 +38,8 @@ pub trait Host {
     /// Pastes a history entry into `target`, the window that had focus before the Launcher. The
     /// Launcher is already hidden; the host does the sequence off the UI thread.
     fn paste(&mut self, id: EntryId, target: Option<isize>);
+    /// Pastes plain text into `target`, the window that had focus before the Launcher.
+    fn paste_text(&mut self, text: String, target: Option<isize>);
     /// Starts a file search for `query`; the answer comes back through
     /// `Controller::on_file_results` with the same `generation`.
     fn search_files(&mut self, generation: u64, query: &str);
@@ -296,6 +298,7 @@ impl Controller {
         let mut launched = false;
         let mut copied = false;
         let mut paste = None;
+        let mut paste_text = None;
         let mut hotkeys = Vec::new();
         // Where a paste goes: the window that had focus before the Launcher (`close` forgets it).
         let target = self.previous;
@@ -341,6 +344,7 @@ impl Controller {
                 Effect::PushView(_) => {}
                 // The paste runs after the Launcher is hidden.
                 Effect::Paste(id) => paste = Some(id),
+                Effect::PasteText(text) => paste_text = Some(text),
                 Effect::RunHotkey(id) => hotkeys.push(id),
                 Effect::ApplyTheme(id) => match host.apply_theme(&id) {
                     Ok(()) => self.applied = true,
@@ -363,11 +367,14 @@ impl Controller {
             let focused_other = matches!(host.foreground(), Some(w) if Some(w) != self.previous);
             self.close(
                 host,
-                restore && !launched && paste.is_none() && !focused_other,
+                restore && !launched && paste.is_none() && paste_text.is_none() && !focused_other,
             );
         }
         if let Some(id) = paste {
             host.paste(id, target);
+        }
+        if let Some(text) = paste_text {
+            host.paste_text(text, target);
         }
         // After the Launcher is hidden and focus is back: the handlers act on the window in front.
         for id in hotkeys {
@@ -458,6 +465,9 @@ mod tests {
         }
         fn paste(&mut self, id: EntryId, target: Option<isize>) {
             self.log.push(format!("paste {} {target:?}", id.0));
+        }
+        fn paste_text(&mut self, text: String, target: Option<isize>) {
+            self.log.push(format!("paste_text {text} {target:?}"));
         }
         fn search_files(&mut self, generation: u64, query: &str) {
             self.log.push(format!("search {generation} {query}"));
@@ -1165,6 +1175,9 @@ mod tests {
             fn paste(&mut self, id: EntryId, target: Option<isize>) {
                 self.fake.paste(id, target);
             }
+            fn paste_text(&mut self, text: String, target: Option<isize>) {
+                self.fake.paste_text(text, target);
+            }
             fn search_files(&mut self, generation: u64, query: &str) {
                 self.fake.search_files(generation, query);
             }
@@ -1293,6 +1306,30 @@ mod tests {
         assert_eq!(
             h.log,
             vec!["hide".to_string(), format!("paste {second_id} Some(77)")]
+        );
+    }
+
+    #[test]
+    fn paste_text_runs_after_the_launcher_is_hidden_and_does_not_restore_focus() {
+        let mut c = controller_with(
+            Box::new(One(Outcome::Effects(vec![Effect::PasteText(
+                "expanded snippet".into(),
+            )]))),
+            Router::default(),
+        );
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
+        c.show(&mut h);
+        h.log.clear();
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.log,
+            vec![
+                "hide".to_string(),
+                "paste_text expanded snippet Some(77)".to_string()
+            ]
         );
     }
 }

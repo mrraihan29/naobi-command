@@ -201,7 +201,7 @@ const DEFAULT_HOTKEYS: [(&str, u8, u32); 4] = [
 ];
 
 /// Valid `[hotkeys]` slots that have no default global binding.
-pub const OPTIONAL_HOTKEYS: [&str; 1] = ["window_switcher"];
+pub const OPTIONAL_HOTKEYS: [&str; 2] = ["window_switcher", "snippets"];
 
 /// D-024: Google, GitHub, YouTube, naobi.dev.
 const DEFAULT_QUICKLINKS: [(&str, &str, &str); 4] = [
@@ -465,6 +465,7 @@ clipboard = "Alt+Shift+V"
 color_picker = "Win+Shift+C"
 topmost = "Win+Ctrl+T"
 # window_switcher = "Alt+Shift+W" # optional, off by default
+# snippets = "Alt+Shift+S" # optional, off by default
 
 [ui]
 text_scale = 1.0 # 1.0, 1.125 or 1.25

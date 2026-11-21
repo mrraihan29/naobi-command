@@ -52,6 +52,8 @@ pub struct Launcher {
     generation: u64,
     rows: Vec<Hit>,
     files: Vec<Hit>,
+    /// The last row (R-034): a source's fallback, listed after files, never ranked.
+    fallback: Option<Hit>,
     /// The root source that owns the current query (a `>` command line): its rows only, unranked.
     claimed: Option<usize>,
     selected: usize,
@@ -86,6 +88,7 @@ impl Launcher {
             generation: 0,
             rows: Vec::new(),
             files: Vec::new(),
+            fallback: None,
             claimed: None,
             selected: 0,
             panel: None,
@@ -235,6 +238,7 @@ impl Launcher {
             self.rows
                 .iter()
                 .chain(&self.files)
+                .chain(&self.fallback)
                 .position(|h| *h.id() == id)
         });
         self.selected = found.unwrap_or(0);
@@ -268,6 +272,7 @@ impl Launcher {
         {
             return false;
         }
+        let at = self.selected_hit().map(|h| h.id().clone());
         self.files = items
             .into_iter()
             .take(MAX_FILE_ROWS)
@@ -289,6 +294,17 @@ impl Launcher {
         };
         self.ranker
             .mark_title_letters(highlight_query, &mut self.files);
+        // The selection stays on its row (a ranked row or the fallback), not on its index.
+        if let Some(id) = at {
+            let found = self
+                .rows
+                .iter()
+                .chain(&self.files)
+                .chain(&self.fallback)
+                .position(|h| *h.id() == id);
+            self.selected =
+                found.unwrap_or_else(|| self.selected.min(self.row_count().saturating_sub(1)));
+        }
         true
     }
 
@@ -331,6 +347,12 @@ impl Launcher {
             sections.push(Section {
                 header: Some("Files".to_owned()),
                 rows: self.files.iter().map(&to_row).collect(),
+            });
+        }
+        if let Some(h) = &self.fallback {
+            sections.push(Section {
+                header: (!self.files.is_empty()).then(|| "Web".to_owned()),
+                rows: vec![to_row(h)],
             });
         }
         // A root source that is still loading shows one status row at the end. It is not a hit, so
@@ -501,6 +523,7 @@ impl Launcher {
 
     /// Loads the sync rows for the current mode and query. Empty text lists the most frecent.
     fn load_rows(&mut self) {
+        self.fallback = None;
         if self.active_editor().is_some() {
             self.rows.clear();
             self.files.clear();
@@ -577,6 +600,18 @@ impl Launcher {
         self.rows = self
             .ranker
             .rank(&text, pool, |id| frecency.decayed_opens(id, now), limit);
+        if self.mode == Mode::Root && !text.is_empty() {
+            self.fallback = self.sources.iter().enumerate().find_map(|(i, s)| {
+                s.fallback(&q).map(|item| Hit {
+                    src: Source::Root(i),
+                    item,
+                    exact: false,
+                    total: 0.0,
+                    opens: 0.0,
+                    matched: Vec::new(),
+                })
+            });
+        }
         self.files.clear();
         self.selected = 0;
     }
@@ -926,11 +961,15 @@ impl Launcher {
     }
 
     fn selected_hit(&self) -> Option<&Hit> {
-        self.rows.iter().chain(self.files.iter()).nth(self.selected)
+        self.rows
+            .iter()
+            .chain(&self.files)
+            .chain(&self.fallback)
+            .nth(self.selected)
     }
 
     fn row_count(&self) -> usize {
-        self.rows.len() + self.files.len()
+        self.rows.len() + self.files.len() + usize::from(self.fallback.is_some())
     }
 
     fn source(&self, src: Source) -> &dyn CommandSource {

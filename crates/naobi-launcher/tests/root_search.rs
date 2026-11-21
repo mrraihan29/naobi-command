@@ -395,6 +395,130 @@ fn r012_late_file_rows_do_not_block_sync_rows() {
     assert!(l.file_results(current, 0, vec![item("file:n", "n")]));
 }
 
+/// A root source with one last-row fallback (R-034) for every query; a `>` query is claimed.
+struct Web;
+
+impl CommandSource for Web {
+    fn items(&self, q: &Query) -> Arc<[Item]> {
+        if q.text.starts_with('>') {
+            vec![item("cmd:run", "Run it")].into()
+        } else {
+            Vec::new().into()
+        }
+    }
+    fn claims(&self, q: &Query) -> bool {
+        q.text.starts_with('>')
+    }
+    fn fallback(&self, q: &Query) -> Option<Item> {
+        let mut i = item("qf:web", &format!("Search Web for {}", q.text));
+        i.kind = ItemKind::Quicklink;
+        Some(i)
+    }
+    fn actions(&self, _id: &ItemId) -> Vec<Action> {
+        vec![action("open", "Open")]
+    }
+    fn run(&self, id: &ItemId, act: ActionId, _cx: &mut Cx) -> Outcome {
+        Outcome::Effects(vec![Effect::Launch(LaunchTarget::ShellItem(format!(
+            "{}:{}",
+            id.0, act.0
+        )))])
+    }
+}
+
+fn web_engine(apps: Vec<Item>, views: Vec<Box<dyn ViewSource>>) -> Launcher {
+    let db = Db::open_in_memory().unwrap_or_else(|e| panic!("in-memory db: {e}"));
+    let frecency =
+        Frecency::open(db, T0_MS / 1000).unwrap_or_else(|e| panic!("frecency open: {e}"));
+    Launcher::new(
+        vec![Box::new(Apps { items: apps }), Box::new(Web)],
+        views,
+        frecency,
+        Box::new(FakeClock(Rc::new(Cell::new(T0_MS)))),
+    )
+}
+
+// @R-034
+#[test]
+fn r034_fallback_is_the_last_row_after_ranked_and_file_rows_and_never_the_start_selection() {
+    let mut l = web_engine(vec![item("app:notes", "Notes")], vec![]);
+    type_text(&mut l, "notes");
+    assert_eq!(titles(&l.screen()), vec!["Notes", "Search Web for notes"]);
+    assert_eq!(l.selected(), 0);
+
+    let gen = l.generation();
+    let mut file = item("file:notes.txt", "notes.txt");
+    file.kind = ItemKind::File;
+    assert!(l.file_results(gen, 0, vec![file]));
+    let s = l.screen();
+    assert_eq!(
+        titles(&s),
+        vec!["Notes", "notes.txt", "Search Web for notes"]
+    );
+    assert_eq!(s.sections.len(), 3);
+    assert_eq!(s.sections[1].header.as_deref(), Some("Files"));
+    assert_eq!(s.sections[2].header.as_deref(), Some("Web"));
+    assert_eq!(l.selected(), 0);
+
+    // Down twice reaches the fallback; Enter runs it through the source that owns it.
+    key(&mut l, Key::Down);
+    key(&mut l, Key::Down);
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![launch("qf:web:open"), Effect::Hide]
+    );
+}
+
+// @R-034
+#[test]
+fn r034_late_file_rows_do_not_move_the_selection_off_the_fallback_row() {
+    let mut l = web_engine(vec![item("app:notes", "Notes")], vec![]);
+    type_text(&mut l, "notes");
+    key(&mut l, Key::Down);
+    assert_eq!(l.selected(), 1, "the fallback is selected");
+    let gen = l.generation();
+    let mut file = item("file:notes.txt", "notes.txt");
+    file.kind = ItemKind::File;
+    assert!(l.file_results(gen, 0, vec![file]));
+    assert_eq!(l.selected(), 2, "still the fallback, now after the file");
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![launch("qf:web:open"), Effect::Hide]
+    );
+}
+
+// @R-034
+#[test]
+fn r034_without_files_the_fallback_has_no_header_and_is_the_only_row_when_nothing_matches() {
+    let mut l = web_engine(vec![item("app:notes", "Notes")], vec![]);
+    type_text(&mut l, "zzzz qqqq");
+    let s = l.screen();
+    assert_eq!(titles(&s), vec!["Search Web for zzzz qqqq"]);
+    assert_eq!(s.sections.len(), 1);
+    assert_eq!(s.sections[0].header, None);
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![launch("qf:web:open"), Effect::Hide]
+    );
+}
+
+// @R-034
+#[test]
+fn r034_empty_text_a_claimed_query_and_a_pushed_view_list_no_fallback() {
+    let mut l = web_engine(vec![item("push:clip", "Clipboard")], clip_view(false));
+    assert!(!titles(&l.screen()).iter().any(|t| t.starts_with("Search")));
+    type_text(&mut l, "> echo");
+    assert_eq!(titles(&l.screen()), vec!["Run it"]);
+
+    type_text(&mut l, "clipboard");
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![Effect::PushView(ViewId("clip".into()))]
+    );
+    assert!(!titles(&l.screen()).iter().any(|t| t.starts_with("Search")));
+    type_text(&mut l, "entry");
+    assert!(!titles(&l.screen()).iter().any(|t| t.starts_with("Search")));
+}
+
 // @R-020
 #[test]
 fn r020_single_enter_arms_second_executes() {

@@ -288,9 +288,16 @@ fn r021_gh_react_native_opens_url_with_percent20() {
 fn r021_an_edited_alias_works_after_the_settings_reload() {
     let mut r = rig();
     type_text(&mut r.launcher, "docs tokio");
-    assert!(titles(&r.launcher.screen())
-        .iter()
-        .all(|t| !t.starts_with("Search")));
+    // No `docs` alias yet: only the last-row fallback (R-034) is a Search row.
+    let searches: Vec<String> = titles(&r.launcher.screen())
+        .into_iter()
+        .filter(|t| t.starts_with("Search"))
+        .collect();
+    assert_eq!(searches, vec!["Search Google for docs tokio"]);
+    assert_eq!(
+        titles(&r.launcher.screen()).last().map(String::as_str),
+        Some("Search Google for docs tokio")
+    );
     r.links.set(vec![Quicklink {
         name: "Docs".into(),
         alias: "docs".into(),
@@ -321,6 +328,144 @@ fn r021_a_quicklink_removed_before_enter_is_a_notice_not_a_launch() {
         matches!(effects.as_slice(), [Effect::Notice(n)] if n.subject == "Quicklink"),
         "{effects:?}"
     );
+}
+
+fn search_titles(l: &Launcher) -> Vec<String> {
+    titles(&l.screen())
+        .into_iter()
+        .filter(|t| t.starts_with("Search"))
+        .collect()
+}
+
+// @R-034
+#[test]
+fn r034_text_without_an_alias_lists_one_google_row_that_opens_the_default_browser() {
+    let mut r = rig();
+    type_text(&mut r.launcher, "claude update terbaru");
+    let s = r.launcher.screen();
+    assert_eq!(titles(&s), vec!["Search Google for claude update terbaru"]);
+    assert_eq!(
+        s.sections[0].rows[0].subtitle,
+        "https://www.google.com/search?q=claude%20update%20terbaru"
+    );
+    assert_eq!(
+        r.launcher.handle(enter()),
+        vec![
+            Effect::Launch(LaunchTarget::Url(
+                "https://www.google.com/search?q=claude%20update%20terbaru".into()
+            )),
+            Effect::Hide
+        ]
+    );
+}
+
+// @R-034
+#[test]
+fn r034_empty_or_blank_text_lists_no_fallback_row() {
+    let mut r = rig();
+    type_text(&mut r.launcher, "");
+    assert!(search_titles(&r.launcher).is_empty());
+    type_text(&mut r.launcher, "   ");
+    assert!(search_titles(&r.launcher).is_empty());
+}
+
+// @R-034
+#[test]
+fn r034_a_first_word_that_is_an_alias_lists_no_fallback_row() {
+    let mut r = rig();
+    for bare in ["g", "gh", "G"] {
+        type_text(&mut r.launcher, bare);
+        assert!(search_titles(&r.launcher).is_empty(), "{bare}");
+    }
+    type_text(&mut r.launcher, "G foo");
+    assert_eq!(search_titles(&r.launcher), vec!["Search Google for foo"]);
+    type_text(&mut r.launcher, "gh react");
+    assert_eq!(search_titles(&r.launcher), vec!["Search GitHub for react"]);
+}
+
+// @R-034
+#[test]
+fn r034_without_a_g_quicklink_there_is_no_row_and_an_edited_g_is_used() {
+    let mut r = rig();
+    r.links.set(vec![Quicklink {
+        name: "Docs".into(),
+        alias: "docs".into(),
+        url: "https://docs.rs/search?query={query}".into(),
+    }]);
+    r.launcher.refresh_sources();
+    type_text(&mut r.launcher, "tokio runtime");
+    assert!(search_titles(&r.launcher).is_empty());
+
+    r.links.set(vec![Quicklink {
+        name: "Bing".into(),
+        alias: "g".into(),
+        url: "https://www.bing.com/search?q={query}".into(),
+    }]);
+    r.launcher.refresh_sources();
+    assert_eq!(
+        search_titles(&r.launcher),
+        vec!["Search Bing for tokio runtime"]
+    );
+    assert_eq!(
+        r.launcher.handle(enter()),
+        vec![
+            Effect::Launch(LaunchTarget::Url(
+                "https://www.bing.com/search?q=tokio%20runtime".into()
+            )),
+            Effect::Hide
+        ]
+    );
+}
+
+// @R-034
+#[test]
+fn r034_g_removed_before_enter_gives_the_static_notice_without_the_query() {
+    let mut r = rig();
+    type_text(&mut r.launcher, "secret words");
+    r.links.set(Vec::new());
+    let effects = r.launcher.handle(enter());
+    assert!(
+        matches!(
+            effects.as_slice(),
+            [Effect::Notice(n)]
+                if n.subject == "Quicklink" && n.message == "That quicklink is no longer defined."
+        ),
+        "{effects:?}"
+    );
+}
+
+// @R-034
+#[test]
+fn r034_enter_on_the_fallback_row_records_no_frecency_and_the_row_is_a_quicklink_row() {
+    let path = std::env::temp_dir().join(format!("naobi-r034-frec-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let db = Db::open(&path, || [3; 16]).unwrap_or_else(|e| panic!("db: {e}"));
+    let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+    let links = QuicklinkSet::default();
+    links.set(Settings::default().quicklinks);
+    let mut l = Launcher::new(
+        vec![Box::new(QuicklinkSource::new(links))],
+        Vec::new(),
+        frecency,
+        Box::new(Zero),
+    );
+    type_text(&mut l, "private words");
+    let row = &l.screen().sections[0].rows[0];
+    assert_eq!(row.kind, "Quicklink");
+    assert_eq!(row.icon_key.as_deref(), Some("g:quicklink"));
+    assert!(row.mono_subtitle);
+    assert!(matches!(
+        l.handle(enter()).as_slice(),
+        [Effect::Launch(LaunchTarget::Url(_)), Effect::Hide]
+    ));
+    drop(l);
+    let conn = rusqlite::Connection::open(&path).unwrap_or_else(|e| panic!("conn: {e}"));
+    let n: i64 = conn
+        .query_row("SELECT COUNT(*) FROM frecency", [], |r| r.get(0))
+        .unwrap_or(-1);
+    assert_eq!(n, 0);
+    drop(conn);
+    let _ = std::fs::remove_file(&path);
 }
 
 // @R-014

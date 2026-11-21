@@ -65,7 +65,7 @@ A system command that has had its first Enter and waits for the second Enter to 
 _Avoid_: pending, confirm dialog
 
 **Quicklink**:
-A named URL template with a `{query}` placeholder and an alias, opened in the default browser.
+A named URL template with a `{query}` placeholder and an alias, opened in the default browser. Text whose first word is no alias gets one last fallback row built from the `g` quicklink.
 _Avoid_: bookmark, search engine, web search
 
 **System command**:

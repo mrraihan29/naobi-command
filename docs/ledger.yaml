@@ -952,3 +952,20 @@ entries:
     statement: "Two additional built-in themes are approved by the Owner: tokyo-haze (Tokyo Haze) and neon-night (Neon Night), both dark, opaque, with the palettes recorded in docs/design/DESIGN_SYSTEM.md; muted and danger are lighter than the Owner's first sketch so every pair meets WCAG 2.2 AA. They are read-only, have no Edit file action, can be duplicated into a Custom theme with base stone, and reserve their ids against theme files. The Windows-mode type has no new variants."
     links:
       decisions: ["D-043@2", "D-030@2"]
+
+  - id: R-034
+    type: requirement
+    version: 1
+    status: active
+    topic: 4
+    answer: "Owner, 2026-11-21: placement \"Selalu paling bawah (Recommended)\"; browser \"Browser default (Recommended)\"; engine \"Pakai Quicklink 'g' (Recommended)\"; ledger \"Ya, R- baru (Recommended)\"; the two architect defaults (no row when the first word is a quicklink alias; 'Web' header only when Files is above) \"setuju dengan itu!\" (2026-11-21)"
+    recommendation: "Teks root tanpa alias mendapat satu baris terakhir 'Search <name> for <query>' dari quicklink g; Enter membukanya di browser default."
+    statement: "When the Launcher root query is not empty, its first word is not a quicklink alias and a quicklink with alias g exists, the Launcher lists one last row, after every ranked and File row, titled 'Search <name> for <query>'; Enter opens that quicklink's URL with the whole query percent-encoded in the default browser; the row is never ranked, never counted in frecency, and its query text is never logged. It extends R-021 to text without an alias and uses the g quicklink of D-024."
+    acceptance:
+      - "With default quicklinks and no other match, typing claude update terbaru lists one row, Search Google for claude update terbaru, and Enter opens https://www.google.com/search?q=claude%20update%20terbaru"
+      - "The row is after every ranked row and after the Files section, and the ranked rows keep their order"
+      - "An empty or whitespace-only query, a query whose first word is a quicklink alias, a > query, a pushed view, and a settings file with no g quicklink list no such row"
+      - "Enter on the row records no frecency and no Notice or log line contains the query"
+    links:
+      decisions: ["D-024@1", "D-001@1"]
+      tickets: ["NCMD-56@1"]

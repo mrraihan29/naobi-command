@@ -89,6 +89,11 @@ pub trait CommandSource: Send + Sync {
     fn claims(&self, _q: &Query) -> bool {
         false
     }
+    /// One row listed after every ranked and file row, never ranked and never counted (R-034).
+    /// Only the root asks, for a non-empty, unclaimed query.
+    fn fallback(&self, _q: &Query) -> Option<Item> {
+        None
+    }
     fn actions(&self, id: &ItemId) -> Vec<Action>;
     fn run(&self, id: &ItemId, action: ActionId, cx: &mut Cx) -> Outcome;
 }

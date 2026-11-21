@@ -6,6 +6,7 @@ pub mod awake;
 pub mod builtin;
 pub mod clipboard;
 pub mod clipboard_capture;
+pub mod emoji;
 pub mod files;
 pub mod icons;
 pub mod picker;
@@ -161,6 +162,7 @@ pub fn register_all(modules: &mut Modules) {
     files::register(modules);
     themes::register(modules);
     windows::register(modules);
+    emoji::register(modules);
 }
 
 #[cfg(test)]
@@ -338,13 +340,9 @@ mod catalog {
         let mut m = Modules::new();
         register_all(&mut m);
         let parts = m.into_parts();
-        let sources: Vec<&dyn CommandSource> = parts
-            .sources
-            .iter()
-            .map(|s| &**s)
-            .chain(parts.views.iter().map(|v| v.as_ref() as &dyn CommandSource))
-            .collect();
-        let table: [(&str, &str); 29] = [
+        // Root search ranks root sources only; pushed views are searched only after opening them.
+        let sources: Vec<&dyn CommandSource> = parts.sources.iter().map(|s| &**s).collect();
+        let table: [(&str, &str); 31] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -353,6 +351,8 @@ mod catalog {
             ("paste history", "clipboard.open"),
             ("clipboard", "clipboard.open"),
             ("switch windows", "win.open"),
+            ("emoji", "emoji.open"),
+            ("symbols", "emoji.open"),
             ("shutdown", "sys.shut_down"),
             ("power off", "sys.shut_down"),
             ("reboot", "sys.restart"),
@@ -421,14 +421,26 @@ mod catalog {
                     .contains(naobi_launcher::providers::windows::VIEW_ID),
             "window switcher"
         );
+        assert!(
+            item("emoji.open") && c.views.contains(naobi_launcher::providers::emoji::VIEW_ID),
+            "emoji picker"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
-            let module = ["sys.", "win.", "awake.", "aot.", "picker.", "clipboard."];
+            let module = [
+                "sys.",
+                "win.",
+                "awake.",
+                "aot.",
+                "picker.",
+                "clipboard.",
+                "emoji.",
+            ];
             if module.iter().any(|p| id.starts_with(p)) {
                 assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");
             }
         }
-        // Phase 2 (R-004): none of it is in the build, by id or by title.
+        // Phase 2 (R-004): out-of-scope items remain absent from the build, by id or by title.
         let phase2 = [
             "snippet",
             "ocr",
@@ -438,7 +450,6 @@ mod catalog {
             "rename",
             "hosts",
             "peek",
-            "emoji",
             "resizer",
         ];
         let named = c

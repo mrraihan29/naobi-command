@@ -392,11 +392,21 @@ impl Launcher {
     /// A view with nothing to list says so; the root has the "Indexing" status row or nothing.
     fn empty_view(&self) -> Option<EmptyView> {
         let (Mode::Pushed(i) | Mode::Hotkey(i)) = self.mode else {
-            // A `>` query with no run history yet (R-024).
-            return (self.claimed.is_some() && self.rows.is_empty()).then(|| EmptyView {
-                title: "No command lines run yet".to_owned(),
-                helper: "Type a command line after > and press Enter".to_owned(),
-            });
+            // A `>` query with no run history yet (R-024), or another claimed root query with no hits.
+            if self.claimed.is_some() && self.rows.is_empty() {
+                return Some(if self.query.trim_start().starts_with('>') {
+                    EmptyView {
+                        title: "No command lines run yet".to_owned(),
+                        helper: "Type a command line after > and press Enter".to_owned(),
+                    }
+                } else {
+                    EmptyView {
+                        title: "No results".to_owned(),
+                        helper: String::new(),
+                    }
+                });
+            }
+            return None;
         };
         if !self.rows.is_empty() {
             return None;
@@ -662,6 +672,7 @@ impl Launcher {
                 | ItemKind::CommandLine
                 | ItemKind::Utility
                 | ItemKind::Window
+                | ItemKind::Emoji
         );
         if matches!(hit.src, Source::Root(_)) && !failed && !ephemeral {
             let now = self.clock.now_ms() / 1000;
@@ -917,6 +928,7 @@ fn icon_key_of(item: &Item) -> Option<String> {
         ItemKind::Command => Some(format!("g:{}", item.id.0)),
         ItemKind::Theme => Some("g:themes.open".to_owned()),
         ItemKind::Window => Some("g:win.open".to_owned()),
+        ItemKind::Emoji => Some("g:emoji.open".to_owned()),
         ItemKind::Quicklink => Some("g:quicklink".to_owned()),
         ItemKind::Calculator => Some("g:calc".to_owned()),
         ItemKind::Utility => Some("g:dev".to_owned()),
@@ -965,6 +977,7 @@ fn kind_name(k: ItemKind) -> &'static str {
         ItemKind::Theme => "Theme",
         ItemKind::Utility => "Utility",
         ItemKind::Window => "Open window",
+        ItemKind::Emoji => "Emoji",
     }
 }
 

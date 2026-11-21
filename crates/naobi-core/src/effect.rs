@@ -43,6 +43,8 @@ pub enum Effect {
     Notice(Notice),
     PushView(ViewId),
     Paste(EntryId),
+    /// Pastes plain text (such as an emoji or symbol) into the Paste target (D-019).
+    PasteText(String),
     /// Puts a clipboard entry on the clipboard without pasting it (Ctrl+Enter in the history).
     CopyEntry(EntryId),
     /// Runs a module's hotkey handlers once the Launcher is hidden and focus is back, so a command

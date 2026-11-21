@@ -12,7 +12,6 @@ use naobi_core::notice::{Notice, NoticeKind};
 use naobi_win32::{clipboard, foreground, paste as win};
 use std::io;
 use std::sync::Arc;
-use zeroize::Zeroizing;
 
 pub fn register(m: &mut Modules) {
     let Some(history) = shared() else { return };

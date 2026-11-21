@@ -7,6 +7,7 @@ pub mod emoji;
 pub mod files;
 pub mod quicklink;
 pub mod run;
+pub mod scratchpad;
 pub mod snippets;
 pub mod system;
 pub mod windows;

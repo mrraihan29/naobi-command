@@ -247,6 +247,25 @@ mod tests {
         assert_eq!(name_for_id(id as usize), Some(HotkeyId("snippets".into())));
     }
 
+    #[test]
+    fn optional_scratchpad_hotkey_registers_when_configured() {
+        let mut fake = Fake::default();
+        let parsed = Settings::parse("[hotkeys]\nscratchpad = \"Alt+Shift+N\"\n").unwrap();
+        let mut reg = Registry::new(&parsed.settings);
+        assert!(reg.register_all(&mut fake).is_empty());
+        assert_eq!(fake.live.len(), 5);
+        let id = reg
+            .entries
+            .iter()
+            .find(|(_, name, _)| name.0 == "scratchpad")
+            .map(|(id, _, _)| *id)
+            .expect("scratchpad registered");
+        assert_eq!(
+            name_for_id(id as usize),
+            Some(HotkeyId("scratchpad".into()))
+        );
+    }
+
     // @R-008
     #[test]
     fn r008_conflict_is_reported_and_other_chords_still_register() {

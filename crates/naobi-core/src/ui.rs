@@ -61,6 +61,8 @@ pub struct Screen {
     pub facts: Vec<crate::view_source::Fact>,
     /// The Theme previewed by the selected row (R-031).
     pub theme_preview: Option<String>,
+    /// Active multiline editor text (Scratchpad view); `None` when a list view is shown.
+    pub editor: Option<String>,
     pub empty: Option<EmptyView>,
     pub loading: bool,
     pub reduced_motion: bool,
@@ -221,6 +223,7 @@ impl From<ViewModel> for Screen {
             preview: None,
             facts: Vec::new(),
             theme_preview: None,
+            editor: None,
             empty: None,
             loading: false,
             reduced_motion: false,
@@ -268,6 +271,8 @@ pub enum UiEvent {
     Back,
     /// The action panel's filter text changed.
     PanelFilter(String),
+    /// The Scratchpad multiline editor text changed.
+    ScratchpadChanged(String),
     Dismissed,
 }
 

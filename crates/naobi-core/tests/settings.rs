@@ -343,6 +343,22 @@ fn snippets_hotkey_is_optional_with_no_default_binding() {
     assert!(Settings::parse("[hotkeys]\nsnippets = \"S\"\n").is_err());
 }
 
+#[test]
+fn scratchpad_hotkey_is_optional_with_no_default_binding() {
+    let def = Settings::parse("").unwrap();
+    assert!(!def.settings.hotkeys.contains_key("scratchpad"));
+    assert!(!Settings::default().hotkeys.contains_key("scratchpad"));
+
+    let bound = Settings::parse("[hotkeys]\nscratchpad = \"Alt+Shift+N\"\n").unwrap();
+    assert!(bound.reports.is_empty());
+    assert_eq!(
+        bound.settings.hotkeys.get("scratchpad"),
+        Some(&chord(ALT | SHIFT, b'N'.into()))
+    );
+
+    assert!(Settings::parse("[hotkeys]\nscratchpad = \"N\"\n").is_err());
+}
+
 // @R-013
 #[test]
 fn r013_files_settings_default_and_custom_parse_strictly() {

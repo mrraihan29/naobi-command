@@ -302,6 +302,12 @@ fn apply(ui: &AppWindow, s: Screen) {
     ui.set_panel_height(panel.map_or(0.0, model::panel_height));
     let actions = panel.map(model::actions).unwrap_or_default();
     ui.set_actions(ModelRc::new(VecModel::from(actions)));
+
+    let editor_text = s.editor.as_deref().unwrap_or("");
+    if ui.get_editor_text().as_str() != editor_text {
+        ui.set_editor_text(editor_text.into());
+    }
+    ui.set_editor_active(s.editor.is_some());
 }
 
 /// Puts `items` into the list's model row by row, so a keystroke reuses the row elements it can
@@ -451,6 +457,8 @@ pub fn run(
         ui.on_back_activated(move || f(UiEvent::Back));
         let f = on_event.clone();
         ui.on_panel_filter_edited(move |text| f(UiEvent::PanelFilter(text.into())));
+        let f = on_event.clone();
+        ui.on_scratchpad_changed(move |text| f(UiEvent::ScratchpadChanged(text.into())));
         wire_keys(&ui, on_event);
     }
     // The native window exists only once the loop runs: park it off-screen, then cloak it in setup.
@@ -769,11 +777,26 @@ mod ui_check {
         loading.loading = true;
         loading.text_scale = 1.25;
 
+        let mut scratchpad = screen(vec![]);
+        scratchpad.view = ViewBar {
+            name: "Scratchpad".into(),
+            marked: true,
+            back: true,
+        };
+        scratchpad.placeholder = "Write Markdown notes...".into();
+        scratchpad.editor = Some("# Scratchpad\n- [x] Single-window view\n- [ ] Autosave".into());
+        scratchpad.footer = FooterView {
+            secondary: Some("Copy all".into()),
+            actions: true,
+            ..FooterView::default()
+        };
+
         vec![
             ("results", results),
             ("action-panel", panel),
             ("clipboard-image", clipboard),
             ("themes", themes),
+            ("scratchpad", scratchpad),
             ("notice-armed", notice),
             ("empty", empty),
             ("loading-scale-125", loading),
@@ -853,6 +876,102 @@ mod ui_check {
         r028_alt_number_runs_the_nth_visible_row(&ui, &window);
         r026_filter_is_last_and_keeps_focus(&ui, &window);
         ctrl_shift_enter_forwards_chord(&ui);
+        scratchpad_editor_forwards_edits_and_chords(&ui);
+    }
+
+    fn scratchpad_editor_forwards_edits_and_chords(ui: &AppWindow) {
+        use slint::platform::WindowEvent;
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let out = seen.clone();
+        ui.on_scratchpad_changed(move |text| {
+            out.borrow_mut()
+                .push(UiEvent::ScratchpadChanged(text.into()))
+        });
+        let keys = seen.clone();
+        wire_keys(ui, Rc::new(move |ev| keys.borrow_mut().push(ev)));
+
+        let mut s = Screen::from(ViewModel::default());
+        s.view = ViewBar {
+            name: "Scratchpad".into(),
+            marked: true,
+            back: true,
+        };
+        s.editor = Some(String::new());
+        s.footer = FooterView {
+            secondary: Some("Copy all".into()),
+            actions: true,
+            ..FooterView::default()
+        };
+        apply(ui, s.clone());
+        ui.invoke_focus_input();
+
+        // Typing and Enter insert into TextInput rather than activating a list row.
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: "a".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: "a".into() });
+        let ret: slint::SharedString = SlintKey::Return.into();
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ret.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ret.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: "b".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: "b".into() });
+        assert_eq!(ui.get_editor_text().as_str(), "a\nb");
+        assert!(seen
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, UiEvent::ScratchpadChanged(t) if t == "a\nb")));
+        assert!(!seen.borrow().iter().any(|e| matches!(e, UiEvent::Key(_))));
+
+        // Ctrl+K, Ctrl+Enter, and Esc forward as UiEvent::Key chords.
+        seen.borrow_mut().clear();
+        let ctrl: slint::SharedString = SlintKey::Control.into();
+        let esc: slint::SharedString = SlintKey::Escape.into();
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ctrl.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: "k".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: "k".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ret.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ret });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ctrl });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: esc.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: esc });
+        assert_eq!(
+            *seen.borrow(),
+            vec![
+                UiEvent::Key(KeyChord {
+                    key: Key::K,
+                    ctrl: true,
+                    alt: false,
+                    shift: false
+                }),
+                UiEvent::Key(KeyChord {
+                    key: Key::Enter,
+                    ctrl: true,
+                    alt: false,
+                    shift: false
+                }),
+                UiEvent::Key(KeyChord {
+                    key: Key::Escape,
+                    ctrl: false,
+                    alt: false,
+                    shift: false
+                }),
+            ]
+        );
+
+        // Reset back to non-editor screen.
+        apply(ui, Screen::from(ViewModel::default()));
     }
 
     fn ctrl_shift_enter_forwards_chord(ui: &AppWindow) {

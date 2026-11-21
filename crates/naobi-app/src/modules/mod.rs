@@ -10,6 +10,7 @@ pub mod emoji;
 pub mod files;
 pub mod icons;
 pub mod picker;
+pub mod scratchpad;
 pub mod snippets;
 pub mod themes;
 pub mod windows;
@@ -165,6 +166,7 @@ pub fn register_all(modules: &mut Modules) {
     windows::register(modules);
     emoji::register(modules);
     snippets::register(modules);
+    scratchpad::register(modules);
 }
 
 #[cfg(test)]
@@ -344,7 +346,7 @@ mod catalog {
         let parts = m.into_parts();
         // Root search ranks root sources only; pushed views are searched only after opening them.
         let sources: Vec<&dyn CommandSource> = parts.sources.iter().map(|s| &**s).collect();
-        let table: [(&str, &str); 33] = [
+        let table: [(&str, &str); 34] = [
             ("color picker", "picker.pick"),
             ("picker", "picker.pick"),
             ("eyedropper", "picker.pick"),
@@ -378,6 +380,7 @@ mod catalog {
             ("recycle bin", "sys.empty_recycle_bin"),
             ("always on top", "aot.toggle"),
             ("topmost", "aot.toggle"),
+            ("scratchpad", "scratchpad.open"),
         ];
         let first = |q: &str| {
             // Apps, files and live open windows depend on the Owner's machine; leave them out.
@@ -440,6 +443,12 @@ mod catalog {
                     .contains(naobi_launcher::providers::snippets::VIEW_ID),
             "snippets"
         );
+        assert!(
+            item("scratchpad.open")
+                && c.views
+                    .contains(naobi_launcher::providers::scratchpad::VIEW_ID),
+            "scratchpad"
+        );
         // Every module command has a drawn icon of its own (NCMD-29), not the generic one.
         for (id, _) in &c.items {
             let module = [
@@ -451,6 +460,7 @@ mod catalog {
                 "clipboard.",
                 "emoji.",
                 "snip.",
+                "scratchpad.",
             ];
             if module.iter().any(|p| id.starts_with(p)) {
                 assert!(naobi_ui::has_own_glyph(id), "no glyph for {id}");

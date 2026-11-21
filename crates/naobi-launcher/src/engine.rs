@@ -57,6 +57,7 @@ pub struct Launcher {
     selected: usize,
     panel: Option<Panel>,
     notice: Option<Notice>,
+    pending_save: Option<u64>,
 }
 
 impl Launcher {
@@ -89,6 +90,7 @@ impl Launcher {
             selected: 0,
             panel: None,
             notice: None,
+            pending_save: None,
         };
         l.refresh();
         l
@@ -111,6 +113,8 @@ impl Launcher {
 
     /// Every show starts at the root with an empty query (D-021).
     pub fn show_root(&mut self) {
+        let _ = self.flush_active_editor();
+        self.pending_save = None;
         self.mode = Mode::Root;
         self.reset();
     }
@@ -119,11 +123,33 @@ impl Launcher {
     pub fn show_view(&mut self, id: &ViewId) -> bool {
         match self.view_index(id) {
             Some(i) if self.views[i].opened_by_hotkey() => {
+                let _ = self.flush_active_editor();
+                self.pending_save = None;
                 self.mode = Mode::Hotkey(i);
                 self.reset();
+                self.open_active_editor();
                 true
             }
             _ => false,
+        }
+    }
+
+    /// Returns the newest debounced scratchpad save generation waiting for a timer, if any.
+    pub fn take_pending_scratchpad_save(&mut self) -> Option<u64> {
+        self.pending_save.take()
+    }
+
+    /// Flushes the active editor view if its current edit generation still matches `generation`.
+    pub fn flush_scratchpad_if_gen(&mut self, generation: u64) -> Vec<Effect> {
+        let Some(i) = self.active_editor() else {
+            return Vec::new();
+        };
+        match self.views[i].flush_editor(Some(generation)) {
+            Ok(()) => Vec::new(),
+            Err(n) => {
+                self.notice = Some(n.clone());
+                vec![Effect::Notice(n)]
+            }
         }
     }
 
@@ -158,8 +184,11 @@ impl Launcher {
             }
             UiEvent::Back => {
                 if matches!(self.mode, Mode::Pushed(_)) && self.panel.is_none() {
+                    let fx = self.flush_active_editor();
+                    self.pending_save = None;
                     self.mode = Mode::Root;
                     self.reset();
+                    return fx;
                 }
                 vec![]
             }
@@ -178,9 +207,19 @@ impl Launcher {
                 }
                 vec![]
             }
+            UiEvent::ScratchpadChanged(text) => {
+                self.armed.disarm();
+                if let Some(i) = self.active_editor() {
+                    self.pending_save = self.views[i].set_editor_text(text);
+                }
+                vec![]
+            }
             UiEvent::Dismissed => {
                 self.armed.disarm();
-                vec![Effect::Hide]
+                let mut fx = self.flush_active_editor();
+                self.pending_save = None;
+                fx.push(Effect::Hide);
+                fx
             }
         }
     }
@@ -333,8 +372,15 @@ impl Launcher {
                     .collect(),
             });
         }
-        let target = self.selected_hit();
-        let (preview, facts) = self.preview();
+        let editor_idx = self.active_editor();
+        let editor = editor_idx.and_then(|i| self.views[i].editor_text());
+        let editor_target = editor_idx.and_then(|i| self.editor_target(i));
+        let target = editor_target.as_ref().or_else(|| self.selected_hit());
+        let (preview, facts) = if editor_idx.is_some() {
+            (None, Vec::new())
+        } else {
+            self.preview()
+        };
         let footer = FooterView {
             primary: target.and_then(|h| self.primary_label(h, armed == Some(h.id()))),
             secondary: target.and_then(|h| self.secondary_label(h)),
@@ -359,7 +405,12 @@ impl Launcher {
             preview,
             facts,
             theme_preview: self.theme_preview(),
-            empty: self.empty_view(),
+            editor,
+            empty: if editor_idx.is_some() {
+                None
+            } else {
+                self.empty_view()
+            },
             loading: !pending.is_empty(),
             reduced_motion: false,
             text_scale: 1.0,
@@ -450,6 +501,12 @@ impl Launcher {
 
     /// Loads the sync rows for the current mode and query. Empty text lists the most frecent.
     fn load_rows(&mut self) {
+        if self.active_editor().is_some() {
+            self.rows.clear();
+            self.files.clear();
+            self.selected = 0;
+            return;
+        }
         let text = self.query.trim().to_owned();
         let q = Query { text: text.clone() };
         let was_claimed = self.claimed.take();
@@ -530,6 +587,18 @@ impl Launcher {
         if c.key != Key::Enter {
             self.armed.disarm();
         }
+        if self.panel.is_none() && self.active_editor().is_some() {
+            return match c.key {
+                Key::Escape => self.escape(),
+                Key::K if c.ctrl => {
+                    self.toggle_panel();
+                    vec![]
+                }
+                Key::Enter if c.ctrl && !c.shift && !c.alt => self.run_editor_selected(true),
+                Key::Enter => self.run_editor_selected(false),
+                _ => vec![],
+            };
+        }
         match c.key {
             Key::Up => {
                 self.move_by(-1);
@@ -597,6 +666,26 @@ impl Launcher {
             hit.item.primary.clone()
         };
         self.run(&hit, action)
+    }
+
+    fn run_editor_selected(&mut self, secondary: bool) -> Vec<Effect> {
+        let Some(i) = self.active_editor() else {
+            return vec![];
+        };
+        let Some(hit) = self.editor_target(i) else {
+            return vec![];
+        };
+        if secondary {
+            return match hit.item.secondary.clone() {
+                Some(a) => self.run(&hit, a),
+                None => vec![],
+            };
+        }
+        let now = self.clock.now_ms();
+        match self.armed.armed_action(hit.id(), now).cloned() {
+            Some(armed) => self.run(&hit, armed),
+            None => vec![],
+        }
     }
 
     /// Runs the selected item's action `name` if it lists one that is enabled.
@@ -693,6 +782,7 @@ impl Launcher {
                 Some(i) => {
                     self.mode = Mode::Pushed(i);
                     self.reset();
+                    self.open_active_editor();
                 }
                 None => effects.push(Effect::Notice(Notice {
                     subject: "View".to_owned(),
@@ -744,11 +834,28 @@ impl Launcher {
                 vec![]
             }
             EscStep::PopView => {
+                let fx = self.flush_active_editor();
+                self.pending_save = None;
                 self.mode = Mode::Root;
                 self.reset();
-                vec![]
+                for e in &fx {
+                    if let Effect::Notice(n) = e {
+                        self.notice = Some(n.clone());
+                    }
+                }
+                fx
             }
-            EscStep::Hide => vec![Effect::Hide],
+            EscStep::Hide => {
+                let mut fx = self.flush_active_editor();
+                self.pending_save = None;
+                for e in &fx {
+                    if let Effect::Notice(n) = e {
+                        self.notice = Some(n.clone());
+                    }
+                }
+                fx.push(Effect::Hide);
+                fx
+            }
         }
     }
 
@@ -757,7 +864,11 @@ impl Launcher {
             self.panel = None;
             return;
         }
-        let Some(target) = self.selected_hit().cloned() else {
+        let target = self
+            .active_editor()
+            .and_then(|i| self.editor_target(i))
+            .or_else(|| self.selected_hit().cloned());
+        let Some(target) = target else {
             return;
         };
         let mut actions = self.source(target.src).actions(target.id());
@@ -832,6 +943,46 @@ impl Launcher {
     fn view_index(&self, id: &ViewId) -> Option<usize> {
         self.views.iter().position(|v| v.view_id() == *id)
     }
+
+    fn active_editor(&self) -> Option<usize> {
+        match self.mode {
+            Mode::Pushed(i) | Mode::Hotkey(i) if self.views[i].is_editor() => Some(i),
+            _ => None,
+        }
+    }
+
+    fn editor_target(&self, view_idx: usize) -> Option<Hit> {
+        let item = self.views[view_idx]
+            .items(&Query::default())
+            .first()
+            .cloned()?;
+        Some(Hit {
+            src: Source::View(view_idx),
+            item,
+            exact: false,
+            total: 0.0,
+            opens: 0.0,
+            matched: Vec::new(),
+        })
+    }
+
+    fn open_active_editor(&mut self) {
+        if let Some(i) = self.active_editor() {
+            if let Err(n) = self.views[i].open_editor() {
+                self.notice = Some(n);
+            }
+        }
+    }
+
+    fn flush_active_editor(&self) -> Vec<Effect> {
+        let Some(i) = self.active_editor() else {
+            return Vec::new();
+        };
+        match self.views[i].flush_editor(None) {
+            Ok(()) => Vec::new(),
+            Err(n) => vec![Effect::Notice(n)],
+        }
+    }
 }
 
 /// Rows PageUp and PageDown move by (one screenful of the list).
@@ -870,7 +1021,7 @@ fn action_style(id: &str) -> ActionStyle {
         "pin" => ("action.pin", 1, false),
         "minimize" => ("action.minimize", 1, false),
         "close" => ("action.close", 1, false),
-        "delete" | "force_quit" => ("action.delete", 2, true),
+        "delete" | "force_quit" | "clear" => ("action.delete", 2, true),
         _ => ("action.copy", 0, false),
     };
     ActionStyle {
@@ -1010,6 +1161,8 @@ mod tests {
             ("close", "action.close", 1, false),
             ("delete", "action.delete", 2, true),
             ("force_quit", "action.delete", 2, true),
+            ("clear", "action.delete", 2, true),
+            ("copy_all", "action.copy", 0, false),
             ("hex", "action.copy", 0, false),
         ] {
             let s = action_style(id);

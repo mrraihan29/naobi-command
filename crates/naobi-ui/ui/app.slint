@@ -655,6 +655,9 @@ export component AppWindow inherits Window {
     in property <[ActionLine]> actions;
     out property <bool> filter-focused: filter-input.has-focus;
     callback panel-filter-edited(string);
+    in property <bool> editor-active;
+    in-out property <string> editor-text;
+    callback scratchpad-changed(string);
 
     callback text-changed(string);
     callback key-pressed(string, bool, bool, bool) -> bool;
@@ -682,7 +685,12 @@ export component AppWindow inherits Window {
         if (panel-open) {
             filter-input.focus();
         } else {
-            input.focus();
+            focus-input();
+        }
+    }
+    changed editor-active => {
+        if (!panel-open) {
+            focus-input();
         }
     }
     // Where the pointer last was over a row: only motion away from it selects, so a list scrolling
@@ -691,7 +699,13 @@ export component AppWindow inherits Window {
     property <length> pointer-y;
     // The footer is the handle: dragging it moves the window by this many logical px.
     callback move-by(length, length);
-    public function focus-input() { input.focus(); }
+    public function focus-input() {
+        if (root.editor-active) {
+            editor-input.focus();
+        } else {
+            input.focus();
+        }
+    }
 
     // Keep the selected line inside the viewport.
     changed selected => { reveal-selected(); }
@@ -721,8 +735,21 @@ export component AppWindow inherits Window {
         }
         capture-key-pressed(e) => {
             if (e.text == Key.Alt) {
-                root.alt-held = true;
-                root.cues-moved();
+                if (!root.editor-active) {
+                    root.alt-held = true;
+                    root.cues-moved();
+                }
+                return reject;
+            }
+            if (root.editor-active && !root.panel-open) {
+                if (e.text == Key.Escape
+                    || (e.modifiers.control && (e.text == "k" || e.text == "K" || e.text == "\u{b}"))
+                    || (e.text == Key.Return && ((e.modifiers.control && !e.modifiers.shift && !e.modifiers.alt) || root.footer-primary != "")))
+                {
+                    if (root.key-pressed(e.text, e.modifiers.control, e.modifiers.alt, e.modifiers.shift)) {
+                        return accept;
+                    }
+                }
                 return reject;
             }
             // Backspace edits the field while it holds text; Ctrl+X cuts while text is selected.
@@ -767,6 +794,8 @@ export component AppWindow inherits Window {
                         y: 15px;
                         width: parent.width - self.x - 16px;
                         height: parent.height - 30px;
+                        visible: !root.editor-active;
+                        enabled: !root.editor-active;
                         vertical-alignment: center;
                         font-size: 16px * Tokens.scale;
                         color: Tokens.text-primary;
@@ -780,7 +809,7 @@ export component AppWindow inherits Window {
                         x: input.x;
                         height: parent.height;
                         vertical-alignment: center;
-                        visible: root.query == "";
+                        visible: !root.editor-active && root.query == "";
                         text: root.placeholder;
                         font-size: 16px * Tokens.scale;
                         color: Tokens.text-muted;
@@ -855,7 +884,9 @@ export component AppWindow inherits Window {
                     Rectangle { y: parent.height - 1px; height: 1px; background: Tokens.line-strong; }
                 }
                 HorizontalLayout {
-                    vertical-stretch: 1;
+                    visible: !root.editor-active;
+                    vertical-stretch: root.editor-active ? 0 : 1;
+                    max-height: root.editor-active ? 0px : 10000px;
                     // Lines differ in height, so each is placed exactly. The list holds at most 50 rows.
                     list := ScrollView {
                         horizontal-stretch: root.preview-kind == 0 ? 1 : 0;
@@ -899,6 +930,58 @@ export component AppWindow inherits Window {
                             picture: root.preview-image;
                             facts: root.preview-facts;
                             swatches: root.preview-swatches;
+                        }
+                    }
+                }
+                Rectangle {
+                    visible: root.editor-active;
+                    vertical-stretch: root.editor-active ? 1 : 0;
+                    max-height: root.editor-active ? 10000px : 0px;
+                    clip: true;
+                    Rectangle {
+                        x: 16px;
+                        y: 12px;
+                        width: parent.width - 32px;
+                        height: max(0px, parent.height - 24px);
+                        background: Tokens.surface-well;
+                        border-radius: Tokens.radius-control;
+                        border-width: editor-input.has-focus ? 2px : 1px;
+                        border-color: editor-input.has-focus ? Tokens.focus : Tokens.line-hair;
+                        clip: true;
+                        editor-scroll := ScrollView {
+                            x: 12px;
+                            y: 10px;
+                            width: max(0px, parent.width - 24px);
+                            height: max(0px, parent.height - 20px);
+                            content-width: self.visible-width;
+                            content-height: max(self.visible-height, editor-input.preferred-height);
+                            editor-input := TextInput {
+                                width: editor-scroll.visible-width;
+                                height: max(editor-scroll.visible-height, self.preferred-height);
+                                enabled: root.editor-active;
+                                single-line: false;
+                                wrap: word-wrap;
+                                font-family: Tokens.font-mono;
+                                font-size: 13px * Tokens.scale;
+                                color: Tokens.text-primary;
+                                selection-background-color: Tokens.surface-selected;
+                                selection-foreground-color: Tokens.text-primary;
+                                page-height: editor-scroll.visible-height;
+                                accessible-role: AccessibleRole.text-input;
+                                accessible-label: "Scratchpad";
+                                text <=> root.editor-text;
+                                edited => { root.scratchpad-changed(self.text); }
+                            }
+                        }
+                        if root.editor-text == "" : Text {
+                            x: 12px;
+                            y: 10px;
+                            width: max(0px, parent.width - 24px);
+                            text: root.placeholder;
+                            wrap: word-wrap;
+                            font-family: Tokens.font-mono;
+                            font-size: 13px * Tokens.scale;
+                            color: Tokens.text-muted;
                         }
                     }
                 }

@@ -65,4 +65,25 @@ pub trait ViewSource: CommandSource {
     fn empty_title(&self) -> &'static str {
         "Nothing here yet"
     }
+    /// True when this view hosts the multiline editor instead of a result list.
+    fn is_editor(&self) -> bool {
+        false
+    }
+    /// Called when the editor view becomes active; returns initial buffer text or an error Notice.
+    fn open_editor(&self) -> Result<String, crate::notice::Notice> {
+        Ok(String::new())
+    }
+    /// Current editor text while active (`None` for list views).
+    fn editor_text(&self) -> Option<String> {
+        None
+    }
+    /// Updates the editor buffer; returns a debounce generation when a delayed save is needed.
+    fn set_editor_text(&self, _text: String) -> Option<u64> {
+        None
+    }
+    /// Flushes pending edits to disk immediately (on Esc, Dismissed, Back, or timer).
+    /// When `generation` is `Some(g)`, flushes only if it still matches the latest edit.
+    fn flush_editor(&self, _generation: Option<u64>) -> Result<(), crate::notice::Notice> {
+        Ok(())
+    }
 }

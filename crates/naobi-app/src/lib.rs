@@ -147,6 +147,12 @@ impl Host for AppHost {
     fn apply_theme(&mut self, id: &str) -> Result<(), String> {
         apply_theme(id)
     }
+    fn schedule_scratchpad_save(&mut self, generation: u64, ms: u64) {
+        let ui = self.ui.clone();
+        self.ui.run_on_ui_after(ms, move || {
+            on_ui(ui, move |c, h| c.on_scratchpad_save_timer(generation, h))
+        });
+    }
     fn post(&mut self, screen: Screen) {
         if screen
             .sections

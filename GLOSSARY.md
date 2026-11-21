@@ -183,7 +183,7 @@ A named set of colors, corner radii, list density and font families that the app
 _Avoid_: skin, mode, dark mode (dark mode names the system command)
 
 **Built-in theme**:
-`paper` (light), `stone`, `tokyo-haze` or `neon-night` (all dark); read-only, shipped in the app, and always meets WCAG 2.2 AA.
+`paper`, `washi`, `sakura-dawn`, `matcha` or `dune` (light); `stone`, `tokyo-haze`, `neon-night`, `midnight-ink`, `kyoto-dusk` or `deep-sea` (dark); read-only, shipped in the app, and always meets WCAG 2.2 AA.
 _Avoid_: default skin, system theme
 
 **Custom theme**:

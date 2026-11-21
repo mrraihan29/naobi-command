@@ -588,7 +588,7 @@ impl Launcher {
                         opens: 0.0,
                         matched: Vec::new(),
                     })
-                    .take(limit)
+                    .take(MAX_ROWS)
                     .collect();
                 self.files.clear();
                 self.selected = 0;

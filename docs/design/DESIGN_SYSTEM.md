@@ -1,6 +1,6 @@
 # Design System: Naobi Command
 
-<!-- Minimum per docs/STANDARD.md §8.3. Sources: ledger R-007, D-021, D-030; naobi.dev DESIGN.md, DOC-09 (tokens), DOC-10 (motion), DOC-11 (accessibility), read-only. No color, font or shape below is new, except the `tokyo-haze` and `neon-night` Built-in themes the Owner added on 2026-11-20 (D-046): each is a Naobi token adapted to a Windows desktop launcher. Anything marked "derived" or "proposal" is listed in the report's open questions. -->
+<!-- Minimum per docs/STANDARD.md §8.3. Sources: ledger R-007, D-021, D-030; naobi.dev DESIGN.md, DOC-09 (tokens), DOC-10 (motion), DOC-11 (accessibility), read-only. No color, font or shape below is new, except the nine further Built-in themes the Owner added (`tokyo-haze` and `neon-night` on 2026-11-20, `washi`, `sakura-dawn`, `matcha`, `dune`, `midnight-ink`, `kyoto-dusk` and `deep-sea` on 2026-11-21; D-046 v2): each is a Naobi token adapted to a Windows desktop launcher. Anything marked "derived" or "proposal" is listed in the report's open questions. -->
 
 ## How the web system was adapted
 
@@ -8,7 +8,7 @@
 |---|---|
 | Warm paper canvas, near-black ink | `paper` theme: window `paper-elevated`, raised areas `paper-canvas`, text `ink-*` |
 | Dock stone, oka, umi, on-stone | `stone` theme: window `dock-stone`, raised `dock-oka`, deepest well `dock-umi`, text `on-stone` |
-| (not in the web system) | `tokyo-haze` and `neon-night` themes: two further dark Built-in themes added by the Owner (D-046), with their own palettes below |
+| (not in the web system) | `tokyo-haze`, `neon-night`, `washi`, `sakura-dawn`, `matcha`, `dune`, `midnight-ink`, `kyoto-dusk` and `deep-sea` themes: nine further Built-in themes added by the Owner (D-046 v2; two dark on 2026-11-20, four light and three dark on 2026-11-21), with their own palettes below |
 | Oxide accent, rare and small | Selection bar, topmost border, pinned marker only (Accent Discipline, DOC-09 §7) |
 | Focus blue `#275D9A` on paper, `#E3BDA9` on stone | Same pair, 2 px ring |
 | Inter for interface, JetBrains Mono technical | Same; Newsreader is not used (Scoped Voice Rule: it belongs to the website Home) |
@@ -18,7 +18,7 @@
 
 ## Tokens
 
-`AppsUseLightTheme` chooses the Theme slot, and the app changes without restart (R-007, R-032). The tables below are the four Built-in themes; the values of `paper` and `stone` come from `DESIGN.md` unless marked derived, and `tokyo-haze` and `neon-night` are the Owner's own palettes. A Custom theme may override them (see Themes).
+`AppsUseLightTheme` chooses the Theme slot, and the app changes without restart (R-007, R-032). The tables below are the eleven Built-in themes; the values of `paper` and `stone` come from `DESIGN.md` unless marked derived, and the other nine are the Owner's own palettes. A Custom theme may override them (see Themes).
 
 ### Color: `paper` theme (light)
 
@@ -101,6 +101,160 @@ Added by the Owner on 2026-11-20 (D-046, D-030 v2); not derived from naobi.dev D
 | `line.strong` | `#434944` | Key hint chip outline | 2.08:1, decorative only |
 
 Worst margins: `state.danger` on selected, 6.06 against 4.5 (text); `focus` on selected, 4.82 against 3 (UI). Windows-mode family and Duplicate base: `stone`.
+
+### Color: `washi` theme (light, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: warm rice-paper surfaces, ink-black text, indigo accent, jade focus. The focus ring is jade, not the danger red, so the ring never looks like an error. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#F5F0DA` | Launcher window, panels | base |
+| `surface.raised` | `#ECE6CC` | Footer, action panel | base |
+| `surface.selected` | `#E0D8B8` | Selected and hovered row | base |
+| `surface.well` | `#ECE6CC` | Image preview well, color readout (same as raised on this light theme) | base |
+| `text.primary` | `#1A1A20` | Input text, row titles | 15.14:1 on window, 13.82 on raised, 12.11 on selected, 13.82 on well |
+| `text.secondary` | `#3A3A44` | Notices; also the selected-row subtitle | 9.82:1 on window, 7.86 on selected |
+| `text.muted` | `#5C5850` | Subtitles, hints, footer | 6.19:1 on window, 5.65 on raised, 5.65 on well |
+| `accent` | `#3B4BA0` (indigo) | Selection bar, topmost border option, pinned marker | 6.80:1 on window, 5.44 on selected |
+| `focus` | `#1F6B66` (jade) | 2 px focus ring | 5.48:1 on window, 5.00 on raised, 4.38 on selected |
+| `state.danger` | `#982F25` | Armed-command marker, error glyph | 6.63:1 on window, 5.30 on selected; always paired with text |
+| `state.success` | `#44634A` | "Copied" glyph | 5.87:1 on window; always paired with text |
+| `line.hair` | `#D8D0B0` | Dividers, window border | 1.35:1, decorative only |
+| `line.strong` | `#C6BC98` | Key hint chip outline | 1.66:1, decorative only |
+
+Worst margin: danger on selected, 5.30 against 4.5 (text). Windows-mode family and Duplicate base: `paper`.
+
+### Color: `sakura-dawn` theme (light, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: pale blush surfaces, deep plum text, sakura-red accent, violet focus. The focus ring is violet, a hue apart from the accent. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#FBE9ED` | Launcher window, panels | base |
+| `surface.raised` | `#F4DAE0` | Footer, action panel | base |
+| `surface.selected` | `#E8C7D1` | Selected and hovered row | base |
+| `surface.well` | `#F4DAE0` | Image preview well, color readout (same as raised on this light theme) | base |
+| `text.primary` | `#3A1830` | Input text, row titles | 13.29:1 on window, 11.79 on raised, 9.99 on selected, 11.79 on well |
+| `text.secondary` | `#5A2E4E` | Notices; also the selected-row subtitle | 9.29:1 on window, 6.99 on selected |
+| `text.muted` | `#7A4F6C` | Subtitles, hints, footer | 5.69:1 on window, 5.04 on raised, 5.04 on well |
+| `accent` | `#B5254F` (sakura red) | Selection bar, topmost border option, pinned marker | 5.38:1 on window, 4.05 on selected |
+| `focus` | `#5B4BA8` (violet) | 2 px focus ring | 5.96:1 on window, 5.29 on raised, 4.48 on selected |
+| `state.danger` | `#8E1B1A` | Armed-command marker, error glyph | 7.74:1 on window, 5.82 on selected; always paired with text |
+| `state.success` | `#34704A` | "Copied" glyph | 5.05:1 on window; always paired with text |
+| `line.hair` | `#E8CDD3` | Dividers, window border | 1.27:1, decorative only |
+| `line.strong` | `#D8B8C1` | Key hint chip outline | 1.56:1, decorative only |
+
+Worst margin: muted on raised, 5.04 against 4.5 (text). Windows-mode family and Duplicate base: `paper`.
+
+### Color: `matcha` theme (light, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: green-tinted cream surfaces, deep green text, tea-green accent, blue focus. The focus ring is blue, a hue apart from the accent. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#DDEBC9` | Launcher window, panels | base |
+| `surface.raised` | `#D1E2B9` | Footer, action panel | base |
+| `surface.selected` | `#C2D8A4` | Selected and hovered row | base |
+| `surface.well` | `#D1E2B9` | Image preview well, color readout (same as raised on this light theme) | base |
+| `text.primary` | `#17301C` | Input text, row titles | 11.38:1 on window, 10.36 on raised, 9.25 on selected, 10.36 on well |
+| `text.secondary` | `#2F4A33` | Notices; also the selected-row subtitle | 7.82:1 on window, 6.36 on selected |
+| `text.muted` | `#445C43` | Subtitles, hints, footer | 5.88:1 on window, 5.35 on raised, 5.35 on well |
+| `accent` | `#3F7226` (tea green) | Selection bar, topmost border option, pinned marker | 4.61:1 on window, 3.74 on selected |
+| `focus` | `#2F6F8F` (blue) | 2 px focus ring | 4.43:1 on window, 4.03 on raised, 3.60 on selected |
+| `state.danger` | `#8A2820` | Armed-command marker, error glyph | 6.99:1 on window, 5.68 on selected; always paired with text |
+| `state.success` | `#2A6A36` | "Copied" glyph | 5.23:1 on window; always paired with text |
+| `line.hair` | `#C2D4A8` | Dividers, window border | 1.27:1, decorative only |
+| `line.strong` | `#AEC38E` | Key hint chip outline | 1.53:1, decorative only |
+
+Worst margin: focus on selected, 3.60 against 3 (UI). Windows-mode family and Duplicate base: `paper`.
+
+### Color: `dune` theme (light, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: warm sand surfaces, dark brown text, terracotta accent, deep blue focus. The focus ring is deep blue, a hue apart from the accent. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#F0E1C8` | Launcher window, panels | base |
+| `surface.raised` | `#E4D1B0` | Footer, action panel | base |
+| `surface.selected` | `#DDC8A5` | Selected and hovered row | base |
+| `surface.well` | `#E4D1B0` | Image preview well, color readout (same as raised on this light theme) | base |
+| `text.primary` | `#33241A` | Input text, row titles | 11.58:1 on window, 9.98 on raised, 9.15 on selected, 9.98 on well |
+| `text.secondary` | `#4F3A2B` | Notices; also the selected-row subtitle | 8.27:1 on window, 6.53 on selected |
+| `text.muted` | `#5A4632` | Subtitles, hints, footer | 6.92:1 on window, 5.96 on raised, 5.96 on well |
+| `accent` | `#AA4219` (terracotta) | Selection bar, topmost border option, pinned marker | 4.66:1 on window, 3.68 on selected |
+| `focus` | `#235A75` (deep blue) | 2 px focus ring | 5.84:1 on window, 5.03 on raised, 4.61 on selected |
+| `state.danger` | `#7F2218` | Armed-command marker, error glyph | 7.61:1 on window, 6.01 on selected; always paired with text |
+| `state.success` | `#435E32` | "Copied" glyph | 5.65:1 on window; always paired with text |
+| `line.hair` | `#D2BE9A` | Dividers, window border | 1.41:1, decorative only |
+| `line.strong` | `#BFA880` | Key hint chip outline | 1.79:1, decorative only |
+
+Worst margin: accent on selected, 3.68 against 3 (UI). Windows-mode family and Duplicate base: `paper`.
+
+### Color: `midnight-ink` theme (dark, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: deep navy surfaces, blue-white text, cyan accent, periwinkle focus. The focus ring is periwinkle, a hue apart from the accent. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#0D1A33` | Launcher window, panels | base |
+| `surface.raised` | `#172844` | Footer, action panel | base |
+| `surface.selected` | `#20365A` | Selected and hovered row | base |
+| `surface.well` | `#070D1A` | Image preview well, color readout | base |
+| `text.primary` | `#E4EEFF` | Input text, row titles | 14.82:1 on window, 12.63 on raised, 10.35 on selected, 16.62 on well |
+| `text.secondary` | `#B9C9E6` | Notices; also the selected-row subtitle | 10.36:1 on window, 7.23 on selected |
+| `text.muted` | `#8CA0C2` | Subtitles, hints, footer | 6.53:1 on window, 5.57 on raised, 7.33 on well |
+| `accent` | `#3CCBE0` (cyan) | Selection bar, topmost border option, pinned marker | 8.91:1 on window, 6.22 on selected |
+| `focus` | `#9DB8FF` (periwinkle) | 2 px focus ring | 8.85:1 on window, 7.54 on raised, 6.18 on selected |
+| `state.danger` | `#FF8A80` | Armed-command marker, error glyph | 7.59:1 on window, 5.30 on selected; always paired with text |
+| `state.success` | `#7AD6A0` | "Copied" glyph | 9.86:1 on window; always paired with text |
+| `line.hair` | `#2A3A58` | Dividers, window border | 1.52:1, decorative only |
+| `line.strong` | `#40557A` | Key hint chip outline | 2.31:1, decorative only |
+
+Worst margin: danger on selected, 5.30 against 4.5 (text). Windows-mode family and Duplicate base: `stone`.
+
+### Color: `kyoto-dusk` theme (dark, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: dusk-purple surfaces, cream text, gold accent, pale-teal focus. The focus ring is pale teal, a hue apart from the accent. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#231733` | Launcher window, panels | base |
+| `surface.raised` | `#32244A` | Footer, action panel | base |
+| `surface.selected` | `#403060` | Selected and hovered row | base |
+| `surface.well` | `#120D1F` | Image preview well, color readout | base |
+| `text.primary` | `#F5EBD6` | Input text, row titles | 14.28:1 on window, 11.93 on raised, 9.80 on selected, 16.08 on well |
+| `text.secondary` | `#D9CDB4` | Notices; also the selected-row subtitle | 10.74:1 on window, 7.37 on selected |
+| `text.muted` | `#A99FBC` | Subtitles, hints, footer | 6.74:1 on window, 5.63 on raised, 7.59 on well |
+| `accent` | `#EDCB5E` (gold) | Selection bar, topmost border option, pinned marker | 10.71:1 on window, 7.35 on selected |
+| `focus` | `#8CC8D8` (pale teal) | 2 px focus ring | 9.15:1 on window, 7.65 on raised, 6.28 on selected |
+| `state.danger` | `#F79A90` | Armed-command marker, error glyph | 8.04:1 on window, 5.51 on selected; always paired with text |
+| `state.success` | `#9CCB8A` | "Copied" glyph | 9.12:1 on window; always paired with text |
+| `line.hair` | `#3E3258` | Dividers, window border | 1.45:1, decorative only |
+| `line.strong` | `#56487A` | Key hint chip outline | 2.10:1, decorative only |
+
+Worst margin: danger on selected, 5.51 against 4.5 (text). Windows-mode family and Duplicate base: `stone`.
+
+### Color: `deep-sea` theme (dark, built-in)
+
+Added by the Owner on 2026-11-21 (D-046 v2, D-030 v3); not derived from naobi.dev DESIGN.md. All colors are opaque: very dark teal surfaces, pale-aqua text, coral accent, sand-yellow focus. The focus ring is sand yellow, a hue apart from the accent. The ratios are the same pairs as `r007_token_pairs_meet_wcag_aa`, which iterates every built-in theme; every pair clears its minimum by at least 0.5.
+
+| Token | Value | Use | Contrast vs background |
+|---|---|---|---|
+| `surface.window` | `#0A2226` | Launcher window, panels | base |
+| `surface.raised` | `#12353B` | Footer, action panel | base |
+| `surface.selected` | `#1B484E` | Selected and hovered row | base |
+| `surface.well` | `#051216` | Image preview well, color readout | base |
+| `text.primary` | `#D6F2F0` | Input text, row titles | 14.03:1 on window, 11.15 on raised, 8.55 on selected, 16.13 on well |
+| `text.secondary` | `#AFD6D4` | Notices; also the selected-row subtitle | 10.55:1 on window, 6.43 on selected |
+| `text.muted` | `#7FA9A8` | Subtitles, hints, footer | 6.41:1 on window, 5.10 on raised, 7.37 on well |
+| `accent` | `#FF7F66` (coral) | Selection bar, topmost border option, pinned marker | 6.68:1 on window, 4.07 on selected |
+| `focus` | `#E8D07A` (sand yellow) | 2 px focus ring | 10.82:1 on window, 8.59 on raised, 6.59 on selected |
+| `state.danger` | `#FF9DA5` | Armed-command marker, error glyph | 8.36:1 on window, 5.10 on selected; always paired with text |
+| `state.success` | `#7ED6A0` | "Copied" glyph | 9.46:1 on window; always paired with text |
+| `line.hair` | `#1F4A52` | Dividers, window border | 1.70:1, decorative only |
+| `line.strong` | `#2F6670` | Key hint chip outline | 2.56:1, decorative only |
+
+Worst margin: muted on raised, 5.10 against 4.5 (text). Windows-mode family and Duplicate base: `stone`.
 
 ### Type scale
 
@@ -236,7 +390,7 @@ Surfaces owned by `naobi-win32` (marked native) use OS drawing; the table says w
 | Clipboard entry row | Kind glyph, first line of text (or "Image 1920 x 1080", or "3 files") in `type.title`, relative time in `type.meta`, pinned marker (`accent`) | `surface.selected` | As Result row | n/a | n/a | n/a | n/a |
 | Preview pane | `surface.well`, `radius.control`, text in `type.preview`, image fitted and centered, then a facts block under a hairline: label in `text.muted`, value in `text.primary`, `type.kind` | n/a | n/a | n/a | n/a (decryption is synchronous) | "Cannot read this entry" text, no facts | "Nothing selected" |
 | Clipboard list | 300 px list, preview pane in the rest. Facts: Type, Length or Size or Files, Copied | n/a | As Result row | n/a | Rows appear as the index builds | n/a | Empty state: "Nothing copied yet" |
-| Themes list | 300 px list: palette glyph, theme name, and at the right the slot it fills ("Light", "Dark") or Built-in or Custom | n/a | As Result row; the selected theme previews at once | n/a | n/a | An unreadable file is listed dimmed with its reason | Always holds the four Built-in themes: paper, stone, tokyo-haze, neon-night |
+| Themes list | 300 px list: palette glyph, theme name, and at the right the slot it fills ("Light", "Dark") or Built-in or Custom | n/a | As Result row; the selected theme previews at once | n/a | n/a | An unreadable file is listed dimmed with its reason | Always holds the eleven Built-in themes: paper, stone, tokyo-haze, neon-night, washi, sakura-dawn, matcha, dune, midnight-ink, kyoto-dusk, deep-sea |
 | Theme pane | Preview pane with all 14 color swatches and their token names, then facts: Base, Density, Fonts, Contrast | n/a | n/a | n/a | n/a | Problems are Notices | n/a |
 | Color history row | 22 px swatch (1 px `line.strong`), HEX in `type.meta`, time | `surface.selected` | As Result row | n/a | n/a | n/a | Empty state: "No colors picked yet" |
 | Empty state | `type.result` title, `type.title` helper line in `text.muted`, centered in the list area | n/a | n/a | n/a | n/a | n/a | This is the empty state |

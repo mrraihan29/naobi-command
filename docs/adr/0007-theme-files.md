@@ -28,4 +28,4 @@ The Owner wants themes that can be edited freely, while the Launcher must keep i
 
 ## Amendment 2026-11-20
 
-- There are four Built-in themes: `paper`, `stone`, `tokyo-haze` and `neon-night` (D-046, R-032 v2). All are read-only consts in `naobi-core`, meet WCAG 2.2 AA, and their ids are reserved against theme files (D-043 v2). `base` in a theme file stays `paper` or `stone`; the two new themes are not bases, and Duplicate writes `base = "stone"` for them.
+- There are eleven Built-in themes: `paper`, `stone`, `tokyo-haze`, `neon-night`, `washi`, `sakura-dawn`, `matcha`, `dune`, `midnight-ink`, `kyoto-dusk` and `deep-sea` (D-046 v2, R-032 v3). All are read-only consts in `naobi-core`, meet WCAG 2.2 AA, and their ids are reserved against theme files (D-043 v3). `base` in a theme file stays `paper` or `stone`; the nine added themes are not bases, and Duplicate writes `base = "paper"` for the four light ones (`washi`, `sakura-dawn`, `matcha`, `dune`) and `base = "stone"` for the dark ones.

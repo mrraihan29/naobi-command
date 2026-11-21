@@ -1,12 +1,38 @@
 //! Token contrast (R-007): every text and component pair in DESIGN_SYSTEM.md meets WCAG 2.2 AA.
 use naobi_core::theme_file::builtins;
-use naobi_core::tokens::{contrast, contrast_failures, PAPER};
+use naobi_core::tokens::{contrast, contrast_failures, Rgba, PAPER};
 
 // @R-007
 #[test]
 fn r007_token_pairs_meet_wcag_aa() {
     for t in builtins() {
         assert_eq!(contrast_failures(&t.palette), [], "{}", t.id);
+    }
+}
+
+// @R-007
+#[test]
+fn r007_builtin_windows_and_accents_are_distinct() {
+    let all = builtins();
+    let dist = |a: Rgba, b: Rgba| {
+        let d = |x: u8, y: u8| (f64::from(x) - f64::from(y)).powi(2);
+        (d(a.r, b.r) + d(a.g, b.g) + d(a.b, b.b)).sqrt()
+    };
+    for (i, a) in all.iter().enumerate() {
+        for b in &all[i + 1..] {
+            assert!(
+                dist(a.palette.window, b.palette.window) >= 12.0,
+                "window {} {}",
+                a.id,
+                b.id
+            );
+            assert!(
+                dist(a.palette.accent, b.palette.accent) >= 30.0,
+                "accent {} {}",
+                a.id,
+                b.id
+            );
+        }
     }
 }
 
@@ -22,7 +48,6 @@ fn r007_muted_on_selected_paper_row_is_replaced_by_secondary() {
 // @R-007
 #[test]
 fn r007_contrast_matches_the_wcag_reference_values() {
-    use naobi_core::tokens::Rgba;
     let close = |a: f64, b: f64| (a - b).abs() < 0.005;
     let (black, white) = (Rgba::rgb(0x000000), Rgba::rgb(0xFFFFFF));
     assert!(close(contrast(black, white), 21.0));
@@ -36,7 +61,7 @@ fn r007_contrast_matches_the_wcag_reference_values() {
 // @R-033
 #[test]
 fn r033_half_transparent_ink_is_mixed_over_its_background() {
-    use naobi_core::tokens::{over, Rgba};
+    use naobi_core::tokens::over;
     let half_red = Rgba::with_alpha(0xFF0000, 128);
     assert_eq!(over(half_red, Rgba::rgb(0x000000)), Rgba::rgb(0x800000));
     assert_eq!(

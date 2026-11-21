@@ -124,6 +124,132 @@ pub const NEON_NIGHT: Palette = Palette {
     strong: Rgba::rgb(0x434944),
 };
 
+/// A light built-in theme: warm rice-paper surfaces, ink-black text, indigo accent, jade focus (D-046).
+pub const WASHI: Palette = Palette {
+    window: Rgba::rgb(0xF5F0DA),
+    raised: Rgba::rgb(0xECE6CC),
+    selected: Rgba::rgb(0xE0D8B8),
+    well: Rgba::rgb(0xECE6CC),
+    text_primary: Rgba::rgb(0x1A1A20),
+    text_secondary: Rgba::rgb(0x3A3A44),
+    subtitle_selected: Rgba::rgb(0x3A3A44),
+    text_muted: Rgba::rgb(0x5C5850),
+    accent: Rgba::rgb(0x3B4BA0),
+    focus: Rgba::rgb(0x1F6B66),
+    danger: Rgba::rgb(0x982F25),
+    success: Rgba::rgb(0x44634A),
+    hair: Rgba::rgb(0xD8D0B0),
+    strong: Rgba::rgb(0xC6BC98),
+};
+
+/// A light built-in theme: pale blush surfaces, deep plum text, sakura-red accent, violet focus (D-046).
+pub const SAKURA_DAWN: Palette = Palette {
+    window: Rgba::rgb(0xFBE9ED),
+    raised: Rgba::rgb(0xF4DAE0),
+    selected: Rgba::rgb(0xE8C7D1),
+    well: Rgba::rgb(0xF4DAE0),
+    text_primary: Rgba::rgb(0x3A1830),
+    text_secondary: Rgba::rgb(0x5A2E4E),
+    subtitle_selected: Rgba::rgb(0x5A2E4E),
+    text_muted: Rgba::rgb(0x7A4F6C),
+    accent: Rgba::rgb(0xB5254F),
+    focus: Rgba::rgb(0x5B4BA8),
+    danger: Rgba::rgb(0x8E1B1A),
+    success: Rgba::rgb(0x34704A),
+    hair: Rgba::rgb(0xE8CDD3),
+    strong: Rgba::rgb(0xD8B8C1),
+};
+
+/// A light built-in theme: green-tinted cream surfaces, deep green text, tea-green accent, blue focus (D-046).
+pub const MATCHA: Palette = Palette {
+    window: Rgba::rgb(0xDDEBC9),
+    raised: Rgba::rgb(0xD1E2B9),
+    selected: Rgba::rgb(0xC2D8A4),
+    well: Rgba::rgb(0xD1E2B9),
+    text_primary: Rgba::rgb(0x17301C),
+    text_secondary: Rgba::rgb(0x2F4A33),
+    subtitle_selected: Rgba::rgb(0x2F4A33),
+    text_muted: Rgba::rgb(0x445C43),
+    accent: Rgba::rgb(0x3F7226),
+    focus: Rgba::rgb(0x2F6F8F),
+    danger: Rgba::rgb(0x8A2820),
+    success: Rgba::rgb(0x2A6A36),
+    hair: Rgba::rgb(0xC2D4A8),
+    strong: Rgba::rgb(0xAEC38E),
+};
+
+/// A light built-in theme: warm sand surfaces, dark brown text, terracotta accent, deep blue focus (D-046).
+pub const DUNE: Palette = Palette {
+    window: Rgba::rgb(0xF0E1C8),
+    raised: Rgba::rgb(0xE4D1B0),
+    selected: Rgba::rgb(0xDDC8A5),
+    well: Rgba::rgb(0xE4D1B0),
+    text_primary: Rgba::rgb(0x33241A),
+    text_secondary: Rgba::rgb(0x4F3A2B),
+    subtitle_selected: Rgba::rgb(0x4F3A2B),
+    text_muted: Rgba::rgb(0x5A4632),
+    accent: Rgba::rgb(0xAA4219),
+    focus: Rgba::rgb(0x235A75),
+    danger: Rgba::rgb(0x7F2218),
+    success: Rgba::rgb(0x435E32),
+    hair: Rgba::rgb(0xD2BE9A),
+    strong: Rgba::rgb(0xBFA880),
+};
+
+/// A dark built-in theme: deep navy surfaces, blue-white text, cyan accent, periwinkle focus (D-046).
+pub const MIDNIGHT_INK: Palette = Palette {
+    window: Rgba::rgb(0x0D1A33),
+    raised: Rgba::rgb(0x172844),
+    selected: Rgba::rgb(0x20365A),
+    well: Rgba::rgb(0x070D1A),
+    text_primary: Rgba::rgb(0xE4EEFF),
+    text_secondary: Rgba::rgb(0xB9C9E6),
+    subtitle_selected: Rgba::rgb(0xB9C9E6),
+    text_muted: Rgba::rgb(0x8CA0C2),
+    accent: Rgba::rgb(0x3CCBE0),
+    focus: Rgba::rgb(0x9DB8FF),
+    danger: Rgba::rgb(0xFF8A80),
+    success: Rgba::rgb(0x7AD6A0),
+    hair: Rgba::rgb(0x2A3A58),
+    strong: Rgba::rgb(0x40557A),
+};
+
+/// A dark built-in theme: dusk-purple surfaces, cream text, gold accent, pale-teal focus (D-046).
+pub const KYOTO_DUSK: Palette = Palette {
+    window: Rgba::rgb(0x231733),
+    raised: Rgba::rgb(0x32244A),
+    selected: Rgba::rgb(0x403060),
+    well: Rgba::rgb(0x120D1F),
+    text_primary: Rgba::rgb(0xF5EBD6),
+    text_secondary: Rgba::rgb(0xD9CDB4),
+    subtitle_selected: Rgba::rgb(0xD9CDB4),
+    text_muted: Rgba::rgb(0xA99FBC),
+    accent: Rgba::rgb(0xEDCB5E),
+    focus: Rgba::rgb(0x8CC8D8),
+    danger: Rgba::rgb(0xF79A90),
+    success: Rgba::rgb(0x9CCB8A),
+    hair: Rgba::rgb(0x3E3258),
+    strong: Rgba::rgb(0x56487A),
+};
+
+/// A dark built-in theme: very dark teal surfaces, pale-aqua text, coral accent, sand-yellow focus (D-046).
+pub const DEEP_SEA: Palette = Palette {
+    window: Rgba::rgb(0x0A2226),
+    raised: Rgba::rgb(0x12353B),
+    selected: Rgba::rgb(0x1B484E),
+    well: Rgba::rgb(0x051216),
+    text_primary: Rgba::rgb(0xD6F2F0),
+    text_secondary: Rgba::rgb(0xAFD6D4),
+    subtitle_selected: Rgba::rgb(0xAFD6D4),
+    text_muted: Rgba::rgb(0x7FA9A8),
+    accent: Rgba::rgb(0xFF7F66),
+    focus: Rgba::rgb(0xE8D07A),
+    danger: Rgba::rgb(0xFF9DA5),
+    success: Rgba::rgb(0x7ED6A0),
+    hair: Rgba::rgb(0x1F4A52),
+    strong: Rgba::rgb(0x2F6670),
+};
+
 fn luminance(c: Rgba) -> f64 {
     let lin = |v: u8| {
         let s = f64::from(v) / 255.0;

@@ -364,15 +364,15 @@ mod tests {
     use super::*;
     use crate::index_worker;
     use naobi_core::db::Db;
-    use naobi_core::tokens::TOKYO_HAZE;
+    use naobi_core::tokens::{TOKYO_HAZE, WASHI};
     use naobi_core::ui::{Key, KeyChord, UiEvent};
     use naobi_launcher::frecency::Frecency;
     use naobi_launcher::{Clock, Launcher};
     use std::sync::{mpsc, Mutex};
     use std::time::Duration;
 
-    /// Paper, Stone, Tokyo Haze and Neon Night come before the first Custom theme.
-    const BUILTIN_ROWS: usize = 4;
+    /// The 11 Built-in themes come before the first Custom theme.
+    const BUILTIN_ROWS: usize = 11;
 
     struct Dir(PathBuf);
 
@@ -617,39 +617,71 @@ mod tests {
         let dir = Dir::new("newbuiltins");
         let mut l = engine(&dir.0);
         open(&mut l);
+        assert_eq!(BUILTIN_ROWS, builtins().len());
         let rows: Vec<(String, Option<String>)> = l.screen().sections[0]
             .rows
             .iter()
             .map(|r| (r.title.clone(), r.right.clone()))
             .collect();
-        let note = |t: &str, r: &str| (t.to_owned(), Some(r.to_owned()));
-        assert_eq!(
-            rows,
-            [
-                note("Paper", "Light"),
-                note("Stone", "Dark"),
-                note("Tokyo Haze", "Built-in"),
-                note("Neon Night", "Built-in"),
-            ]
-        );
-        for (id, effect) in [("tokyo-haze", "tokyo-haze"), ("neon-night", "neon-night")] {
-            press(&mut l, Key::Down, false);
-            press(&mut l, Key::Down, false);
-            if id == "neon-night" {
+        let expected: Vec<(String, Option<String>)> = builtins()
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let note = match i {
+                    0 => "Light",
+                    1 => "Dark",
+                    _ => "Built-in",
+                };
+                (t.name.clone(), Some(note.to_owned()))
+            })
+            .collect();
+        assert_eq!(rows, expected);
+        let all = builtins();
+        for (i, t) in all.iter().enumerate().skip(2) {
+            for _ in 0..i {
                 press(&mut l, Key::Down, false);
             }
             let s = l.screen();
-            assert_eq!(s.theme_preview.as_deref(), Some(id));
-            assert_eq!(s.facts[0].value, "Stone");
-            assert_eq!(s.facts[3].value, "Passes WCAG AA");
+            assert_eq!(s.theme_preview.as_deref(), Some(t.id.as_str()));
+            let family = if t.base == Theme::Paper {
+                "Paper"
+            } else {
+                "Stone"
+            };
+            assert_eq!(s.facts[0].value, family, "{}", t.id);
+            assert_eq!(s.facts[3].value, "Passes WCAG AA", "{}", t.id);
             assert_eq!(
                 press(&mut l, Key::Enter, false),
-                [Effect::ApplyTheme(effect.into())]
+                [Effect::ApplyTheme(t.id.clone())]
             );
             press(&mut l, Key::Escape, false);
             assert_eq!(l.screen().theme_preview, None, "the applied theme returns");
             open(&mut l);
         }
+        // Duplicate of a light built-in keeps the palette and writes base paper.
+        let wdir = Dir::new("washidup");
+        let mut w = engine(&wdir.0);
+        open(&mut w);
+        for _ in 0..4 {
+            press(&mut w, Key::Down, false);
+        }
+        assert!(run_panel_action(&mut w, "Duplicate").is_empty());
+        let text = fs::read_to_string(wdir.0.join("washi-copy.toml")).expect("copy");
+        assert!(
+            text.starts_with(
+                "name = \"Washi copy\"
+base = \"paper\"
+"
+            ),
+            "{text}"
+        );
+        let parsed = theme_file::parse("washi-copy", &text).expect("parses");
+        assert!(parsed.reports.is_empty(), "{:?}", parsed.reports);
+        assert_eq!(parsed.theme.palette, WASHI);
+        assert_eq!(
+            w.screen().sections[0].rows[BUILTIN_ROWS].title,
+            "Washi copy"
+        );
         // Duplicate keeps the palette and names the family as base.
         press(&mut l, Key::Down, false);
         press(&mut l, Key::Down, false);

@@ -842,10 +842,18 @@ mod ui_check {
             .expect("platform is set once per test process");
         let ui = AppWindow::new().expect("window");
         ui.show().expect("show");
+        // Paper and stone render every view; the other built-ins render the three views that prove their
+        // palette (a full sweep of 11 themes costs 22 s of animation sleeps). The owner's UI-CHECK
+        // (NAOBI_UI_CHECK_DIR) renders everything.
+        const QUICK_VIEWS: [&str; 3] = ["results", "themes", "loading-scale-125"];
         for built in naobi_core::theme_file::builtins() {
             let (theme, palette) = (built.id.as_str(), &built.palette);
+            let full = dir.is_some() || matches!(theme, "paper" | "stone");
             set_palette(&ui, palette);
             for (name, s) in views() {
+                if !full && !QUICK_VIEWS.contains(&name) {
+                    continue;
+                }
                 apply(&ui, s);
                 // Let the 120 ms panel fade and rise finish (the animations run on wall-clock time).
                 slint::platform::update_timers_and_animations();

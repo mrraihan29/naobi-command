@@ -1,7 +1,10 @@
 //! Theme files (ADR-0007, D-043): a Custom theme is plain data over a read-only Built-in theme. This
 //! module parses and resolves themes and touches no file, so every rule is tested with strings.
 use crate::settings::{Report, ThemeSlots};
-use crate::tokens::{contrast_failures, Palette, Rgba, NEON_NIGHT, PAPER, STONE, TOKYO_HAZE};
+use crate::tokens::{
+    contrast_failures, Palette, Rgba, DEEP_SEA, DUNE, KYOTO_DUSK, MATCHA, MIDNIGHT_INK, NEON_NIGHT,
+    PAPER, SAKURA_DAWN, STONE, TOKYO_HAZE, WASHI,
+};
 use crate::ui::Theme;
 
 /// Larger theme files are refused before they are parsed (T-038).
@@ -83,11 +86,18 @@ type BuiltinEntry = (&'static str, &'static str, Theme, Palette);
 
 /// Built-in themes in Themes-view order: id, name, Windows-mode family, palette (D-046). The family is
 /// what Duplicate writes as `base`.
-const BUILTINS: [BuiltinEntry; 4] = [
+const BUILTINS: &[BuiltinEntry] = &[
     ("paper", "Paper", Theme::Paper, PAPER),
     ("stone", "Stone", Theme::Stone, STONE),
     ("tokyo-haze", "Tokyo Haze", Theme::Stone, TOKYO_HAZE),
     ("neon-night", "Neon Night", Theme::Stone, NEON_NIGHT),
+    ("washi", "Washi", Theme::Paper, WASHI),
+    ("sakura-dawn", "Sakura Dawn", Theme::Paper, SAKURA_DAWN),
+    ("matcha", "Matcha", Theme::Paper, MATCHA),
+    ("dune", "Dune", Theme::Paper, DUNE),
+    ("midnight-ink", "Midnight Ink", Theme::Stone, MIDNIGHT_INK),
+    ("kyoto-dusk", "Kyoto Dusk", Theme::Stone, KYOTO_DUSK),
+    ("deep-sea", "Deep Sea", Theme::Stone, DEEP_SEA),
 ];
 
 fn resolved(&(id, name, base, palette): &BuiltinEntry) -> ResolvedTheme {
@@ -744,28 +754,65 @@ mod tests {
     // @R-032
     #[test]
     fn r032_new_builtins_fill_a_slot_without_notice() {
-        let s = slots("tokyo-haze", "neon-night");
         let empty = Catalog::new();
-        let (light, light_notes) = resolve(&s, Theme::Paper, &empty);
-        assert_eq!(
-            (light.id.as_str(), light.palette),
-            ("tokyo-haze", TOKYO_HAZE)
-        );
-        let (dark, dark_notes) = resolve(&s, Theme::Stone, &empty);
-        assert_eq!((dark.id.as_str(), dark.palette), ("neon-night", NEON_NIGHT));
-        assert!(light.builtin && dark.builtin);
-        assert!(light_notes.is_empty() && dark_notes.is_empty());
-        assert_eq!(contrast_message(&light), None);
-        let parsed = Settings::parse("[theme]\nlight = \"tokyo-haze\"\ndark = \"neon-night\"\n")
+        for b in builtins() {
+            let s = slots(&b.id, &b.id);
+            for mode in [Theme::Paper, Theme::Stone] {
+                let (t, notes) = resolve(&s, mode, &empty);
+                assert_eq!((t.id.as_str(), t.palette), (b.id.as_str(), b.palette));
+                assert!(t.builtin && notes.is_empty(), "{}", b.id);
+                assert_eq!(contrast_message(&t), None, "{}", b.id);
+            }
+        }
+        for (light, dark, expect) in [
+            ("tokyo-haze", "neon-night", (TOKYO_HAZE, NEON_NIGHT)),
+            ("washi", "deep-sea", (WASHI, DEEP_SEA)),
+        ] {
+            let parsed = Settings::parse(&format!(
+                "[theme]
+light = \"{light}\"
+dark = \"{dark}\"
+"
+            ))
             .expect("parses");
-        assert!(parsed.reports.is_empty(), "{:?}", parsed.reports);
-        assert_eq!(parsed.settings.theme, s);
+            assert!(parsed.reports.is_empty(), "{:?}", parsed.reports);
+            assert_eq!(parsed.settings.theme, slots(light, dark));
+            let (l, _) = resolve(&parsed.settings.theme, Theme::Paper, &empty);
+            let (d, _) = resolve(&parsed.settings.theme, Theme::Stone, &empty);
+            assert_eq!((l.palette, d.palette), expect);
+        }
     }
 
     // @R-032
     #[test]
     fn r032_builtin_registry_is_consistent() {
         let all = builtins();
+        let ids: Vec<&str> = all.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "paper",
+                "stone",
+                "tokyo-haze",
+                "neon-night",
+                "washi",
+                "sakura-dawn",
+                "matcha",
+                "dune",
+                "midnight-ink",
+                "kyoto-dusk",
+                "deep-sea"
+            ]
+        );
+        for (i, t) in all.iter().enumerate() {
+            let light = i == 0 || (4..=7).contains(&i);
+            assert_eq!(
+                t.base,
+                if light { Theme::Paper } else { Theme::Stone },
+                "{}",
+                t.id
+            );
+        }
         assert_eq!(all[0], builtin(Theme::Paper));
         assert_eq!(all[1], builtin(Theme::Stone));
         for (i, t) in all.iter().enumerate() {
@@ -786,7 +833,7 @@ mod tests {
     // @D-043
     #[test]
     fn d043_new_builtin_ids_are_reserved_against_files() {
-        for id in ["tokyo-haze", "neon-night"] {
+        for id in builtins().iter().map(|b| b.id.clone()) {
             let file = format!("{id}.toml");
             let c = catalog(&[(file.as_str(), "")]);
             assert!(c.themes.is_empty(), "{id}");
@@ -931,22 +978,14 @@ mod tests {
     // @D-043
     #[test]
     fn d043_theme_id_rejects_paths_and_reserved_names() {
-        for bad in [
-            "",
-            "paper",
-            "stone",
-            "tokyo-haze",
-            "neon-night",
-            "..",
-            r"..\x",
-            "a/b",
-            "A",
-            "a b",
-            "a.b",
-            &"x".repeat(41),
-        ] {
+        for bad in builtins()
+            .iter()
+            .map(|b| b.id.as_str())
+            .chain(["", "..", r"..\x", "a/b", "A", "a b", "a.b"])
+        {
             assert!(!is_custom_id(bad), "{bad}");
         }
+        assert!(!is_custom_id(&"x".repeat(41)));
         assert!(is_custom_id("harbor-2"));
         assert!(is_theme_name("paper") && is_theme_name("harbor-2") && !is_theme_name(r"..\x"));
         let c = catalog(&[("Bad Name.toml", "")]);

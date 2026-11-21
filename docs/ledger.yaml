@@ -94,18 +94,18 @@ entries:
 
   - id: R-007
     type: requirement
-    version: 3
+    version: 4
     status: active
     topic: 10
-    answer: "setuju dengan semuanya! Version 2 (2026-11-18, round 2 of the UI/UX upgrade): \"setuju semua!\" Version 3 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\"; concept \"Haze + Amber (Recommended)\", type \"Built-in (Recommended)\""
-    recommendation: "Token dari naobi.dev/DESIGN.md (tema terang 'paper', tema gelap 'stone', ikut tema Windows), font Inter + JetBrains Mono di-embed, bahasa UI Inggris, WCAG 2.2 AA untuk kontras, semua fitur bisa pakai keyboard saja. Version 2: kontras di bawah AA boleh pada tema kustom dengan Notice; paper dan stone tetap wajib AA. Version 3: dua tema bawaan gelap baru, tokyo-haze dan neon-night, juga wajib AA."
-    statement: "The UI applies the Naobi design tokens from naobi.dev DESIGN.md through the built-in light 'paper' and dark 'stone' themes (and the two further dark built-in themes 'tokyo-haze' and 'neon-night'), shows the theme assigned to the current Windows app mode, embeds Inter and JetBrains Mono, uses English copy, and every capability is operable by keyboard alone. Every built-in theme (paper, stone, tokyo-haze, neon-night) meets WCAG 2.2 AA contrast; a custom theme may fall below it under R-033."
+    answer: "setuju dengan semuanya! Version 2 (2026-11-18, round 2 of the UI/UX upgrade): \"setuju semua!\" Version 3 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\"; concept \"Haze + Amber (Recommended)\", type \"Built-in (Recommended)\" Version 4 (2026-11-21, seven more built-in themes): the Owner said \"aku pengen ada minimal 10 theme di naobi command\" and chose light Washi, Sakura Dawn, Matcha and Dune, dark Midnight Ink, Kyoto Dusk and Deep Sea; mockup \"Langsung bangun\""
+    recommendation: "Token dari naobi.dev/DESIGN.md (tema terang 'paper', tema gelap 'stone', ikut tema Windows), font Inter + JetBrains Mono di-embed, bahasa UI Inggris, WCAG 2.2 AA untuk kontras, semua fitur bisa pakai keyboard saja. Version 2: kontras di bawah AA boleh pada tema kustom dengan Notice; paper dan stone tetap wajib AA. Version 3: dua tema bawaan gelap baru, tokyo-haze dan neon-night, juga wajib AA. Version 4: tujuh tema bawaan baru (terang washi, sakura-dawn, matcha, dune; gelap midnight-ink, kyoto-dusk, deep-sea) juga wajib AA."
+    statement: "The UI applies the Naobi design tokens from naobi.dev DESIGN.md through the built-in light 'paper' and dark 'stone' themes (and the nine further built-in themes 'tokyo-haze', 'neon-night', 'washi', 'sakura-dawn', 'matcha', 'dune', 'midnight-ink', 'kyoto-dusk' and 'deep-sea'), shows the theme assigned to the current Windows app mode, embeds Inter and JetBrains Mono, uses English copy, and every capability is operable by keyboard alone. Every built-in theme (paper, washi, sakura-dawn, matcha, dune (light); stone, tokyo-haze, neon-night, midnight-ink, kyoto-dusk, deep-sea (dark)) meets WCAG 2.2 AA contrast; a custom theme may fall below it under R-033."
     acceptance:
       - "Switching Windows between light and dark mode switches the app theme without restart"
-      - "All text/background token pairs of every built-in theme (paper, stone, tokyo-haze, neon-night) meet WCAG 2.2 AA contrast ratios"
+      - "All text/background token pairs of every built-in theme (paper, stone, tokyo-haze, neon-night, washi, sakura-dawn, matcha, dune, midnight-ink, kyoto-dusk, deep-sea) meet WCAG 2.2 AA contrast ratios"
       - "Every MVP capability can be completed without a mouse"
     links:
-      tickets: ["NCMD-11@3", "NCMD-13@3", "NCMD-25@3", "NCMD-50@3", "NCMD-54@3", "NCMD-55@3"]
+      tickets: ["NCMD-11@4", "NCMD-13@4", "NCMD-25@4", "NCMD-50@4", "NCMD-54@4", "NCMD-55@4", "NCMD-57@4"]
 
   - id: R-008
     type: requirement
@@ -634,11 +634,11 @@ entries:
 
   - id: D-030
     type: decision
-    version: 2
+    version: 3
     status: active
     topic: 10
-    answer: "autonomous default. Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\""
-    recommendation: "Adapt the Naobi web tokens to the desktop without inventing colors: reuse the paper and stone tokens (tokyo-haze and neon-night are two further built-in palettes the Owner added on 2026-11-20 and are not derived from naobi.dev DESIGN.md), the DOC-09 type and spacing scales and the DOC-10 motion tokens, and flag the one contrast failure."
+    answer: "autonomous default. Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\" Version 3 (2026-11-21, seven more built-in themes): the Owner said \"aku pengen ada minimal 10 theme di naobi command\" and chose light Washi, Sakura Dawn, Matcha and Dune, dark Midnight Ink, Kyoto Dusk and Deep Sea; mockup \"Langsung bangun\""
+    recommendation: "Adapt the Naobi web tokens to the desktop without inventing colors: reuse the paper and stone tokens (tokyo-haze and neon-night, added by the Owner on 2026-11-20, and washi, sakura-dawn, matcha, dune, midnight-ink, kyoto-dusk and deep-sea, added on 2026-11-21, are further built-in palettes not derived from naobi.dev DESIGN.md), the DOC-09 type and spacing scales and the DOC-10 motion tokens, and flag the one contrast failure."
     statement: "Desktop token adaptation: the paper window uses paper-elevated and the stone window uses dock-stone; the selection accent is oxide on paper and stone-focus on stone; the focus ring is focus blue on paper and stone-focus on stone; type uses Inter and JetBrains Mono at 12, 13, 14, 16 and 18 px only; spacing follows the 4 px scale; window radius is 8 and row radius 2; there is no shadow beyond the OS window shadow and no animation on show or hide; reduced motion follows the Windows Animation effects setting; on a selected row in paper, muted text steps up to ink-secondary because ink-muted measures 4.32:1 there; no new danger or success tint is added on stone and state is conveyed by text and glyph; the settings file offers ui.text_scale of 1.0, 1.125 or 1.25."
 
   - id: D-031
@@ -882,27 +882,27 @@ entries:
 
   - id: R-032
     type: requirement
-    version: 2
+    version: 3
     status: active
     topic: 10
-    answer: "setuju semua! Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\""
-    recommendation: "Dua slot, light dan dark, masing-masing menunjuk satu tema, aplikasi tetap mengikuti mode Windows. Bawaan paper dan stone (default slot), ditambah tokyo-haze dan neon-night, semuanya terkunci, tema kustom dibuat dengan Duplicate. Satu tema terus: isi kedua slot dengan tema yang sama."
-    statement: "The settings hold a light and a dark theme slot, defaulting to paper and stone; the app shows the slot of the current Windows app mode. The four built-in themes (paper, stone, tokyo-haze, neon-night) are read-only, and both slots may name the same theme."
+    answer: "setuju semua! Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\" Version 3 (2026-11-21, seven more built-in themes): the Owner said \"aku pengen ada minimal 10 theme di naobi command\" and chose light Washi, Sakura Dawn, Matcha and Dune, dark Midnight Ink, Kyoto Dusk and Deep Sea; mockup \"Langsung bangun\""
+    recommendation: "Dua slot, light dan dark, masing-masing menunjuk satu tema, aplikasi tetap mengikuti mode Windows. Bawaan paper dan stone (default slot), ditambah sembilan tema lain (tokyo-haze, neon-night, washi, sakura-dawn, matcha, dune, midnight-ink, kyoto-dusk, deep-sea), semuanya terkunci, tema kustom dibuat dengan Duplicate. Satu tema terus: isi kedua slot dengan tema yang sama."
+    statement: "The settings hold a light and a dark theme slot, defaulting to paper and stone; the app shows the slot of the current Windows app mode. The eleven built-in themes (paper, washi, sakura-dawn, matcha, dune (light); stone, tokyo-haze, neon-night, midnight-ink, kyoto-dusk, deep-sea (dark)) are read-only, and both slots may name the same theme."
     acceptance:
       - "With default settings the app looks as it does with paper in light mode and stone in dark mode"
       - "Switching the Windows mode switches between the two slots without restart"
       - "With the same theme in both slots, switching the Windows mode does not change the Launcher's colors"
       - "No built-in theme offers an Edit file action or has a file a save could change"
     links:
-      tickets: ["NCMD-50@2", "NCMD-52@2", "NCMD-55@2"]
+      tickets: ["NCMD-50@3", "NCMD-52@3", "NCMD-55@3", "NCMD-57@3"]
 
   - id: R-033
     type: requirement
-    version: 2
+    version: 3
     status: active
     topic: 10
-    answer: "setuju semua! Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\""
-    recommendation: "Nilai tidak valid memakai nilai tema dasarnya dan Notice menyebut baris yang salah. Kontras di bawah WCAG AA tetap boleh pada tema kustom dengan Notice yang menyebut pasangan warna yang gagal. Setiap tema bawaan (paper, stone, tokyo-haze, neon-night) tetap wajib AA."
+    answer: "setuju semua! Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\" Version 3 (2026-11-21, seven more built-in themes): the Owner said \"aku pengen ada minimal 10 theme di naobi command\" and chose light Washi, Sakura Dawn, Matcha and Dune, dark Midnight Ink, Kyoto Dusk and Deep Sea; mockup \"Langsung bangun\""
+    recommendation: "Nilai tidak valid memakai nilai tema dasarnya dan Notice menyebut baris yang salah. Kontras di bawah WCAG AA tetap boleh pada tema kustom dengan Notice yang menyebut pasangan warna yang gagal. Setiap tema bawaan (kesebelas id: paper, stone, tokyo-haze, neon-night, washi, sakura-dawn, matcha, dune, midnight-ink, kyoto-dusk, deep-sea) tetap wajib AA."
     statement: "A custom theme never stops the app: an invalid value takes its base theme's value and a Notice names the file and line; a theme that cannot be read at all leaves the built-in theme of that mode on screen with a Notice. A custom theme whose text pair falls below WCAG 2.2 AA still applies, and a Notice names the failing pair; every built-in theme meets AA and never raises that Notice."
     acceptance:
       - "An invalid color in a custom theme uses the base theme's color, and a Notice names the theme file and line"
@@ -911,16 +911,16 @@ entries:
       - "A low-contrast custom theme applies, and a Notice names the failing pair and its ratio"
       - "A theme file over the size limit is refused with a Notice and is not parsed"
     links:
-      tickets: ["NCMD-50@2", "NCMD-55@2"]
+      tickets: ["NCMD-50@3", "NCMD-55@3", "NCMD-57@3"]
 
   - id: D-043
     type: decision
-    version: 2
+    version: 3
     status: active
     topic: 8
-    answer: "setuju semua, lanjut ke fase plan. Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\""
+    answer: "setuju semua, lanjut ke fase plan. Version 2 (2026-11-20, two built-in themes): asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\" Version 3 (2026-11-21, seven more built-in themes): the Owner said \"aku pengen ada minimal 10 theme di naobi command\" and chose light Washi, Sakura Dawn, Matcha and Dune, dark Midnight Ink, Kyoto Dusk and Deep Sea; mockup \"Langsung bangun\""
     recommendation: "Keep themes as plain data: one small TOML file per custom theme, resolved over a read-only built-in base, with no theme code, no font files, no new dependency and no in-app color editor."
-    statement: "A custom theme is %APPDATA%\\NaobiCommand\\themes\\<id>.toml, where <id> matches [a-z0-9-]{1,40}, is not the id of a built-in theme (paper, stone, tokyo-haze, neon-night), and the file is at most 64 KiB; at most 100 themes are read. A theme names a base (paper or stone) and overrides any of colors, shape, list density and installed font family names. naobi-core parses and resolves themes as pure data; the index worker reloads them on a folder change; the settings file keeps the slots in [theme], and applying a theme rewrites only that slot's line, never a settings file that does not parse. The window radius is 0, 4 or 8 px because Windows draws it (D-034, ADR-0007)."
+    statement: "A custom theme is %APPDATA%\\NaobiCommand\\themes\\<id>.toml, where <id> matches [a-z0-9-]{1,40}, is not the id of a built-in theme (paper, washi, sakura-dawn, matcha, dune (light); stone, tokyo-haze, neon-night, midnight-ink, kyoto-dusk, deep-sea (dark)), and the file is at most 64 KiB; at most 100 themes are read. A theme names a base (paper or stone) and overrides any of colors, shape, list density and installed font family names. naobi-core parses and resolves themes as pure data; the index worker reloads them on a folder change; the settings file keeps the slots in [theme], and applying a theme rewrites only that slot's line, never a settings file that does not parse. The window radius is 0, 4 or 8 px because Windows draws it (D-034, ADR-0007)."
     links:
       decisions: ["D-009@1", "D-034@2"]
 
@@ -944,14 +944,14 @@ entries:
 
   - id: D-046
     type: decision
-    version: 1
+    version: 2
     status: active
     topic: 10
-    answer: "Owner, 2026-11-20: asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\"; concept \"Haze + Amber (Recommended)\", type \"Built-in (Recommended)\""
-    recommendation: "Add two built-in dark themes, read-only and WCAG 2.2 AA tested, each usable in the light or the dark slot; default slots stay paper and stone; a new built-in cannot be a base."
-    statement: "Two additional built-in themes are approved by the Owner: tokyo-haze (Tokyo Haze) and neon-night (Neon Night), both dark, opaque, with the palettes recorded in docs/design/DESIGN_SYSTEM.md; muted and danger are lighter than the Owner's first sketch so every pair meets WCAG 2.2 AA. They are read-only, have no Edit file action, can be duplicated into a Custom theme with base stone, and reserve their ids against theme files. The Windows-mode type has no new variants."
+    answer: "Owner, 2026-11-20: asked \"Boleh aku ubah teks ledger dan GLOSSARY supaya mencatat theme baru?\", the Owner chose \"Ya, boleh (Recommended)\"; concept \"Haze + Amber (Recommended)\", type \"Built-in (Recommended)\" Version 2 (2026-11-21, seven more built-in themes): the Owner said \"aku pengen ada minimal 10 theme di naobi command\" and chose light Washi, Sakura Dawn, Matcha and Dune, dark Midnight Ink, Kyoto Dusk and Deep Sea; mockup \"Langsung bangun\""
+    recommendation: "Add built-in themes (two dark on 2026-11-20, seven more on 2026-11-21), read-only and WCAG 2.2 AA tested, each usable in the light or the dark slot; default slots stay paper and stone; a new built-in cannot be a base."
+    statement: "Eleven built-in themes are approved by the Owner: dark tokyo-haze and neon-night (2026-11-20) and, on 2026-11-21, light washi, sakura-dawn, matcha, dune (Windows-mode family paper, Duplicate base paper) and dark midnight-ink, kyoto-dusk, deep-sea (family stone). All are opaque, read-only, have no Edit file action and reserve their ids against theme files; palettes in docs/design/DESIGN_SYSTEM.md; every pair meets WCAG 2.2 AA with at least 0.5 margin. The Windows-mode type has no new variants."
     links:
-      decisions: ["D-043@2", "D-030@2"]
+      decisions: ["D-043@3", "D-030@3"]
 
   - id: R-034
     type: requirement

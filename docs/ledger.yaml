@@ -49,17 +49,17 @@ entries:
 
   - id: R-004
     type: requirement
-    version: 1
+    version: 2
     status: active
     topic: 3
-    answer: "setuju dengan semuanya!"
-    recommendation: "MVP = A (Launcher: app, file, system commands, quicklinks web search), B (kalkulator + konversi unit), C (Clipboard history), E (Window management snap/zona), F (Color Picker), G (Always On Top), H (Awake). Fase 2 = D (Snippets), I (Text Extractor OCR), J (Keyboard remapper), K (PowerRename, Image Resizer, Hosts editor, Peek, emoji picker, dll)."
-    statement: "The MVP contains seven modules: launcher (apps, files, system commands, web-search quicklinks), inline calculator with unit conversion, clipboard history, window management (snap to zones), color picker, always-on-top, and awake. Snippets, OCR text extractor, keyboard remapper and the remaining PowerToys utilities are phase 2."
+    answer: "setuju dengan semuanya! Version 2 (Phase 2 Spec #1): Snippets, Emoji picker, Scratchpad, Window switcher, File index, Currency conversion, Timezone/Date/Epoch, and Dev micro-tools enabled."
+    recommendation: "MVP = A (Launcher: app, file, system commands, quicklinks web search), B (kalkulator + konversi unit), C (Clipboard history), E (Window management snap/zona -> dihapus di D-039, diganti Window switcher di fase 2), F (Color Picker), G (Always On Top), H (Awake). Fase 2 aktif (Spec #1): D (Snippets manual), Emoji picker, Scratchpad, Window switcher, User-scoped File index, Currency conversion, Dev micro-tools. Masih di luar cakupan: OCR, Keyboard remapper, PowerRename, Image Resizer, Hosts editor, Peek."
+    statement: "Naobi Command ships the six core modules (launcher, calculator, clipboard history, color picker, always-on-top, awake) plus the Phase 2 commander suite (window switcher, searchable manual snippets, scratchpad view, inline emoji picker, user-scoped file index, currency conversion, timezone/date/epoch math, and developer micro-tools). OCR text extractor, keyboard remapper, PowerRename, Image Resizer, Hosts editor, and Peek remain out of scope."
     acceptance:
-      - "Each of the seven MVP modules is reachable from the launcher or its own hotkey"
-      - "No phase-2 module ships in the MVP build"
+      - "Each active module is reachable from the launcher or its own hotkey"
+      - "Out-of-scope utilities (OCR, remapper, PowerRename, hosts editor, peek, image resizer) do not ship in the build"
     links:
-      tickets: ["NCMD-25@1", "NCMD-35@1"]
+      tickets: ["NCMD-25@2", "NCMD-35@2"]
 
   - id: R-005
     type: requirement
@@ -261,32 +261,32 @@ entries:
 
   - id: R-013
     type: requirement
-    version: 1
+    version: 2
     status: active
     topic: 4
-    answer: "setuju semua"
-    recommendation: "MVP: query Windows Search index (cara PowerToys), memori ditanggung service Windows. Index MFT sendiri di fase 2."
-    statement: "File results in the MVP come from querying the Windows Search system index; the app keeps no file index of its own. An own NTFS index is phase 2."
+    answer: "setuju semua. Version 2 (ADR-0009): non-admin user-scoped disk-backed File index via ReadDirectoryChangesW + Windows Search fallback."
+    recommendation: "Phase 2 (ADR-0009): index lokal disk-backed per-user tanpa elevasi via ReadDirectoryChangesW + SQLite FTS5 (< 5 MB RAM), dengan Windows Search sebagai fallback saat hasil lokal sedikit atau memakai awalan ws:."
+    statement: "File results come from a non-admin, user-scoped disk-backed File index over configured user directories kept current via ReadDirectoryChangesW (< 5 MB resident RAM, ADR-0009), falling back to the transient Windows Search child process when local hits are sparse or prefixed with ws:."
     acceptance:
-      - "A file in an indexed location appears in results by name"
-      - "When Windows Search is disabled, the launcher shows a 'file search unavailable' row instead of an error"
+      - "A file inside configured user roots appears instantaneously from the local index with build noise ignored"
+      - "Sparse local hits or ws: queries fall back to Windows Search, and when Windows Search is disabled, the launcher shows a 'file search unavailable' row instead of an error"
     links:
-      tickets: ["NCMD-17@1"]
+      tickets: ["NCMD-17@2"]
 
   - id: R-014
     type: requirement
-    version: 1
+    version: 2
     status: active
     topic: 4
-    answer: "setuju semua"
-    recommendation: "Parser sendiri: aritmetika, persen, pangkat, hex/bin; konversi 8 kategori satuan (panjang, massa, suhu, volume, ukuran data, waktu, kecepatan, luas); tanpa kurs; Enter menyalin hasil."
-    statement: "Typing an expression in the root search shows an inline calculator result supporting arithmetic, percentages, powers and hex/binary, plus unit conversion in eight categories (length, mass, temperature, volume, data size, time, speed, area); there is no currency conversion; Enter copies the result."
+    answer: "setuju semua. Version 2 (Phase 2 Spec #1 + ADR-0008): adds ans chaining, calculation history, CSS px/rem, currency symbol stripping, offline timezone/date/epoch math, and cached FX currency conversion."
+    recommendation: "Parser sendiri: aritmetika, persen, pangkat, hex/bin, ans + history persisten, CSS px/rem, strip simbol mata uang, zona waktu/tanggal/epoch offline, konversi 8 kategori satuan, dan konversi kurs mata uang dari cache lokal (ADR-0008); Enter menyalin hasil."
+    statement: "Typing an expression in the root search shows an inline calculator result supporting arithmetic, ans chaining (with up to 100 entries persisted in naobi.db), percentages, powers, hex/binary, CSS px/rem, currency symbol stripping, offline timezone/date/epoch conversions, unit conversion in eight categories, and Currency rate conversion from the local fx-rates.json cache (ADR-0008); Enter copies the result."
     acceptance:
-      - "Expressions such as 2^10 + 15% evaluate correctly in unit tests"
-      - "5 km to mi and 100 F to C convert correctly"
+      - "Expressions such as 2^10 + 15%, ans + 5, 32 px to rem, and $120 + $45 evaluate correctly in unit tests"
+      - "5 km to mi, 100 F to C, timezone/date/epoch queries, and cached currency conversions (53 usd) evaluate accurately"
       - "Enter on a calculator result puts the result text on the clipboard"
     links:
-      tickets: ["NCMD-10@1", "NCMD-18@1"]
+      tickets: ["NCMD-10@2", "NCMD-18@2"]
 
   - id: R-015
     type: requirement

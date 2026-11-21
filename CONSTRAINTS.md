@@ -23,7 +23,7 @@ Read before writing code. Never weaken this file to make a change pass.
 | No unwrap/expect outside tests | Zero (D-005) | workspace lints `clippy::unwrap_used` and `clippy::expect_used` set to deny, run by the clippy row above | task end (local) |
 | Unsafe | Only in `naobi-win32`; every block has `// SAFETY:` (D-011) | `forbid(unsafe_code)` in all other crates, `clippy::undocumented_unsafe_blocks` denied, run by the clippy row above | every edit |
 | Performance (R-006) | Every budget in "Project numbers" reports PASS | `cargo run --release -p naobi-perf -- all --out target/perf.json` (reads `docs/research/baseline-powertoys.json`, no PowerToys needed) | before Gate 3, after any hot-path change |
-| Network silence (R-010) | No socket opened in a 10-minute session without an explicit URL action | `cargo run --release -p naobi-perf -- network-silence --minutes 10` | Gate 3 |
+| Network silence (R-010) | No socket opened in a 10-minute session without an explicit URL action (hardened `WinHttp` FX refresh in `naobi-win32` allowed at most once per 24h or on explicit refresh per ADR-0008) | `cargo run --release -p naobi-perf -- network-silence --minutes 10` | Gate 3 |
 | Accessibility | All Naobi token text pairs (every built-in theme: `paper`, `stone`, `tokyo-haze`, `neon-night`) meet WCAG 2.2 AA; a Custom theme below AA applies with a Notice naming the pair (R-033); manual checklist in DESIGN_SYSTEM.md passes | test `r007_token_pairs_meet_wcag_aa` in `cargo test --workspace`; manual keyboard-only pass and Accessibility Insights for Windows | task end (test); Gate 3 (manual) |
 | Dependencies (Rust) | No advisories, licenses allowed, banned crates absent | `cargo deny check` (cargo-deny) | task end (local) |
 | Secrets | None in source or history | `gitleaks detect --redact` | every edit, before commit (local) |
@@ -61,7 +61,10 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 | Theme file | <= 64 KiB, id `[a-z0-9-]{1,40}`, at most 100 themes read | D-043 |
 | Theme values | Window radius 0, 4 or 8; row and control radius 0 to 12; chip radius 0 to 8; font family <= 64 characters | R-030, D-043 |
 | Visible rows | <= 50 | D-016, D-021 |
-| File results | <= 30, async | D-016 |
+| File results | <= 30, async; local disk-backed File index resident overhead < 5 MB (ADR-0009) | D-016, ADR-0009 |
+| Calculation history | <= 100 entries, DPAPI-encrypted | R-014 |
+| FX rate response & cache | <= 256 KiB, 5 s timeout, 24h TTL, HTTPS allowlist only | ADR-0008 |
+| Snippets file | <= 256 KiB (`snippets.toml`), zero `WH_KEYBOARD_LL` hooks | ADR-0004 |
 | Money and time | Rp0 (free and open-source dependencies only); no hard deadline | D-008 |
 
 ## Measured, not yet enforced (ratchets)

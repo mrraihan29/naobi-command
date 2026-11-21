@@ -135,6 +135,9 @@ impl Host for AppHost {
     fn paste(&mut self, id: naobi_core::ids::EntryId, target: Option<isize>) {
         modules::clipboard::paste_entry(id, target, |n| raise_notice(&mut state(), n));
     }
+    fn paste_text(&mut self, text: &str, target: Option<isize>) {
+        modules::clipboard::paste_text(text.to_owned(), target, |n| raise_notice(&mut state(), n));
+    }
     fn search_files(&mut self, generation: u64, query: &str) {
         modules::files::request(generation, query);
     }

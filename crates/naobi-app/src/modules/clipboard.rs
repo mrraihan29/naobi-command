@@ -141,18 +141,43 @@ pub fn copy_entry(id: EntryId) -> io::Result<()> {
 /// Enter: runs the paste sequence on a thread of its own, so the UI thread never waits for the
 /// target window or for the 300 ms before the restore. `raise` shows a Notice.
 pub fn paste_entry(id: EntryId, target: Option<isize>, raise: fn(Notice)) {
+    spawn_paste(
+        move || {
+            shared()
+                .and_then(|h| payload_of(&h, id))
+                .ok_or_else(|| notice("That entry is no longer there.", NoticeKind::Warning))
+        },
+        target,
+        raise,
+    );
+}
+
+/// Pastes plain text (such as an emoji or symbol) via the D-019 snapshot-and-restore pipeline.
+pub fn paste_text(text: String, target: Option<isize>, raise: fn(Notice)) {
+    spawn_paste(
+        move || Ok(Payload::Text(zeroize::Zeroizing::new(text))),
+        target,
+        raise,
+    );
+}
+
+fn spawn_paste(
+    resolve: impl FnOnce() -> Result<Payload, Notice> + Send + 'static,
+    target: Option<isize>,
+    raise: fn(Notice),
+) {
     let spawned = std::thread::Builder::new()
         .name("paste".into())
         .spawn(move || {
             // One paste at a time: a second one would snapshot the first one's entry as "previous".
             static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
             let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-            let Some(payload) = shared().and_then(|h| payload_of(&h, id)) else {
-                raise(notice(
-                    "That entry is no longer there.",
-                    NoticeKind::Warning,
-                ));
-                return;
+            let payload = match resolve() {
+                Ok(payload) => payload,
+                Err(n) => {
+                    raise(n);
+                    return;
+                }
             };
             if let Outcome::Aborted(why) = paste(&payload, target, &mut Board, &mut Foreground) {
                 // The reason only (T-010): never the entry.

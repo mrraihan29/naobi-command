@@ -26,6 +26,9 @@ impl Cx {
     pub fn copy_text(&mut self, text: String) {
         self.effects.push(Effect::CopyText(text));
     }
+    pub fn paste_text(&mut self, text: String) {
+        self.effects.push(Effect::PasteText(text));
+    }
     pub fn launch(&mut self, t: LaunchTarget) {
         self.effects.push(Effect::Launch(t));
     }

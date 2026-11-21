@@ -38,6 +38,8 @@ pub trait Host {
     /// Pastes a history entry into `target`, the window that had focus before the Launcher. The
     /// Launcher is already hidden; the host does the sequence off the UI thread.
     fn paste(&mut self, id: EntryId, target: Option<isize>);
+    /// Pastes plain text into `target`, the window that had focus before the Launcher.
+    fn paste_text(&mut self, text: &str, target: Option<isize>);
     /// Starts a file search for `query`; the answer comes back through
     /// `Controller::on_file_results` with the same `generation`.
     fn search_files(&mut self, generation: u64, query: &str);
@@ -296,6 +298,7 @@ impl Controller {
         let mut launched = false;
         let mut copied = false;
         let mut paste = None;
+        let mut paste_text = None;
         let mut hotkeys = Vec::new();
         // Where a paste goes: the window that had focus before the Launcher (`close` forgets it).
         let target = self.previous;
@@ -341,6 +344,7 @@ impl Controller {
                 Effect::PushView(_) => {}
                 // The paste runs after the Launcher is hidden.
                 Effect::Paste(id) => paste = Some(id),
+                Effect::PasteText(text) => paste_text = Some(text),
                 Effect::RunHotkey(id) => hotkeys.push(id),
                 Effect::ApplyTheme(id) => match host.apply_theme(&id) {
                     Ok(()) => self.applied = true,
@@ -363,11 +367,14 @@ impl Controller {
             let focused_other = matches!(host.foreground(), Some(w) if Some(w) != self.previous);
             self.close(
                 host,
-                restore && !launched && paste.is_none() && !focused_other,
+                restore && !launched && paste.is_none() && paste_text.is_none() && !focused_other,
             );
         }
         if let Some(id) = paste {
             host.paste(id, target);
+        }
+        if let Some(text) = paste_text {
+            host.paste_text(&text, target);
         }
         // After the Launcher is hidden and focus is back: the handlers act on the window in front.
         for id in hotkeys {
@@ -458,6 +465,9 @@ mod tests {
         }
         fn paste(&mut self, id: EntryId, target: Option<isize>) {
             self.log.push(format!("paste {} {target:?}", id.0));
+        }
+        fn paste_text(&mut self, text: &str, target: Option<isize>) {
+            self.log.push(format!("paste_text {text} {target:?}"));
         }
         fn search_files(&mut self, generation: u64, query: &str) {
             self.log.push(format!("search {generation} {query}"));
@@ -1165,6 +1175,9 @@ mod tests {
             fn paste(&mut self, id: EntryId, target: Option<isize>) {
                 self.fake.paste(id, target);
             }
+            fn paste_text(&mut self, text: &str, target: Option<isize>) {
+                self.fake.paste_text(text, target);
+            }
             fn search_files(&mut self, generation: u64, query: &str) {
                 self.fake.search_files(generation, query);
             }
@@ -1294,5 +1307,59 @@ mod tests {
             h.log,
             vec!["hide".to_string(), format!("paste {second_id} Some(77)")]
         );
+    }
+
+    #[test]
+    fn emoji_picker_enter_pastes_text_after_hide_and_ctrl_enter_copies() {
+        use naobi_core::ids::HotkeyId;
+        use naobi_launcher::providers::emoji::{EmojiSource, EmojiView, VIEW_ID};
+
+        let fdb = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(fdb, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        let launcher = Launcher::new(
+            vec![Box::new(EmojiSource)],
+            vec![Box::new(EmojiView)],
+            frecency,
+            Box::new(Zero),
+        );
+        let mut m = crate::modules::Modules::new();
+        m.subscribe(
+            HotkeyId("emoji".into()),
+            Box::new(|_, cx| cx.open_view(ViewId(VIEW_ID.into()))),
+        );
+        let crate::modules::Parts { router, .. } = m.into_parts();
+        let mut c = Controller::new(launcher, router);
+        let mut h = Fake {
+            fg: Some(77),
+            ..Fake::default()
+        };
+
+        c.show(&mut h);
+        h.log.clear();
+        c.on_ui_event(UiEvent::TextChanged(":fire".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, false), &mut h);
+        assert_eq!(
+            h.log,
+            vec!["hide".to_string(), "paste_text 🔥 Some(77)".to_string()]
+        );
+
+        assert!(c.on_hotkey(&HotkeyId("emoji".into()), &mut h));
+        assert!(h.visible);
+        h.log.clear();
+        c.on_ui_event(UiEvent::TextChanged("rocket".into()), &mut h);
+        c.on_ui_event(key(Key::Enter, true), &mut h);
+        assert_eq!(
+            h.log,
+            vec!["copy 🚀".to_string(), "close_later 120".to_string()]
+        );
+        assert_eq!(
+            h.last_post
+                .as_ref()
+                .and_then(|s| s.footer.confirmation.as_deref()),
+            Some("Copied")
+        );
+        h.log.clear();
+        c.finish_close(&mut h);
+        assert_eq!(h.log, vec!["hide".to_string(), "restore 77".to_string()]);
     }
 }

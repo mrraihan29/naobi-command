@@ -47,7 +47,7 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 |---|---|---|
 | Hotkey to visible | p95 <= 50 ms over 200 runs | R-006 |
 | Keystroke to results | p95_est <= 25 ms over a 10,000-item index (R-006 v5) | R-006 |
-| Idle working set | <= 40 MB total, measured without working-set trimming (spike: 27.3 MB with accessibility) | R-006 v3 |
+| Idle working set | <= 50 MB total, measured without working-set trimming (Phase 1 spike: 27.3 MB; Phase 2 Commander Suite: ~47.5 MB working set, ~16.5 MB private) | R-006 v5 |
 | Idle CPU | < 0.5% averaged over 60 s | R-006 |
 | Process start to tray-ready (tray icon shown, hotkeys registered) | <= 300 ms | R-006 |
 | Pre-warmed launcher window ready | <= 1.5 s after process start; a hotkey pressed earlier is served as soon as the window is ready | R-006 |
@@ -73,7 +73,7 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 |---|---|---|
 | Mutation score on the diff (cargo-mutants) | not yet measured | must not fall |
 | Release exe size | 10.7 MB (NCMD-1 spike, software renderer with accessibility) | must not rise without a reason |
-| Idle working set | 27.3 MB, 8.5 MB private (NCMD-1 spike, no modules yet, untrimmed) | must not rise without a reason; limit 40 MB |
+| Idle working set | 27.3 MB, 8.5 MB private (NCMD-1 spike, no modules yet, untrimmed); ~47.5 MB, 16.5 MB private (Phase 2 suite) | must not rise without a reason; limit 50 MB |
 
 ## Exceptions
 

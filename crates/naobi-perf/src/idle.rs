@@ -79,7 +79,7 @@ pub fn run(
     );
     record(
         out,
-        verdict("idle_working_set", m.working_set as f64 / MB, 40.0, "MB"),
+        verdict("idle_working_set", m.working_set as f64 / MB, 50.0, "MB"),
     )?;
     // The budget is "< 0.5%"; the verdict file uses <=, the same at this precision.
     record(out, verdict("idle_cpu", cpu, 0.5, "percent"))

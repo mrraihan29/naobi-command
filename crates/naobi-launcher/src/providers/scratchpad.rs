@@ -201,7 +201,7 @@ impl ViewSource for ScratchpadView {
     }
 
     fn placeholder(&self) -> &'static str {
-        "Write Markdown notes..."
+        "Write Markdown in Scratchpad..."
     }
 
     fn preview(&self, _id: &ItemId) -> Option<Preview> {

@@ -101,6 +101,14 @@ fn with_audio_endpoint<T>(f: impl FnOnce(&IAudioEndpointVolume) -> Result<T>) ->
     Ok(out)
 }
 
+/// Reads `(muted, scalar_volume)` from the default multimedia render endpoint without mutating it.
+pub fn audio_endpoint_state() -> io::Result<(bool, f32)> {
+    with_audio_endpoint(|ep| {
+        // SAFETY: `ep` is an active `IAudioEndpointVolume` queried read-only.
+        unsafe { Ok((ep.GetMute()?.as_bool(), ep.GetMasterVolumeLevelScalar()?)) }
+    })
+}
+
 /// Toggles the mute state of the default multimedia render endpoint.
 pub fn toggle_mute() -> io::Result<()> {
     with_audio_endpoint(|ep| {
@@ -149,6 +157,8 @@ pub fn select_local_ip(addrs: &[LocalAddr]) -> Option<Ipv4Addr> {
 }
 
 /// Reads the active local interface IPv4 address via IP Helper without opening any socket (R-010).
+/// Uses `GetIpAddrTable` + `GetIfEntry` instead of `GetAdaptersAddresses` because `Win32_Networking_WinSock`
+/// is banned by `deny.toml`.
 pub fn local_ip() -> io::Result<Option<String>> {
     let mut size = 0u32;
     let mut buf = Vec::<u32>::new();

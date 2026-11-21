@@ -96,12 +96,16 @@ pub fn run(exe: &Path, minutes: u64, out: &Path) -> Result<()> {
         bail!("--minutes must be at least 1: a verdict needs a session");
     }
     check_env()?;
-    // The perf build leaves the app catalog and clipboard history off; the session runs with them on, so
-    // the verdict covers the code that scans Start Menu folders and listens to the clipboard.
+    // The perf build leaves the app catalog, clipboard history, and File index off; the session runs with them on, so
+    // the verdict covers the code that scans Start Menu folders and configured roots and listens to the clipboard.
     let mut app = App::spawn_with(
         exe,
         1_000,
-        &[("NAOBI_TEST_APPS", "1"), ("NAOBI_TEST_CLIPBOARD", "1")],
+        &[
+            ("NAOBI_TEST_APPS", "1"),
+            ("NAOBI_TEST_CLIPBOARD", "1"),
+            ("NAOBI_TEST_FILES", "1"),
+        ],
     )?;
     app.wait("tray_ready")?;
     app.wait("window_ready")?;

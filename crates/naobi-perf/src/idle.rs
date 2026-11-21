@@ -48,9 +48,10 @@ pub fn run(
             seeded.clone().unwrap_or_else(|| sandbox.join("data")),
         )
         .env("NAOBI_SETTINGS_DIR", sandbox.join("settings"))
-        // The perf build leaves the app catalog and clipboard history off; idle is measured with them on.
+        // The perf build leaves the app catalog, clipboard history, and File index off; idle is measured with them on.
         .env("NAOBI_TEST_APPS", "1")
         .env("NAOBI_TEST_CLIPBOARD", "1")
+        .env("NAOBI_TEST_FILES", "1")
         .spawn()?;
     // `--pinned 1`: one helper window is made topmost (so one border and one hook exist) while idle
     // is measured. The helper belongs to this process; it is closed after the run.

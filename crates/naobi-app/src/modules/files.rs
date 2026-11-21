@@ -69,7 +69,7 @@ pub fn set_config(files: &Files) {
     }
 }
 
-/// Starts the background File index crawler and `ReadDirectoryChangesW` watcher.
+/// Starts the background File index scanner and `ReadDirectoryChangesW` watcher.
 pub fn start_indexer(files: &Files) {
     set_config(files);
     if !indexer_enabled() {
@@ -81,7 +81,10 @@ pub fn start_indexer(files: &Files) {
     let wake = match WakeEvent::new() {
         Ok(w) => Arc::new(w),
         Err(e) => {
-            tracing::warn!(error = %e, "file index wake event failed; local file index is off");
+            tracing::warn!(
+                code = e.code().0,
+                "file index wake event failed; local file index is off"
+            );
             return;
         }
     };
@@ -133,7 +136,10 @@ fn run_indexer(db_path: &Path, wake: &WakeEvent) {
     let mut idx = match FileIndex::open(db_path) {
         Ok(i) => i,
         Err(e) => {
-            tracing::warn!(error = %e, "file index store could not be opened");
+            tracing::warn!(
+                code = ?e.sqlite_error_code(),
+                "file index store could not be opened"
+            );
             return;
         }
     };
@@ -157,7 +163,11 @@ fn run_indexer(db_path: &Path, wake: &WakeEvent) {
             }
         }
         if let Err(e) = idx.sync_roots(&watched_roots, &cfg.ignore) {
-            tracing::warn!(error = %e, "file index sync failed");
+            tracing::warn!(
+                code = ?e.sqlite_error_code(),
+                roots = watched_roots.len(),
+                "file index sync failed"
+            );
         }
 
         loop {
@@ -183,7 +193,7 @@ fn run_indexer(db_path: &Path, wake: &WakeEvent) {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "file index watch stopped");
+                    tracing::warn!(code = e.code().0, "file index watch stopped");
                     return;
                 }
             }
@@ -831,5 +841,59 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn d020_file_index_errors_never_log_paths() {
+        use std::sync::{Arc, Mutex};
+        #[derive(Clone, Default)]
+        struct Buf(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Buf {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let dir = std::env::temp_dir().join(format!(
+            "naobi-files-log-{}-zq-file-path-9914",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let blocker = dir.join("zq-blocker-file");
+        std::fs::write(&blocker, "not a directory").expect("write blocker");
+        let bad_db = blocker.join("zq-secret-db-9914.db");
+        let wake = WakeEvent::new().expect("wake");
+
+        let buf = Buf::default();
+        let sink = buf.clone();
+        let sub = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .with_target(false)
+            .with_writer(move || sink.clone())
+            .finish();
+        tracing::subscriber::with_default(sub, || {
+            tracing::callsite::rebuild_interest_cache();
+            run_indexer(&bad_db, &wake);
+        });
+
+        let text =
+            String::from_utf8_lossy(&buf.0.lock().unwrap_or_else(|e| e.into_inner())).into_owned();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            text.contains("file index store could not be opened"),
+            "{text}"
+        );
+        assert!(text.contains("code="), "{text}");
+        assert!(!text.contains("zq-file-path-9914"), "leaked dir: {text}");
+        assert!(!text.contains("zq-blocker-file"), "leaked file: {text}");
+        assert!(!text.contains("zq-secret-db-9914"), "leaked db: {text}");
     }
 }

@@ -175,6 +175,18 @@ fn windows_view_lists_filters_and_pops_or_hides_on_esc() {
 
     l.handle(UiEvent::TextChanged("switch windows".into()));
     assert_eq!(titles(&l.screen())[0], "Switch Windows");
+    let switch_items = naobi_core::command::CommandSource::items(
+        &WindowCommands,
+        &naobi_core::command::Query::default(),
+    );
+    assert!(
+        !switch_items[0]
+            .keywords
+            .iter()
+            .any(|k| k.to_ascii_lowercase().contains("task")),
+        "GLOSSARY.md avoids 'task' for Open window / Window switcher: {:?}",
+        switch_items[0].keywords
+    );
     assert_eq!(
         key(&mut l, Key::Enter, false),
         vec![Effect::PushView(ViewId(VIEW_ID.into()))]

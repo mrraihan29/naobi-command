@@ -90,6 +90,7 @@ fn opening_scratchpad_pushes_multiline_editor_view_and_loads_existing_notes() {
     assert_eq!(effects, vec![Effect::PushView(ViewId(VIEW_ID.into()))]);
 
     let s = l.screen();
+    assert_eq!(s.placeholder, "Write Markdown in Scratchpad...");
     assert_eq!(s.editor.as_deref(), Some("# Heading\n- task"));
     assert!(s.sections.is_empty());
     assert!(s.empty.is_none());

@@ -23,6 +23,13 @@ const DEFAULT_USER_DIRS: [&str; 12] = [
 
 const SYNC_BATCH: usize = 500;
 
+const UPSERT_FILE_SQL: &str = "
+INSERT INTO files (path, name, gen) VALUES (?1, ?2, ?3)
+ON CONFLICT(path) DO UPDATE SET
+    name = excluded.name,
+    gen  = excluded.gen
+WHERE files.name != excluded.name OR files.gen != excluded.gen";
+
 const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
@@ -204,7 +211,7 @@ impl FileIndex {
         Ok(Self { conn })
     }
 
-    /// Crawls `roots` (skipping `ignore`, symlinks, and non-local paths), upserts entries in
+    /// Scans `roots` (skipping `ignore`, symlinks, and non-local paths), upserts entries in
     /// bounded transactions, prunes stale rows, and releases unused SQLite cache pages.
     pub fn sync_roots(
         &mut self,
@@ -222,7 +229,7 @@ impl FileIndex {
             if !is_safe_local_path(root) || !root.is_dir() {
                 continue;
             }
-            crawl_dir(root, ignore, &mut |path, name| {
+            scan_dir(root, ignore, &mut |path, name| {
                 total += 1;
                 batch.push((path, name));
                 if batch.len() >= SYNC_BATCH {
@@ -341,13 +348,7 @@ fn flush_batch(
 ) -> Result<(), rusqlite::Error> {
     let tx = conn.transaction()?;
     {
-        let mut stmt = tx.prepare_cached(
-            "INSERT INTO files (path, name, gen) VALUES (?1, ?2, ?3)
-             ON CONFLICT(path) DO UPDATE SET
-                 name = excluded.name,
-                 gen  = excluded.gen
-             WHERE files.name != excluded.name OR files.gen != excluded.gen",
-        )?;
+        let mut stmt = tx.prepare_cached(UPSERT_FILE_SQL)?;
         for (path, name) in batch {
             stmt.execute(params![path, name, gen])?;
         }
@@ -356,7 +357,7 @@ fn flush_batch(
     Ok(())
 }
 
-fn crawl_dir(
+fn scan_dir(
     root: &Path,
     ignore: &[String],
     visit: &mut impl FnMut(String, String) -> Result<(), rusqlite::Error>,
@@ -425,15 +426,9 @@ fn upsert_path(
     if meta.file_type().is_symlink() {
         return Ok(());
     }
-    let mut stmt = tx.prepare_cached(
-        "INSERT INTO files (path, name, gen) VALUES (?1, ?2, ?3)
-         ON CONFLICT(path) DO UPDATE SET
-             name = excluded.name,
-             gen  = excluded.gen
-         WHERE files.name != excluded.name OR files.gen != excluded.gen",
-    )?;
+    let mut stmt = tx.prepare_cached(UPSERT_FILE_SQL)?;
     if meta.is_dir() {
-        crawl_dir(path, ignore, &mut |p, name| {
+        scan_dir(path, ignore, &mut |p, name| {
             stmt.execute(params![p, name, gen])?;
             Ok(())
         })?;

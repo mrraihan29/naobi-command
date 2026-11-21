@@ -3,7 +3,8 @@
 //! assert fails. Lock, sleep, restart, shut down, sign out and empty recycle bin are never run by a
 //! test.
 use naobi_win32::system_commands::{
-    apps_use_light_theme, restore_theme, system_uses_light_theme, toggle_dark_mode,
+    apps_use_light_theme, audio_endpoint_state, local_ip, restore_theme, system_uses_light_theme,
+    toggle_dark_mode,
 };
 
 /// Both raw values, written back as they were (they can differ: dark system, light apps).
@@ -27,4 +28,26 @@ fn r020_toggle_dark_mode_flips_the_windows_app_theme() {
         before,
         "the app theme did not change"
     );
+}
+
+// @R-020
+#[test]
+#[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
+fn r020_core_audio_endpoint_opens_and_reads_state() {
+    let (_muted, volume) = audio_endpoint_state().expect("open Core Audio endpoint");
+    assert!(
+        (0.0..=1.0).contains(&volume),
+        "unexpected scalar volume: {volume}"
+    );
+}
+
+// @R-010
+#[test]
+#[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
+fn r010_local_ip_reads_interface_table_cleanly() {
+    let ip = local_ip().expect("read IP Helper table");
+    if let Some(ip_str) = ip {
+        let parsed: std::net::Ipv4Addr = ip_str.parse().expect("valid IPv4 address");
+        assert!(!parsed.is_loopback() && !parsed.is_unspecified());
+    }
 }

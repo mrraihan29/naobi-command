@@ -49,3 +49,25 @@ fn r010_fx_fetcher_enforces_256kb_cap_and_5s_timeout_constants() {
     let err = append_bounded(&mut buf, b"x").expect_err("262_145th byte must fail");
     assert_eq!(err, FxError::ResponseTooLarge);
 }
+
+// @R-010
+#[test]
+#[ignore = "tier2: interactive desktop"] // naobi-allow: tier 2 test, D-025
+fn r010_winhttp_fx_fetch_hits_allowlisted_endpoint() {
+    let frank = fetch_https("https://api.frankfurter.dev/v1/latest?base=EUR");
+    let ecb = fetch_https("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml");
+    match (&frank, &ecb) {
+        (Ok(body), _) => {
+            assert!(
+                body.contains("\"rates\"") && body.contains("\"USD\""),
+                "{body}"
+            );
+            assert!(body.len() <= MAX_RESPONSE_BYTES);
+        }
+        (_, Ok(body)) => {
+            assert!(body.contains("Cube") && body.contains("USD"), "{body}");
+            assert!(body.len() <= MAX_RESPONSE_BYTES);
+        }
+        (Err(e1), Err(e2)) => panic!("both FX endpoints failed: frankfurter={e1}, ecb={e2}"),
+    }
+}

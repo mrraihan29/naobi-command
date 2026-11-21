@@ -148,54 +148,44 @@ pub fn focus(hwnd: isize) -> Result<(), ActionError> {
     Ok(())
 }
 
-pub fn minimize(hwnd: isize) -> Result<(), ActionError> {
+fn ensure_target_window(hwnd: isize) -> Result<HWND, ActionError> {
     let h = hwnd_of(hwnd);
-    // SAFETY: `h` is validated by IsWindow before checking elevation and posting SW_MINIMIZE.
-    unsafe {
-        if !IsWindow(Some(h)).as_bool() {
-            return Err(ActionError::Refused);
-        }
-        if crate::paste::is_elevated(hwnd) {
-            return Err(ActionError::Elevated);
-        }
-        if !ShowWindowAsync(h, SW_MINIMIZE).as_bool() {
-            return Err(ActionError::Refused);
-        }
+    // SAFETY: `IsWindow` validates `h` as a live window handle before checking elevation.
+    if !unsafe { IsWindow(Some(h)) }.as_bool() {
+        return Err(ActionError::Refused);
+    }
+    if crate::paste::is_elevated(hwnd) {
+        return Err(ActionError::Elevated);
+    }
+    Ok(h)
+}
+
+pub fn minimize(hwnd: isize) -> Result<(), ActionError> {
+    let h = ensure_target_window(hwnd)?;
+    // SAFETY: `h` was validated as a live non-elevated window by `ensure_target_window`.
+    if !unsafe { ShowWindowAsync(h, SW_MINIMIZE) }.as_bool() {
+        return Err(ActionError::Refused);
     }
     Ok(())
 }
 
 pub fn close(hwnd: isize) -> Result<(), ActionError> {
-    let h = hwnd_of(hwnd);
-    // SAFETY: `h` is validated by IsWindow before checking elevation and posting WM_CLOSE.
-    unsafe {
-        if !IsWindow(Some(h)).as_bool() {
-            return Err(ActionError::Refused);
-        }
-        if crate::paste::is_elevated(hwnd) {
+    let h = ensure_target_window(hwnd)?;
+    // SAFETY: `h` was validated as a live non-elevated window by `ensure_target_window`.
+    if let Err(e) = unsafe { PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0)) } {
+        if e.code() == ERROR_ACCESS_DENIED.to_hresult() {
             return Err(ActionError::Elevated);
         }
-        if let Err(e) = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0)) {
-            if e.code() == ERROR_ACCESS_DENIED.to_hresult() {
-                return Err(ActionError::Elevated);
-            }
-            return Err(ActionError::Refused);
-        }
+        return Err(ActionError::Refused);
     }
     Ok(())
 }
 
 pub fn force_quit(hwnd: isize) -> Result<(), ActionError> {
-    let h = hwnd_of(hwnd);
+    let h = ensure_target_window(hwnd)?;
     let mut pid = 0u32;
-    // SAFETY: `h` is validated by IsWindow before querying elevation and its process id.
+    // SAFETY: `h` was validated by `ensure_target_window`; `pid` receives its owning process id.
     unsafe {
-        if !IsWindow(Some(h)).as_bool() {
-            return Err(ActionError::Refused);
-        }
-        if crate::paste::is_elevated(hwnd) {
-            return Err(ActionError::Elevated);
-        }
         GetWindowThreadProcessId(h, Some(&mut pid));
         if pid == 0 || pid == GetCurrentProcessId() {
             return Err(ActionError::Refused);

@@ -159,7 +159,6 @@ impl CommandSource for WindowCommands {
                 "windows".into(),
                 "open windows".into(),
                 "window switcher".into(),
-                "tasks".into(),
             ],
             alias: None,
             kind: ItemKind::Command,

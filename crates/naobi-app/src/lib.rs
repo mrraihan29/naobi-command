@@ -283,21 +283,32 @@ fn on_ready(ui: UiHandle) {
     naobi_win32::subclass::install(ui.window());
     let (controller, warn) = build_controller();
     CONTROLLER.with_borrow_mut(|c| *c = controller);
-    let show_now = {
+    let (show_now, aliases) = {
         let mut s = state();
         s.ui = Some(ui.clone());
         if let Some(n) = warn {
             raise_notice(&mut s, n);
         }
-        std::mem::take(&mut s.early_show)
+        let aliases = s
+            .settings
+            .as_ref()
+            .map(|cfg| cfg.aliases.clone())
+            .unwrap_or_default();
+        (std::mem::take(&mut s.early_show), aliases)
     };
     report("window_ready");
     if show_now {
         // Pressed before the window was ready: served as soon as it is.
-        with_controller(ui, |c, h| c.show(h));
+        with_controller(ui, |c, h| {
+            c.set_aliases(aliases);
+            c.show(h);
+        });
     } else {
         // A catalog scan may have finished before the controller existed.
-        with_controller(ui, |c, h| c.refresh(h));
+        with_controller(ui, |c, h| {
+            c.set_aliases(aliases);
+            c.refresh(h);
+        });
     }
 }
 
@@ -525,7 +536,11 @@ fn on_settings_changed(path: &Path) {
     if next.currency.auto_refresh && !last.currency.auto_refresh {
         modules::builtin::maybe_auto_refresh_fx();
     }
-    to_modules(|c, h| c.refresh(h));
+    let aliases = next.aliases;
+    to_modules(|c, h| {
+        c.set_aliases(aliases);
+        c.refresh(h);
+    });
 }
 
 /// Runs on the index worker once the settings folder settled: reloads `snippets.toml`,

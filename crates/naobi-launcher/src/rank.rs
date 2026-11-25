@@ -128,6 +128,18 @@ impl Ranker {
         opens: impl Fn(&ItemId) -> f64,
         limit: usize,
     ) -> Vec<Hit> {
+        self.rank_with_alias(text, pool, opens, limit, None)
+    }
+
+    /// Like `rank`, also treating `alias_target` as an exact alias hit when present.
+    pub fn rank_with_alias<'a>(
+        &mut self,
+        text: &str,
+        pool: impl IntoIterator<Item = (Source, &'a Item)>,
+        opens: impl Fn(&ItemId) -> f64,
+        limit: usize,
+        alias_target: Option<&ItemId>,
+    ) -> Vec<Hit> {
         let pat = (!text.is_empty())
             .then(|| Pattern::parse(text, CaseMatching::Ignore, Normalization::Smart));
         let chars = text.chars().count();
@@ -145,10 +157,11 @@ impl Ranker {
                 });
                 continue;
             };
-            let exact = item
-                .alias
-                .as_deref()
-                .is_some_and(|a| a.eq_ignore_ascii_case(text));
+            let exact = alias_target.is_some_and(|t| &item.id == t)
+                || item
+                    .alias
+                    .as_deref()
+                    .is_some_and(|a| a.eq_ignore_ascii_case(text));
             // A row needs a real subsequence match, whatever the query length. The score floor only
             // applies to matches that exist; an alias hit is always a row.
             let fuzzy = match self.best(pat, item) {

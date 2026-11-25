@@ -102,6 +102,14 @@ impl Controller {
         }
     }
 
+    pub fn set_aliases(&mut self, aliases: std::collections::BTreeMap<String, String>) {
+        let mapped = aliases
+            .into_iter()
+            .map(|(k, v)| (k, naobi_core::ids::ItemId(v)))
+            .collect();
+        self.launcher.set_aliases(mapped);
+    }
+
     /// The engine's snapshot, with the "Copied" confirmation while a copy waits to close, and the
     /// icons that are loaded. The keys of rows whose icon is not loaded and not yet asked for go to
     /// `missing`.

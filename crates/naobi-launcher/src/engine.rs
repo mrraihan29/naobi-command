@@ -16,7 +16,7 @@ use naobi_core::ui::{
     RowView, Screen, Section, UiEvent, ViewBar, DEFAULT_ROW_HEIGHT,
 };
 use naobi_core::view_source::{Fact, Preview, ViewSource};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +60,8 @@ pub struct Launcher {
     panel: Option<Panel>,
     notice: Option<Notice>,
     pending_save: Option<u64>,
+    /// Custom `[aliases]` (lowercased alias -> `ItemId`).
+    aliases: BTreeMap<String, ItemId>,
 }
 
 impl Launcher {
@@ -94,9 +96,42 @@ impl Launcher {
             panel: None,
             notice: None,
             pending_save: None,
+            aliases: BTreeMap::new(),
         };
         l.refresh();
         l
+    }
+
+    /// Updates custom `[aliases]` from the Settings file and re-ranks if at root.
+    pub fn set_aliases(&mut self, aliases: BTreeMap<String, ItemId>) {
+        self.aliases = aliases
+            .into_iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v))
+            .collect();
+        if self.mode == Mode::Root {
+            self.refresh();
+        }
+    }
+
+    fn resolve_custom_alias(&self, text: &str) -> (Option<ItemId>, String) {
+        if let Some(target) = self.aliases.get(&text.to_ascii_lowercase()) {
+            return (Some(target.clone()), text.to_owned());
+        }
+        if let Some((first, rest)) = text.split_once(char::is_whitespace) {
+            let rest = rest.trim();
+            if !rest.is_empty() {
+                if let Some(target) = self.aliases.get(&first.to_ascii_lowercase()) {
+                    if let Some(cmd) = target.0.strip_prefix("dev:") {
+                        return (Some(target.clone()), format!("{cmd} {rest}"));
+                    }
+                    if target.0 == "run.prompt" {
+                        return (Some(target.clone()), format!("> {rest}"));
+                    }
+                    return (Some(target.clone()), text.to_owned());
+                }
+            }
+        }
+        (None, text.to_owned())
     }
 
     /// Marks items whose primary action needs a second Enter (R-020).
@@ -530,7 +565,12 @@ impl Launcher {
             self.selected = 0;
             return;
         }
-        let text = self.query.trim().to_owned();
+        let raw_text = self.query.trim().to_owned();
+        let (alias_target, text) = if self.mode == Mode::Root && !raw_text.is_empty() {
+            self.resolve_custom_alias(&raw_text)
+        } else {
+            (None, raw_text)
+        };
         let q = Query { text: text.clone() };
         let was_claimed = self.claimed.take();
         if self.mode == Mode::Root {
@@ -597,9 +637,13 @@ impl Launcher {
         }
         let now = self.clock.now_ms() / 1000;
         let frecency = &self.frecency;
-        self.rows = self
-            .ranker
-            .rank(&text, pool, |id| frecency.decayed_opens(id, now), limit);
+        self.rows = self.ranker.rank_with_alias(
+            &text,
+            pool,
+            |id| frecency.decayed_opens(id, now),
+            limit,
+            alias_target.as_ref(),
+        );
         if self.mode == Mode::Root && !text.is_empty() {
             self.fallback = self.sources.iter().enumerate().find_map(|(i, s)| {
                 s.fallback(&q).map(|item| Hit {
@@ -757,6 +801,9 @@ impl Launcher {
     /// Runs `action` on `hit` and turns the outcome into effects. A PushView opens the view; a
     /// failed run keeps the Launcher open with its Notice; anything else ends with Hide.
     fn run(&mut self, hit: &Hit, action: ActionId) -> Vec<Effect> {
+        if action.0 == "copy_item_id" {
+            return vec![Effect::CopyText(hit.id().0.clone()), Effect::Hide];
+        }
         // R-020: this is the one gate. Enter, Ctrl+Enter and the action panel all end here, so an
         // armed command runs only on the second press of the same action within 5 s.
         let now = self.clock.now_ms();
@@ -907,6 +954,26 @@ impl Launcher {
             return;
         };
         let mut actions = self.source(target.src).actions(target.id());
+        if self.active_editor().is_none()
+            && !target.item.id.0.is_empty()
+            && matches!(
+                target.item.kind,
+                ItemKind::App
+                    | ItemKind::File
+                    | ItemKind::Command
+                    | ItemKind::Quicklink
+                    | ItemKind::Snippet
+                    | ItemKind::Utility
+            )
+            && !actions.iter().any(|a| a.id.0 == "copy_item_id")
+        {
+            actions.push(Action {
+                id: ActionId("copy_item_id".into()),
+                label: "Copy item ID".into(),
+                shortcut: None,
+                enabled: Ok(()),
+            });
+        }
         actions.sort_by_key(|a| action_style(&a.id.0).group);
         self.panel = Some(Panel {
             target,
@@ -1054,7 +1121,7 @@ fn action_style(id: &str) -> ActionStyle {
         "queue_next" => ("action.queue_next", 1, false),
         "queue_clear" => ("action.queue_clear", 1, false),
         "folder" => ("action.folder", 1, false),
-        "duplicate" => ("action.copy", 1, false),
+        "duplicate" | "copy_item_id" => ("action.copy", 1, false),
         "save_snippet" => ("action.save_snippet", 1, false),
         "edit" => ("action.edit", 1, false),
         "pin" => ("action.pin", 1, false),

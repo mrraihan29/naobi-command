@@ -250,7 +250,7 @@ fn r012_ctrl_k_lists_actions_of_selected_result() {
     assert!(ctrl(&mut l, Key::K).is_empty());
     let panel = l.screen().action_panel.expect("panel open");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, vec!["Open", "Copy path"]);
+    assert_eq!(labels, vec!["Open", "Copy path", "Copy item ID"]);
 }
 
 // @R-012
@@ -1295,7 +1295,7 @@ fn r026_panel_has_title_groups_and_glyphs() {
     let panel = l.screen().action_panel.expect("panel open");
     assert_eq!(panel.title, "Report.txt");
     let groups: Vec<u8> = panel.actions.iter().map(|a| a.group).collect();
-    assert_eq!(groups, [0, 1, 2]);
+    assert_eq!(groups, [0, 1, 1, 2]);
     assert!(panel.actions.iter().all(|a| !a.glyph.is_empty()));
     assert_eq!(panel.actions[0].shortcut.as_deref(), Some("Enter"));
 }
@@ -1307,14 +1307,14 @@ fn r026_destructive_actions_come_last() {
     ctrl(&mut l, Key::K);
     let panel = l.screen().action_panel.expect("panel open");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, ["Open", "Pin", "Delete"]);
+    assert_eq!(labels, ["Open", "Pin", "Copy item ID", "Delete"]);
     assert_eq!(
         panel
             .actions
             .iter()
             .map(|a| a.destructive)
             .collect::<Vec<_>>(),
-        [false, false, true]
+        [false, false, false, true]
     );
 }
 
@@ -1415,4 +1415,68 @@ fn inline_color_converts_notations_draws_swatch_and_copies_via_enter_and_panel()
             .any(|r| r.kind == "Color");
         assert!(!has_color, "spurious Color row for {bad:?}");
     }
+}
+
+#[test]
+fn copy_item_id_custom_alias_and_inline_args() {
+    use std::collections::BTreeMap;
+
+    // 1. Copy item ID from Action panel copies the ItemId and hides.
+    let (mut l, _) = engine(vec![item("app:wt.exe", "Windows Terminal")], vec![]);
+    type_text(&mut l, "terminal");
+    ctrl(&mut l, Key::K);
+    let panel = l.screen().action_panel.expect("panel open");
+    assert!(panel.actions.iter().any(|a| a.label == "Copy item ID"));
+    let idx = panel
+        .actions
+        .iter()
+        .position(|a| a.label == "Copy item ID")
+        .unwrap();
+    for _ in 0..idx {
+        key(&mut l, Key::Down);
+    }
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![Effect::CopyText("app:wt.exe".into()), Effect::Hide]
+    );
+
+    // 2. Custom [aliases] ranks exact alias target first.
+    let (mut l, _) = engine(
+        vec![
+            item("app:termit", "Termit"),
+            item("app:wt.exe", "Windows Terminal"),
+        ],
+        vec![],
+    );
+    l.set_aliases(BTreeMap::from([("term".into(), ItemId("app:wt.exe".into()))]));
+    type_text(&mut l, "term");
+    assert_eq!(titles(&l.screen())[0], "Windows Terminal");
+
+    // 3. Parameterized alias forwards trailing argument to dev micro-tool.
+    struct ParamDev;
+    impl CommandSource for ParamDev {
+        fn items(&self, q: &Query) -> Arc<[Item]> {
+            if let Some(arg) = q.text.strip_prefix("b64 ") {
+                vec![item("dev:b64", &format!("b64:{arg}"))].into()
+            } else {
+                Vec::new().into()
+            }
+        }
+        fn actions(&self, _id: &ItemId) -> Vec<Action> {
+            vec![action("copy", "Copy")]
+        }
+        fn run(&self, id: &ItemId, _act: ActionId, cx: &mut Cx) -> Outcome {
+            cx.copy_text(id.0.clone());
+            Outcome::Done
+        }
+    }
+    let mut l = Launcher::new(
+        vec![Box::new(ParamDev)],
+        vec![],
+        Frecency::open(Db::open_in_memory().unwrap(), 0).unwrap(),
+        Box::new(FakeClock(Rc::new(Cell::new(T0_MS)))),
+    );
+    l.set_aliases(BTreeMap::from([("enc".into(), ItemId("dev:b64".into()))]));
+    type_text(&mut l, "enc hello world");
+    assert_eq!(titles(&l.screen()), vec!["b64:hello world"]);
 }

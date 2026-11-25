@@ -162,6 +162,8 @@ pub struct Settings {
     pub currency: Currency,
     pub files: Files,
     pub quicklinks: Vec<Quicklink>,
+    /// Custom item aliases mapping alias string -> `ItemId`.
+    pub aliases: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -180,6 +182,7 @@ struct Raw {
     currency: Currency,
     files: Files,
     quicklinks: Option<Vec<Quicklink>>,
+    aliases: BTreeMap<String, String>,
 }
 
 /// Hotkeys of the removed window snapping; an old file may still bind them, and they are ignored.
@@ -238,6 +241,7 @@ impl Default for Settings {
                     url: url.into(),
                 })
                 .collect(),
+            aliases: BTreeMap::new(),
         }
     }
 }
@@ -367,6 +371,31 @@ impl Settings {
                     Err(e) => note(format!("quicklink '{}' rejected: {e}", q.alias)),
                 }
             }
+        }
+        let mut seen_aliases: Vec<String> = s
+            .quicklinks
+            .iter()
+            .map(|q| q.alias.to_ascii_lowercase())
+            .collect();
+        for (alias, target) in raw.aliases {
+            let alias_trimmed = alias.trim();
+            let target_trimmed = target.trim();
+            if alias_trimmed.is_empty() || alias_trimmed.chars().any(char::is_whitespace) {
+                note(format!("alias '{alias}' rejected: cannot be empty or contain whitespace"));
+                continue;
+            }
+            if target_trimmed.is_empty() {
+                note(format!("alias '{alias_trimmed}' rejected: target item id is empty"));
+                continue;
+            }
+            let lower = alias_trimmed.to_ascii_lowercase();
+            if seen_aliases.contains(&lower) {
+                note(format!("alias '{alias_trimmed}' rejected: duplicate alias"));
+                continue;
+            }
+            seen_aliases.push(lower);
+            s.aliases
+                .insert(alias_trimmed.to_owned(), target_trimmed.to_owned());
         }
         Ok(Parsed {
             settings: s,
@@ -517,4 +546,8 @@ url = "https://www.youtube.com/results?search_query={query}"
 name = "naobi.dev"
 alias = "naobi"
 url = "https://naobi.dev/search?q={query}"
+
+# Custom item aliases: run "Copy item ID" from the Action panel (Ctrl+K) and map an alias to it.
+# [aliases]
+# lock = "sys.lock"
 "##;

@@ -112,6 +112,8 @@ pub struct Launcher {
     pending_save: Option<u64>,
     /// Custom `[aliases]` (lowercased alias -> `ItemId`).
     aliases: BTreeMap<String, ItemId>,
+    /// Whether `Home` lists Starred + recent Frecency items on an empty query.
+    show_home: bool,
 }
 
 impl Launcher {
@@ -148,9 +150,19 @@ impl Launcher {
             notice: None,
             pending_save: None,
             aliases: BTreeMap::new(),
+            show_home: true,
         };
         l.refresh();
         l
+    }
+
+    pub fn set_show_home(&mut self, show: bool) {
+        if self.show_home != show {
+            self.show_home = show;
+            if self.mode == Mode::Root && self.query.trim().is_empty() {
+                self.refresh();
+            }
+        }
     }
 
     /// Updates custom `[aliases]` from the Settings file and re-ranks if at root.
@@ -724,12 +736,30 @@ impl Launcher {
                 return;
             }
         }
+        if self.mode == Mode::Root
+            && text.is_empty()
+            && self.scope == SearchScope::All
+            && !self.show_home
+        {
+            self.rows.clear();
+            self.files.clear();
+            self.selected = 0;
+            return;
+        }
         let now = self.clock.now_ms() / 1000;
         let frecency = &self.frecency;
+        let empty_home = self.mode == Mode::Root && text.is_empty() && self.scope == SearchScope::All;
         self.rows = self.ranker.rank_with_alias(
             &text,
             pool,
-            |id| frecency.decayed_opens(id, now),
+            |id| {
+                let base = frecency.decayed_opens(id, now);
+                if empty_home && frecency.is_starred(id) {
+                    1_000_000_000.0 + base
+                } else {
+                    base
+                }
+            },
             limit,
             alias_target.as_ref(),
         );
@@ -927,6 +957,20 @@ impl Launcher {
         if action.0 == "copy_item_id" {
             return vec![Effect::CopyText(hit.id().0.clone()), Effect::Hide];
         }
+        if action.0 == "star" {
+            let now = self.clock.now_ms() / 1000;
+            if self.frecency.toggle_star(hit.id(), now).is_err() {
+                let n = Notice {
+                    subject: "Home".to_owned(),
+                    message: "Could not update starred item.".to_owned(),
+                    kind: NoticeKind::Error,
+                };
+                self.notice = Some(n.clone());
+                return vec![Effect::Notice(n)];
+            }
+            self.refresh();
+            return vec![];
+        }
         // R-020: this is the one gate. Enter, Ctrl+Enter and the action panel all end here, so an
         // armed command runs only on the second press of the same action within 5 s.
         let now = self.clock.now_ms();
@@ -1088,14 +1132,28 @@ impl Launcher {
                     | ItemKind::Snippet
                     | ItemKind::Utility
             )
-            && !actions.iter().any(|a| a.id.0 == "copy_item_id")
         {
-            actions.push(Action {
-                id: ActionId("copy_item_id".into()),
-                label: "Copy item ID".into(),
-                shortcut: None,
-                enabled: Ok(()),
-            });
+            if !actions.iter().any(|a| a.id.0 == "star") {
+                let starred = self.frecency.is_starred(target.id());
+                actions.push(Action {
+                    id: ActionId("star".into()),
+                    label: if starred {
+                        "Unstar item".into()
+                    } else {
+                        "Star item".into()
+                    },
+                    shortcut: None,
+                    enabled: Ok(()),
+                });
+            }
+            if !actions.iter().any(|a| a.id.0 == "copy_item_id") {
+                actions.push(Action {
+                    id: ActionId("copy_item_id".into()),
+                    label: "Copy item ID".into(),
+                    shortcut: None,
+                    enabled: Ok(()),
+                });
+            }
         }
         actions.sort_by_key(|a| action_style(&a.id.0).group);
         self.panel = Some(Panel {
@@ -1245,6 +1303,7 @@ fn action_style(id: &str) -> ActionStyle {
         "queue_clear" => ("action.queue_clear", 1, false),
         "folder" => ("action.folder", 1, false),
         "duplicate" | "copy_item_id" => ("action.copy", 1, false),
+        "star" => ("action.pin", 1, false),
         "save_snippet" => ("action.save_snippet", 1, false),
         "edit" => ("action.edit", 1, false),
         "pin" => ("action.pin", 1, false),

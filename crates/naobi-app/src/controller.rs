@@ -112,6 +112,10 @@ impl Controller {
         self.launcher.set_aliases(mapped);
     }
 
+    pub fn set_show_home(&mut self, show: bool) {
+        self.launcher.set_show_home(show);
+    }
+
     /// The engine's snapshot, with the "Copied" confirmation while a copy waits to close, and the
     /// icons that are loaded. The keys of rows whose icon is not loaded and not yet asked for go to
     /// `missing`.

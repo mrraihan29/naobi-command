@@ -286,7 +286,7 @@ fn on_ready(ui: UiHandle) {
     naobi_win32::subclass::install(ui.window());
     let (controller, warn) = build_controller();
     CONTROLLER.with_borrow_mut(|c| *c = controller);
-    let (show_now, aliases) = {
+    let (show_now, aliases, show_home) = {
         let mut s = state();
         s.ui = Some(ui.clone());
         if let Some(n) = warn {
@@ -297,19 +297,26 @@ fn on_ready(ui: UiHandle) {
             .as_ref()
             .map(|cfg| cfg.aliases.clone())
             .unwrap_or_default();
-        (std::mem::take(&mut s.early_show), aliases)
+        let show_home = s
+            .settings
+            .as_ref()
+            .map(|cfg| cfg.launcher.show_home)
+            .unwrap_or(true);
+        (std::mem::take(&mut s.early_show), aliases, show_home)
     };
     report("window_ready");
     if show_now {
         // Pressed before the window was ready: served as soon as it is.
         with_controller(ui, |c, h| {
             c.set_aliases(aliases);
+            c.set_show_home(show_home);
             c.show(h);
         });
     } else {
         // A catalog scan may have finished before the controller existed.
         with_controller(ui, |c, h| {
             c.set_aliases(aliases);
+            c.set_show_home(show_home);
             c.refresh(h);
         });
     }
@@ -541,8 +548,10 @@ fn on_settings_changed(path: &Path) {
         modules::builtin::maybe_auto_refresh_fx();
     }
     let aliases = next.aliases;
-    to_modules(|c, h| {
+    let show_home = next.launcher.show_home;
+    to_modules(move |c, h| {
         c.set_aliases(aliases);
+        c.set_show_home(show_home);
         c.refresh(h);
     });
 }

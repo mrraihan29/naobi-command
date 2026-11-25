@@ -250,7 +250,7 @@ fn r012_ctrl_k_lists_actions_of_selected_result() {
     assert!(ctrl(&mut l, Key::K).is_empty());
     let panel = l.screen().action_panel.expect("panel open");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, vec!["Open", "Copy path", "Copy item ID"]);
+    assert_eq!(labels, vec!["Open", "Copy path", "Star item", "Copy item ID"]);
 }
 
 // @R-012
@@ -1295,7 +1295,7 @@ fn r026_panel_has_title_groups_and_glyphs() {
     let panel = l.screen().action_panel.expect("panel open");
     assert_eq!(panel.title, "Report.txt");
     let groups: Vec<u8> = panel.actions.iter().map(|a| a.group).collect();
-    assert_eq!(groups, [0, 1, 1, 2]);
+    assert_eq!(groups, [0, 1, 1, 1, 2]);
     assert!(panel.actions.iter().all(|a| !a.glyph.is_empty()));
     assert_eq!(panel.actions[0].shortcut.as_deref(), Some("Enter"));
 }
@@ -1307,14 +1307,14 @@ fn r026_destructive_actions_come_last() {
     ctrl(&mut l, Key::K);
     let panel = l.screen().action_panel.expect("panel open");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, ["Open", "Pin", "Copy item ID", "Delete"]);
+    assert_eq!(labels, ["Open", "Pin", "Star item", "Copy item ID", "Delete"]);
     assert_eq!(
         panel
             .actions
             .iter()
             .map(|a| a.destructive)
             .collect::<Vec<_>>(),
-        [false, false, false, true]
+        [false, false, false, false, true]
     );
 }
 
@@ -1604,4 +1604,41 @@ fn search_scope_ctrl_1_to_4_filters_toggles_and_shows_inline_clipboard() {
         key(&mut l, Key::Enter),
         vec![Effect::PasteText("hello clipboard".into()), Effect::Hide]
     );
+}
+
+#[test]
+fn home_lists_starred_before_recents_and_respects_show_home() {
+    let (mut l, _) = engine(
+        vec![
+            item("app:alpha", "Alpha"),
+            item("app:beta", "Beta"),
+            item("app:gamma", "Gamma"),
+        ],
+        vec![],
+    );
+    // Record opens on Alpha so Alpha is the top recent item.
+    type_text(&mut l, "alpha");
+    assert_eq!(key(&mut l, Key::Enter), vec![launch("app:alpha:open"), Effect::Hide]);
+    l.show_root();
+    assert_eq!(titles(&l.screen())[0], "Alpha");
+
+    // Star Gamma via Action panel: Gamma moves above Alpha on empty Home.
+    type_text(&mut l, "gamma");
+    ctrl(&mut l, Key::K);
+    let panel = l.screen().action_panel.expect("panel open");
+    let idx = panel.actions.iter().position(|a| a.label == "Star item").unwrap();
+    for _ in 0..idx {
+        key(&mut l, Key::Down);
+    }
+    assert!(key(&mut l, Key::Enter).is_empty());
+    l.show_root();
+    assert_eq!(titles(&l.screen()), vec!["Gamma", "Alpha", "Beta"]);
+
+    // Esc on empty query still hides Launcher.
+    assert_eq!(key(&mut l, Key::Escape), vec![Effect::Hide]);
+
+    // show_home = false clears empty root search.
+    l.set_show_home(false);
+    l.show_root();
+    assert!(titles(&l.screen()).is_empty());
 }

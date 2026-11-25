@@ -1,7 +1,15 @@
 //! Schema per REPORT 4.1. Content and preview columns are BLOB (DPAPI ciphertext, R-009).
 //! Migrations are append-only and expand-only (D-014): add tables or nullable/defaulted columns, never drop or rename.
 
-pub const MIGRATIONS: &[&str] = &[V1, V2, V3];
+pub const MIGRATIONS: &[&str] = &[V1, V2, V3, V4];
+
+/// Home starred items (issue #23): keyed by salted item hash, never plaintext ids/paths (D-014).
+const V4: &str = "
+CREATE TABLE starred_item (
+    item_key   INTEGER PRIMARY KEY,
+    starred_at INTEGER NOT NULL
+);
+";
 
 /// Calculator history (issue #2): expressions and results are DPAPI blobs; `calculated_at` is Unix ms.
 const V3: &str = "

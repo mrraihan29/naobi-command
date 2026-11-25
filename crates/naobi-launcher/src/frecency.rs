@@ -2,7 +2,7 @@
 //! `frecency` table keyed by a salted xxh3 hash of the item id, never by a path (D-014).
 use naobi_core::db::{self, Db};
 use naobi_core::ids::ItemId;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Opens lose half their weight every 30 days (D-016).
 const HALF_LIFE_SECS: f64 = 30.0 * 86_400.0;
@@ -11,6 +11,8 @@ pub struct Frecency {
     db: Db,
     /// item key -> (open count, last opened at). Loaded once so a boost costs no SQL per row.
     rows: HashMap<i64, (i64, i64)>,
+    /// Keys of Starred items (Home, Issue #23).
+    starred: HashSet<i64>,
 }
 
 impl Frecency {
@@ -22,7 +24,25 @@ impl Frecency {
             .into_iter()
             .map(|(key, count, last)| (key, (count, last)))
             .collect();
-        Ok(Self { db, rows })
+        let starred = db.starred_keys()?;
+        Ok(Self { db, rows, starred })
+    }
+
+    pub fn is_starred(&self, id: &ItemId) -> bool {
+        self.starred.contains(&self.key(id))
+    }
+
+    pub fn toggle_star(&mut self, id: &ItemId, now_secs: i64) -> Result<bool, db::Error> {
+        let key = self.key(id);
+        if self.starred.contains(&key) {
+            self.db.unstar(key)?;
+            self.starred.remove(&key);
+            Ok(false)
+        } else {
+            self.db.star(key, now_secs)?;
+            self.starred.insert(key);
+            Ok(true)
+        }
     }
 
     /// Counts one open of `id` at `now_secs`.

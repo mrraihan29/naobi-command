@@ -50,7 +50,7 @@ fn d014_wal_pragmas_and_schema() {
     assert_eq!(pragma(c, "synchronous"), "1"); // NORMAL
     assert_eq!(pragma(c, "cache_size"), "-2048"); // 2 MiB
     assert_eq!(pragma(c, "auto_vacuum"), "2"); // INCREMENTAL
-    assert_eq!(pragma(c, "user_version"), "3");
+    assert_eq!(pragma(c, "user_version"), "4");
     let names: Vec<String> = c
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .unwrap()
@@ -67,7 +67,8 @@ fn d014_wal_pragmas_and_schema() {
             "color_history",
             "frecency",
             "meta",
-            "run_history"
+            "run_history",
+            "starred_item"
         ]
     );
 }
@@ -82,7 +83,7 @@ fn d014_schema_v2_adds_run_history_and_backs_up_v1() {
         db.record_open(42, 1000).unwrap();
     }
     let db = Db::open(&d.db(), || [9; 16]).unwrap();
-    assert_eq!(pragma(db.conn(), "user_version"), "3");
+    assert_eq!(pragma(db.conn(), "user_version"), "4");
     let bak = d.0.join("naobi.db.bak-v1");
     assert!(bak.exists());
     assert_eq!(
@@ -113,7 +114,7 @@ fn d014_schema_v3_adds_calc_history_and_backs_up_v2() {
         db.record_open(7, 1000).unwrap();
     }
     let db = Db::open(&d.db(), || [9; 16]).unwrap();
-    assert_eq!(pragma(db.conn(), "user_version"), "3");
+    assert_eq!(pragma(db.conn(), "user_version"), "4");
     let bak = d.0.join("naobi.db.bak-v2");
     assert!(bak.exists());
     assert_eq!(
@@ -156,11 +157,25 @@ fn d014_migration_copies_backup_and_is_expand_contract() {
         "1"
     );
     drop(db);
-    // An older (v2) reader still opens the v3 file and uses its own statements.
+    // An older (v2) reader still opens the v4 file and uses its own statements.
     let old = Db::open(&d.db(), || [9; 16]).unwrap();
-    assert_eq!(pragma(old.conn(), "user_version"), "3");
+    assert_eq!(pragma(old.conn(), "user_version"), "4");
     old.record_open(42, 2000).unwrap();
     assert_eq!(old.raw_rows().unwrap(), vec![(42, 2, 2000)]);
+}
+
+// @D-014
+#[test]
+fn d014_schema_v4_adds_starred_item_and_persists() {
+    let d = Dir::new();
+    let db = Db::open(&d.db(), || [5; 16]).unwrap();
+    assert_eq!(pragma(db.conn(), "user_version"), "4");
+    db.star(101, 1_700_000_000).unwrap();
+    db.star(202, 1_700_000_010).unwrap();
+    assert!(db.starred_keys().unwrap().contains(&101));
+    db.unstar(101).unwrap();
+    assert!(!db.starred_keys().unwrap().contains(&101));
+    assert!(db.starred_keys().unwrap().contains(&202));
 }
 
 #[test]

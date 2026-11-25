@@ -152,6 +152,29 @@ impl Db {
             [now - STALE_SECS],
         )?)
     }
+
+    pub fn star(&self, key: i64, now: i64) -> Result<(), Error> {
+        self.conn.execute(
+            "INSERT INTO starred_item (item_key, starred_at) VALUES (?1, ?2)
+             ON CONFLICT (item_key) DO UPDATE SET starred_at = excluded.starred_at",
+            params![key, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn unstar(&self, key: i64) -> Result<(), Error> {
+        self.conn
+            .execute("DELETE FROM starred_item WHERE item_key = ?1", [key])?;
+        Ok(())
+    }
+
+    pub fn starred_keys(&self) -> Result<std::collections::HashSet<i64>, Error> {
+        let mut stmt = self.conn.prepare("SELECT item_key FROM starred_item")?;
+        let rows = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<Result<std::collections::HashSet<i64>, _>>()?;
+        Ok(rows)
+    }
 }
 
 fn decode_hex(s: &str) -> Option<[u8; 16]> {

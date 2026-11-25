@@ -152,7 +152,7 @@ fn root_search_finds_snippets_by_name_or_exact_alias_and_emits_paste_or_copy() {
     key(&mut l, Key::K, true);
     let panel = l.screen().action_panel.expect("panel");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, ["Paste", "Copy", "Copy item ID"]);
+    assert_eq!(labels, ["Paste", "Copy", "Star item", "Copy item ID"]);
     key(&mut l, Key::Escape, false);
     assert_eq!(
         key(&mut l, Key::Enter, true),

@@ -186,12 +186,24 @@ impl Default for Files {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LauncherSettings {
+    pub show_home: bool,
+}
+impl Default for LauncherSettings {
+    fn default() -> Self {
+        Self { show_home: true }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub general: General,
     /// Keyed by hotkey id ("launcher", "topmost", ...).
     pub hotkeys: BTreeMap<String, KeyChord>,
     pub ui: Ui,
+    pub launcher: LauncherSettings,
     pub theme: ThemeSlots,
     pub clipboard: Clipboard,
     pub aot: Aot,
@@ -209,6 +221,7 @@ struct Raw {
     general: General,
     hotkeys: BTreeMap<String, KeyChord>,
     ui: Ui,
+    launcher: LauncherSettings,
     theme: ThemeSlots,
     /// Window snapping was removed; an old file may still hold the section, which is ignored.
     #[allow(dead_code)] // naobi-allow: read only to accept a retired settings section
@@ -270,6 +283,7 @@ impl Default for Settings {
                 .map(|&(k, mods, vk)| (k.to_string(), KeyChord { mods, vk }))
                 .collect(),
             ui: Ui::default(),
+            launcher: LauncherSettings::default(),
             theme: ThemeSlots::default(),
             clipboard: Clipboard::default(),
             aot: Aot::default(),
@@ -340,6 +354,7 @@ impl Settings {
             general: raw.general,
             hotkeys,
             ui: raw.ui,
+            launcher: raw.launcher,
             theme: raw.theme,
             clipboard: raw.clipboard,
             aot: raw.aot,

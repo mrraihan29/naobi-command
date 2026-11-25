@@ -969,3 +969,14 @@ entries:
     links:
       decisions: ["D-024@1", "D-001@1"]
       tickets: ["NCMD-56@1"]
+
+  - id: D-047
+    type: decision
+    version: 1
+    status: active
+    topic: 8
+    answer: "Spec #16 (Priorities 1-10) approved via /grill-with-docs and /to-spec (2026-11-25); executed cleanly without subagents across Waves 1-3 (#17-#29)."
+    recommendation: "Approve Slint 1.19.1 (edition 1.19) and scoped serde_json in naobi-launcher (local Windows Terminal settings.json) alongside naobi-app/naobi-perf; deliver Priorities 1-10 within existing medium-integrity, offline-only, R-006, D-012 (RegisterHotKey only), and D-020 (no sensitive logs) guarantees."
+    statement: "Post-Phase 2 Commander Upgrades (Spec #16, tickets #17-#29): upgrades Slint to 1.19.1 (edition 1.19), scopes serde_json to local JSON parsing/reports in naobi-launcher (Terminal profiles), naobi-app, and naobi-perf with no new external crates, and delivers [aliases]/[hotkeys.items]/inline args, Search scope + /ext & kind: filters, [theme.schedule], cycle_app_windows + Restart Frontmost App, local clipboard transforms + temp cleanup, Home + Starred item SQLite v4 persistence, extended offline calculator utilities, Reveal in Explorer / File Locksmith (current-user Restart Manager) / Run as administrator, and full ms-settings: + Terminal profile catalogs."
+    links:
+      decisions: ["D-012@1", "D-019@5", "D-020@1", "D-034@2"]

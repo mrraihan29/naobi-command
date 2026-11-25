@@ -1,6 +1,6 @@
 # Constraints
 
-Last reviewed: 2026-11-18 by the design author for the UI/UX upgrade (the owner reviews at Gate 1) · Stack: Rust stable, `x86_64-pc-windows-msvc`, native UI Slint, software renderer, accessibility on (D-034) (docs/adr/0001-stack.md)
+Last reviewed: 2026-11-25 (Post-Phase 2 Commander Upgrades, Spec #16) · Stack: Rust stable, `x86_64-pc-windows-msvc`, native UI Slint 1.19.1 (edition 1.19), software renderer, accessibility on (D-034) (docs/adr/0001-stack.md)
 Read before writing code. Never weaken this file to make a change pass.
 
 ## Floor (always enforced)
@@ -39,7 +39,7 @@ E2E (Playwright) and axe do not apply: the app is native (D-006). Their place is
 - Libraries use `thiserror`; the binary uses `anyhow` (D-005).
 - Use the words in `GLOSSARY.md` in identifiers, logs, UI copy and docs.
 - No clipboard content, query text or file names in logs (D-020).
-- Dependency direction: module crates depend on `naobi-core` only (plus `naobi-launcher` on `naobi-calc`), never on `naobi-ui`, `naobi-win32` or each other; `naobi-win32` depends on module crates only to implement their ports; `naobi-app` is the only crate that sees everything.
+- Dependency direction: module crates depend on `naobi-core` only (plus `naobi-launcher` on `naobi-calc`), never on `naobi-ui`, `naobi-win32` or each other; `naobi-win32` depends on module crates only to implement their ports; `naobi-app` is the only crate that sees everything. `serde_json` is scoped to local parsing/metrics in `naobi-launcher` (Windows Terminal `settings.json`), `naobi-app` (`perf_report`), and `naobi-perf` only (zero network sockets).
 
 ## Project numbers
 

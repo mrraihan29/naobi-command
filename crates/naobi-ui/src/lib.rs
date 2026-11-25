@@ -934,9 +934,31 @@ mod ui_check {
             .any(|e| matches!(e, UiEvent::ScratchpadChanged(t) if t == "a\nb")));
         assert!(!seen.borrow().iter().any(|e| matches!(e, UiEvent::Key(_))));
 
+        // Ctrl+Z undoes and Ctrl+Y redoes in Scratchpad.
+        let ctrl: slint::SharedString = SlintKey::Control.into();
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ctrl.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: "z".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: "z".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ctrl.clone() });
+        assert_ne!(ui.get_editor_text().as_str(), "a\nb");
+        let after_undo = ui.get_editor_text().to_string();
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: ctrl.clone() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: "y".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: "y".into() });
+        ui.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: ctrl.clone() });
+        assert_eq!(ui.get_editor_text().as_str(), "a\nb");
+        assert_ne!(after_undo, "a\nb");
+
         // Ctrl+K, Ctrl+Enter, and Esc forward as UiEvent::Key chords.
         seen.borrow_mut().clear();
-        let ctrl: slint::SharedString = SlintKey::Control.into();
         let esc: slint::SharedString = SlintKey::Escape.into();
         ui.window()
             .dispatch_event(WindowEvent::KeyPressed { text: ctrl.clone() });

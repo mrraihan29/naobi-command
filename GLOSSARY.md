@@ -22,6 +22,10 @@ _Avoid_: palette, run box, spotlight, popup
 A global key chord that starts a Module action from any foreground app.
 _Avoid_: shortcut, keybinding (those mean in-window keys)
 
+**Item hotkey**:
+A Hotkey bound to a specific Item in the Settings file so the Owner can run it directly from any app.
+_Avoid_: quick key, macro hotkey
+
 **Hotkey conflict**:
 A Hotkey that Windows refuses to register because another process owns it.
 _Avoid_: collision, hijack
@@ -42,7 +46,19 @@ _Avoid_: hit, match
 
 **Alias**:
 A short exact name the Owner assigns to an Item or a quicklink; an exact alias match always ranks first.
-_Avoid_: keyword, prefix, trigger
+_Avoid_: keyword, prefix, trigger, quick key
+
+**Search scope**:
+A filter active on the Root search that narrows Results to one category (Apps, Files, Commands, or Clipboard entries) or one file kind.
+_Avoid_: browse mode, tab mode, filter mode
+
+**Home**:
+The initial Root search list shown on an empty query, listing Starred items followed by recent Frecency Items.
+_Avoid_: shelf, landing, start page
+
+**Starred item**:
+An Item marked by the Owner to appear at the top of Home.
+_Avoid_: pinned item (pinned belongs to Pinned entry), favorite, bookmark
 
 **Frecency**:
 A score combining how often and how recently the Owner opened an Item; it adds a boost of at most 20% of the fuzzy score, so it breaks ties between equal fuzzy matches and never outweighs a clearly better match.

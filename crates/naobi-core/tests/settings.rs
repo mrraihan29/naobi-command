@@ -466,3 +466,34 @@ fn cycle_app_windows_hotkey_is_optional_with_no_default_binding() {
     let off = Settings::parse("[launcher]\nshow_home = false\n").unwrap();
     assert!(!off.settings.launcher.show_home);
 }
+
+#[test]
+fn t27_hotkeys_items_parse_and_validate_chords_and_ids() {
+    let parsed = Settings::parse(
+        "[hotkeys]\nlauncher = \"Ctrl+Space\"\n[hotkeys.items]\n\"sys.lock\" = \"Ctrl+Alt+L\"\n\"ql:g\" = \"Ctrl+Alt+G\"\n",
+    )
+    .unwrap();
+    assert!(parsed.reports.is_empty());
+    assert_eq!(parsed.settings.hotkeys["launcher"], chord(CTRL, 0x20));
+    assert_eq!(
+        parsed.settings.item_hotkeys["sys.lock"],
+        chord(CTRL | ALT, u32::from(b'L'))
+    );
+    assert_eq!(
+        parsed.settings.item_hotkeys["ql:g"],
+        chord(CTRL | ALT, u32::from(b'G'))
+    );
+
+    assert!(
+        Settings::parse("[hotkeys.items]\n\"\" = \"Ctrl+Alt+L\"\n").is_err(),
+        "empty item id must fail"
+    );
+    assert!(
+        Settings::parse("[hotkeys.items]\n\"sys.lock\" = \"L\"\n").is_err(),
+        "chord without modifier must fail"
+    );
+    assert!(
+        Settings::parse("[hotkeys.items]\n\"sys.lock\" = \"NotAKey\"\n").is_err(),
+        "bad chord must fail"
+    );
+}

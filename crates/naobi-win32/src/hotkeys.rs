@@ -1,6 +1,6 @@
 //! Global hotkeys through `RegisterHotKey` only (ADR-0004). One id per settings chord; a chord that
 //! another process owns becomes an event, and the other chords still register.
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use naobi_core::chord::KeyChord;
 use naobi_core::event::AppEvent;
@@ -10,6 +10,9 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_NOREPEAT,
 };
+
+pub const ITEM_HOTKEY_PREFIX: &str = "item:";
+const ITEM_ID_BASE: usize = 10_000;
 
 /// Hotkey names in id order: id = position + 1. The settings parser accepts only these names.
 fn names() -> &'static [String] {
@@ -23,8 +26,21 @@ fn names() -> &'static [String] {
     })
 }
 
+fn item_names() -> &'static Mutex<Vec<String>> {
+    static ITEMS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+    ITEMS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
 /// The hotkey a `WM_HOTKEY` id stands for.
 pub fn name_for_id(id: usize) -> Option<HotkeyId> {
+    if id >= ITEM_ID_BASE {
+        return item_names()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id - ITEM_ID_BASE)
+            .cloned()
+            .map(HotkeyId);
+    }
     names().get(id.checked_sub(1)?).map(|n| HotkeyId(n.clone()))
 }
 
@@ -65,6 +81,15 @@ impl Registry {
             if let Some(index) = names().iter().position(|n| n == name) {
                 entries.push((index as i32 + 1, HotkeyId(name.clone()), *chord));
             }
+        }
+        let mut registered_items = Vec::new();
+        for (idx, (item_id, chord)) in settings.item_hotkeys.iter().enumerate() {
+            let full = format!("{ITEM_HOTKEY_PREFIX}{item_id}");
+            entries.push(((ITEM_ID_BASE + idx) as i32, HotkeyId(full.clone()), *chord));
+            registered_items.push(full);
+        }
+        if !registered_items.is_empty() {
+            *item_names().lock().unwrap_or_else(|e| e.into_inner()) = registered_items;
         }
         Self {
             entries,
@@ -324,5 +349,31 @@ mod tests {
         assert_eq!(MOD_CONTROL.0, u32::from(CTRL));
         assert_eq!(MOD_SHIFT.0, u32::from(SHIFT));
         assert_eq!(MOD_WIN.0, u32::from(WIN));
+    }
+
+    #[test]
+    fn t27_item_hotkeys_register_round_trip_and_report_conflicts() {
+        let mut fake = Fake::default();
+        fake.taken.insert(u32::from(b'G'));
+        let parsed = Settings::parse(
+            "[hotkeys.items]\n\"ql:g\" = \"Ctrl+Alt+G\"\n\"sys.lock\" = \"Ctrl+Alt+L\"\n",
+        )
+        .unwrap();
+        let mut reg = Registry::new(&parsed.settings);
+        let conflicts = reg.register_all(&mut fake);
+        assert_eq!(
+            conflicts,
+            vec![AppEvent::HotkeyConflict(HotkeyId("item:ql:g".into()))]
+        );
+        let lock_id = reg
+            .entries
+            .iter()
+            .find(|(_, name, _)| name.0 == "item:sys.lock")
+            .map(|(id, _, _)| *id)
+            .expect("item:sys.lock entry");
+        assert_eq!(
+            name_for_id(lock_id as usize),
+            Some(HotkeyId("item:sys.lock".into()))
+        );
     }
 }

@@ -213,13 +213,15 @@ pub struct Settings {
     pub quicklinks: Vec<Quicklink>,
     /// Custom item aliases mapping alias string -> `ItemId`.
     pub aliases: BTreeMap<String, String>,
+    /// Global `[hotkeys.items]` mapping `ItemId` -> `KeyChord`.
+    pub item_hotkeys: BTreeMap<String, KeyChord>,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 struct Raw {
     general: General,
-    hotkeys: BTreeMap<String, KeyChord>,
+    hotkeys: toml::Table,
     ui: Ui,
     launcher: LauncherSettings,
     theme: ThemeSlots,
@@ -299,6 +301,7 @@ impl Default for Settings {
                 })
                 .collect(),
             aliases: BTreeMap::new(),
+            item_hotkeys: BTreeMap::new(),
         }
     }
 }
@@ -315,17 +318,58 @@ impl Settings {
         if text.len() > MAX_FILE_BYTES {
             return Err(SettingsError::TooLarge);
         }
-        let mut raw: Raw = toml::from_str(text).map_err(|e| SettingsError::Syntax {
+        let raw: Raw = toml::from_str(text).map_err(|e| SettingsError::Syntax {
             line: e.span().and_then(|s| {
                 let head = text.as_bytes().get(..s.start)?;
                 Some(head.iter().filter(|&&b| b == b'\n').count() + 1)
             }),
             message: e.message().to_string(),
         })?;
-        raw.hotkeys
-            .retain(|k, _| !RETIRED_HOTKEYS.contains(&k.as_str()));
-        // Hotkey ids must be known, and a global hotkey needs a modifier.
-        for (k, c) in &raw.hotkeys {
+        let mut parsed_hotkeys = BTreeMap::new();
+        let mut parsed_item_hotkeys = BTreeMap::new();
+        for (k, v) in raw.hotkeys {
+            if k == "items" {
+                let tbl = v.as_table().ok_or_else(|| SettingsError::Syntax {
+                    line: None,
+                    message: "hotkey `items` must be a table of item id = chord".into(),
+                })?;
+                for (item_id, cv) in tbl {
+                    let trimmed = item_id.trim();
+                    if trimmed.is_empty() {
+                        return Err(SettingsError::Syntax {
+                            line: None,
+                            message: "hotkeys.items entry cannot have an empty item id".into(),
+                        });
+                    }
+                    let chord_str = cv.as_str().ok_or_else(|| SettingsError::Syntax {
+                        line: None,
+                        message: format!("hotkey for item `{trimmed}` must be a chord string"),
+                    })?;
+                    let c = KeyChord::parse(chord_str).map_err(|msg| SettingsError::Syntax {
+                        line: None,
+                        message: format!("hotkey for item `{trimmed}`: {msg}"),
+                    })?;
+                    if c.mods == 0 {
+                        return Err(SettingsError::Syntax {
+                            line: None,
+                            message: format!("hotkey for item `{trimmed}` needs a modifier"),
+                        });
+                    }
+                    parsed_item_hotkeys.insert(trimmed.to_owned(), c);
+                }
+                continue;
+            }
+            if RETIRED_HOTKEYS.contains(&k.as_str()) {
+                continue;
+            }
+            let chord_str = v.as_str().ok_or_else(|| SettingsError::Syntax {
+                line: None,
+                message: format!("hotkey `{k}` must be a string"),
+            })?;
+            let c = KeyChord::parse(chord_str).map_err(|msg| SettingsError::Syntax {
+                line: None,
+                message: format!("hotkey `{k}`: {msg}"),
+            })?;
             let known =
                 DEFAULT_HOTKEYS.iter().any(|d| d.0 == k) || OPTIONAL_HOTKEYS.contains(&k.as_str());
             if !known || c.mods == 0 {
@@ -339,6 +383,7 @@ impl Settings {
                     message: format!("hotkey `{k}` {why}"),
                 });
             }
+            parsed_hotkeys.insert(k, c);
         }
 
         let mut reports = Vec::new();
@@ -349,10 +394,11 @@ impl Settings {
             })
         };
         let mut hotkeys = Settings::default().hotkeys;
-        hotkeys.extend(raw.hotkeys);
+        hotkeys.extend(parsed_hotkeys);
         let mut s = Settings {
             general: raw.general,
             hotkeys,
+            item_hotkeys: parsed_item_hotkeys,
             ui: raw.ui,
             launcher: raw.launcher,
             theme: raw.theme,
@@ -644,4 +690,8 @@ url = "https://naobi.dev/search?q={query}"
 # Custom item aliases: run "Copy item ID" from the Action panel (Ctrl+K) and map an alias to it.
 # [aliases]
 # lock = "sys.lock"
+
+# Direct global hotkeys for individual items: run "Copy item ID" from Ctrl+K and map to a chord.
+# [hotkeys.items]
+# "sys.lock" = "Ctrl+Alt+L"
 "##;

@@ -629,3 +629,103 @@ fn t25_locksmith_view_lists_locks_requires_confirm_and_maps_outcomes() {
         Outcome::Failed(n) if n.message.contains("administrator")
     ));
 }
+
+#[test]
+fn t28_ext_and_kind_filters_narrow_file_index_and_hide_non_files() {
+    use naobi_launcher::file_index::{FileIndex, IndexEvent};
+    use naobi_launcher::providers::files::{parse_file_filter, ParsedFileFilter};
+
+    // Parsing /ext and kind:<type>
+    assert_eq!(
+        parse_file_filter("/pdf budget"),
+        ParsedFileFilter {
+            query: "budget".into(),
+            extensions: vec!["pdf".into()],
+        }
+    );
+    let img = parse_file_filter("vacation kind:image");
+    assert_eq!(img.query, "vacation");
+    assert!(img.extensions.contains(&"png".into()));
+    assert!(img.extensions.contains(&"jpg".into()));
+    assert_eq!(
+        parse_file_filter("kind:rs engine"),
+        ParsedFileFilter {
+            query: "engine".into(),
+            extensions: vec!["rs".into()],
+        }
+    );
+    // Arithmetic slashes and bare slashes are untouched.
+    assert_eq!(
+        parse_file_filter("10/2"),
+        ParsedFileFilter {
+            query: "10/2".into(),
+            extensions: vec![],
+        }
+    );
+
+    // FileIndex filtering
+    let dir = TempDir::new("filter");
+    let root = dir.0.join("docs");
+    std::fs::create_dir_all(&root).unwrap_or_else(|e| panic!("{e}"));
+    let pdf = root.join("budget_2026.pdf");
+    let xlsx = root.join("budget_2026.xlsx");
+    let photo = root.join("vacation.png");
+    let song = root.join("track.mp3");
+    let zip = root.join("bundle.zip");
+    for f in [&pdf, &xlsx, &photo, &song, &zip] {
+        std::fs::write(f, "x").unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    let mut idx = FileIndex::open(&dir.0.join("idx.db")).unwrap_or_else(|e| panic!("{e}"));
+    idx.sync_roots(std::slice::from_ref(&root), &[])
+        .unwrap_or_else(|e| panic!("sync: {e}"));
+
+    assert_eq!(
+        idx.search("/pdf budget", LIMIT).unwrap_or_default(),
+        vec![pdf.to_string_lossy().into_owned()]
+    );
+    assert_eq!(
+        idx.search("kind:image", LIMIT).unwrap_or_default(),
+        vec![photo.to_string_lossy().into_owned()]
+    );
+    assert_eq!(
+        idx.search("kind:audio", LIMIT).unwrap_or_default(),
+        vec![song.to_string_lossy().into_owned()]
+    );
+    assert_eq!(
+        idx.search("kind:archive", LIMIT).unwrap_or_default(),
+        vec![zip.to_string_lossy().into_owned()]
+    );
+    let _ = idx.apply_events(
+        &[IndexEvent::Removed(zip)],
+        std::slice::from_ref(&root),
+        &[],
+    );
+    assert!(idx
+        .search("kind:archive", LIMIT)
+        .unwrap_or_default()
+        .is_empty());
+
+    // Launcher hides unrelated non-file items (`Apps`) when a file-kind filter is active.
+    let mut l = launcher(
+        vec![app("PDF Viewer"), app("Budget App")],
+        Arc::new(AtomicBool::new(false)),
+    );
+    type_text(&mut l, "/pdf budget");
+    let (gen, source) = (l.generation(), l.file_source().unwrap_or(0));
+    assert!(l.file_results(
+        gen,
+        source,
+        rows(&[
+            pdf.to_string_lossy().into_owned(),
+            photo.to_string_lossy().into_owned(),
+        ]),
+    ));
+    let s = l.screen();
+    assert!(
+        titles(&s, None).is_empty(),
+        "non-file apps must be hidden when /ext is active: {:?}",
+        titles(&s, None)
+    );
+    assert_eq!(titles(&s, Some("Files")), ["budget_2026.pdf"]);
+}

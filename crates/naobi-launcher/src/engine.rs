@@ -19,6 +19,19 @@ use naobi_core::view_source::{Fact, Preview, ViewSource};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ItemHotkeyOutcome {
+    /// Target executed directly (or failed with a Notice); Launcher stays as-is.
+    Direct(Vec<Effect>),
+    /// Target opens a View or requires interactive input inside Launcher.
+    OpenLauncher {
+        view: Option<ViewId>,
+        prefill: Option<String>,
+    },
+    /// Target `ItemId` was not found by any source.
+    NotFound,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Root,
@@ -235,6 +248,87 @@ impl Launcher {
         }
     }
 
+    /// Opens any hosted view (used by `Item hotkey`s that target view-opening commands).
+    pub fn open_view_any(&mut self, id: &ViewId) -> bool {
+        let Some(i) = self.view_index(id) else {
+            return false;
+        };
+        let _ = self.flush_active_editor();
+        self.pending_save = None;
+        self.mode = if self.views[i].opened_by_hotkey() {
+            Mode::Hotkey(i)
+        } else {
+            Mode::Pushed(i)
+        };
+        self.reset();
+        self.open_active_editor();
+        true
+    }
+
+    /// Runs an `Item hotkey` directly when non-parameterized, or opens `Launcher` ready for input.
+    pub fn trigger_item_hotkey(&mut self, id: &ItemId) -> ItemHotkeyOutcome {
+        if id.0 == "run.prompt" {
+            return ItemHotkeyOutcome::OpenLauncher {
+                view: None,
+                prefill: Some("> ".to_owned()),
+            };
+        }
+        if let Some(rest) = id.0.strip_prefix("ql:") {
+            if rest
+                .split_once(char::is_whitespace)
+                .is_some_and(|(_, q)| !q.trim().is_empty())
+            {
+                for src in &self.sources {
+                    let items = src.items(&Query {
+                        text: rest.to_owned(),
+                    });
+                    if let Some(item) = items.iter().find(|it| &it.id == id) {
+                        return run_source_item(src.as_ref(), item);
+                    }
+                }
+            }
+            return ItemHotkeyOutcome::OpenLauncher {
+                view: None,
+                prefill: Some(format!("{rest} ")),
+            };
+        }
+        if let Some(cmd) = id.0.strip_prefix("dev:") {
+            if matches!(cmd, "uuid" | "ulid") {
+                for src in &self.sources {
+                    let items = src.items(&Query {
+                        text: cmd.to_owned(),
+                    });
+                    if let Some(item) = items.iter().find(|it| &it.id == id) {
+                        return run_source_item(src.as_ref(), item);
+                    }
+                }
+            }
+            if matches!(
+                cmd,
+                "b64" | "b64d" | "url" | "urld" | "sha256" | "json" | "wc"
+            ) {
+                return ItemHotkeyOutcome::OpenLauncher {
+                    view: None,
+                    prefill: Some(format!("{cmd} ")),
+                };
+            }
+        }
+        for src in &self.sources {
+            let items = src.items(&Query::default());
+            if let Some(item) = items.iter().find(|it| &it.id == id) {
+                return run_source_item(src.as_ref(), item);
+            }
+        }
+        if id.0.starts_with("file:") {
+            if let Some(idx) = self.file_source() {
+                let mut cx = Cx::default();
+                let out = self.sources[idx].run(id, ActionId("open".into()), &mut cx);
+                return outcome_to_hotkey_result(cx.take(), out);
+            }
+        }
+        ItemHotkeyOutcome::NotFound
+    }
+
     /// Returns the newest debounced scratchpad save generation waiting for a timer, if any.
     pub fn take_pending_scratchpad_save(&mut self) -> Option<u64> {
         self.pending_save.take()
@@ -375,8 +469,13 @@ impl Launcher {
             return false;
         }
         let at = self.selected_hit().map(|h| h.id().clone());
+        let filter = crate::providers::files::parse_file_filter(&self.query);
         self.files = items
             .into_iter()
+            .filter(|item| {
+                let path = item.id.0.strip_prefix("file:").unwrap_or(&item.subtitle);
+                crate::providers::files::path_matches_extensions(path, &filter.extensions)
+            })
             .take(MAX_FILE_ROWS)
             .map(|item| Hit {
                 src: Source::Root(source),
@@ -387,15 +486,16 @@ impl Launcher {
                 matched: Vec::new(),
             })
             .collect();
-        let highlight_query = match crate::providers::files::classify_query(&self.query) {
+        let raw_highlight = match crate::providers::files::classify_query(&self.query) {
             Some(
                 crate::providers::files::FileQuery::Local(q)
                 | crate::providers::files::FileQuery::WindowsSearch(q),
             ) => q,
             None => self.query.trim(),
         };
+        let highlight_query = crate::providers::files::parse_file_filter(raw_highlight).query;
         self.ranker
-            .mark_title_letters(highlight_query, &mut self.files);
+            .mark_title_letters(&highlight_query, &mut self.files);
         // The selection stays on its row (a ranked row or the fallback), not on its index.
         if let Some(id) = at {
             let found = self
@@ -664,6 +764,17 @@ impl Launcher {
         } else {
             (None, raw_text)
         };
+        if self.mode == Mode::Root
+            && matches!(self.scope, SearchScope::All | SearchScope::Files)
+            && !crate::providers::files::parse_file_filter(&text)
+                .extensions
+                .is_empty()
+        {
+            self.rows.clear();
+            self.files.clear();
+            self.selected = 0;
+            return;
+        }
         let q = Query { text: text.clone() };
         let was_claimed = self.claimed.take();
         if self.mode == Mode::Root {
@@ -1430,6 +1541,30 @@ fn swatch_of(item: &Item) -> Option<u32> {
         return None;
     }
     naobi_core::color::parse(&item.title).map(|c| c.rgb.packed())
+}
+
+fn run_source_item(src: &dyn CommandSource, item: &Item) -> ItemHotkeyOutcome {
+    let mut cx = Cx::default();
+    let out = src.run(&item.id, item.primary.clone(), &mut cx);
+    outcome_to_hotkey_result(cx.take(), out)
+}
+
+fn outcome_to_hotkey_result(mut effects: Vec<Effect>, out: Outcome) -> ItemHotkeyOutcome {
+    match out {
+        Outcome::Done | Outcome::Refresh => {}
+        Outcome::Stay { effects: more, .. } | Outcome::Effects(more) => effects.extend(more),
+        Outcome::Failed(n) => effects.push(Effect::Notice(n)),
+    }
+    if let Some(view) = effects.iter().find_map(|e| match e {
+        Effect::PushView(v) => Some(v.clone()),
+        _ => None,
+    }) {
+        return ItemHotkeyOutcome::OpenLauncher {
+            view: Some(view),
+            prefill: None,
+        };
+    }
+    ItemHotkeyOutcome::Direct(effects)
 }
 
 fn kind_name(k: ItemKind) -> &'static str {

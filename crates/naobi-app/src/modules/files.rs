@@ -7,8 +7,8 @@ use super::Modules;
 use naobi_core::settings::Files;
 use naobi_launcher::file_index::{resolve_roots, FileIndex, IndexEvent};
 use naobi_launcher::providers::files::{
-    classify_query, contains_sql, like_sql, merge_paths, rows, FileCommands, FileQuery, LIMIT,
-    SPARSE_THRESHOLD,
+    classify_query, contains_sql, like_sql, merge_paths, parse_file_filter,
+    path_matches_extensions, rows, FileCommands, FileQuery, LIMIT, SPARSE_THRESHOLD,
 };
 use naobi_win32::dirwatch::{
     is_local_dir, wait_any_changes, DirWatcher, FileAction, FileChange, MultiWake, WakeEvent,
@@ -336,13 +336,44 @@ pub fn route_answer(
             paths: Vec::new(),
             unavailable: None,
         },
-        Some(FileQuery::WindowsSearch(q)) => answer(backend, q),
+        Some(FileQuery::WindowsSearch(q)) => {
+            let filter = parse_file_filter(q);
+            if filter.extensions.is_empty() {
+                answer(backend, q)
+            } else if filter.query.is_empty() {
+                Answer {
+                    paths: Vec::new(),
+                    unavailable: Some(false),
+                }
+            } else {
+                let mut ans = answer(backend, &filter.query);
+                ans.paths
+                    .retain(|p| path_matches_extensions(p, &filter.extensions));
+                ans
+            }
+        }
         Some(FileQuery::Local(q)) => {
+            let filter = parse_file_filter(q);
             let Some(idx) = local else {
-                return answer(backend, q);
+                return if filter.extensions.is_empty() {
+                    answer(backend, q)
+                } else if filter.query.is_empty() {
+                    Answer {
+                        paths: Vec::new(),
+                        unavailable: Some(false),
+                    }
+                } else {
+                    let mut ans = answer(backend, &filter.query);
+                    ans.paths
+                        .retain(|p| path_matches_extensions(p, &filter.extensions));
+                    ans
+                };
             };
             let local_paths = idx.search(q, LIMIT).unwrap_or_default();
-            if local_paths.len() >= SPARSE_THRESHOLD || !backend.service_running() {
+            if local_paths.len() >= SPARSE_THRESHOLD
+                || !backend.service_running()
+                || (!filter.extensions.is_empty() && filter.query.is_empty())
+            {
                 return Answer {
                     paths: local_paths,
                     unavailable: Some(false),
@@ -351,8 +382,16 @@ pub fn route_answer(
             if !local_paths.is_empty() {
                 emit_early(local_paths.clone());
             }
-            let merged = match backend.query(q) {
-                Ok(ws_paths) => merge_paths(local_paths, ws_paths, LIMIT),
+            let ws_q = if filter.extensions.is_empty() {
+                q
+            } else {
+                filter.query.as_str()
+            };
+            let merged = match backend.query(ws_q) {
+                Ok(mut ws_paths) => {
+                    ws_paths.retain(|p| path_matches_extensions(p, &filter.extensions));
+                    merge_paths(local_paths, ws_paths, LIMIT)
+                }
                 Err(_) => local_paths,
             };
             Answer {

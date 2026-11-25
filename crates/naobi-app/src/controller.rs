@@ -9,6 +9,7 @@ use naobi_core::ids::{EntryId, HotkeyId, ViewId};
 use naobi_core::item::Item;
 use naobi_core::notice::{Notice, NoticeKind};
 use naobi_core::ui::{Screen, UiEvent};
+use naobi_launcher::engine::ItemHotkeyOutcome;
 use naobi_launcher::icons::{askable, Answer, IconCache};
 use naobi_launcher::{Clock, Launcher};
 use std::collections::{HashMap, HashSet};
@@ -285,21 +286,58 @@ impl Controller {
         }
     }
 
-    /// A module's hotkey: runs its handlers and executes what they asked for. False when no module
-    /// subscribed to it.
+    /// A module's hotkey or `[hotkeys.items]` binding: runs its handlers/primary action directly
+    /// when non-parameterized, or opens the Launcher ready for input for views/parameterized items.
     pub fn on_hotkey(&mut self, id: &HotkeyId, host: &mut dyn Host) -> bool {
         let mut cx = Cx::default();
         let handled = self.router.hotkey(id, &mut cx);
-        let (opens, rest): (Vec<_>, Vec<_>) = cx
-            .take()
-            .into_iter()
-            .partition(|e| matches!(e, Effect::PushView(_)));
-        self.execute(rest, true, host);
-        // A module's hotkey that asks for its view opens the Launcher on it (D-021 for hotkey views).
-        if let Some(Effect::PushView(view)) = opens.into_iter().next() {
-            self.open_view(&view, host);
+        if handled {
+            let (opens, rest): (Vec<_>, Vec<_>) = cx
+                .take()
+                .into_iter()
+                .partition(|e| matches!(e, Effect::PushView(_)));
+            self.execute(rest, true, host);
+            // A module's hotkey that asks for its view opens the Launcher on it (D-021 for hotkey views).
+            if let Some(Effect::PushView(view)) = opens.into_iter().next() {
+                self.open_view(&view, host);
+            }
+            return true;
         }
-        handled
+        let Some(raw_item_id) = id.0.strip_prefix("item:") else {
+            return false;
+        };
+        let target_id = naobi_core::ids::ItemId(raw_item_id.to_owned());
+        match self.launcher.trigger_item_hotkey(&target_id) {
+            ItemHotkeyOutcome::Direct(mut effects) => {
+                let was_hidden = !host.is_visible();
+                if was_hidden {
+                    self.previous = host.foreground();
+                    effects.retain(|e| !matches!(e, Effect::Hide));
+                }
+                self.execute(effects, true, host);
+                true
+            }
+            ItemHotkeyOutcome::OpenLauncher { view, prefill } => {
+                self.pending_close = None;
+                self.previous = host.foreground();
+                let opened = match view {
+                    Some(v) => self.launcher.open_view_any(&v),
+                    None => {
+                        self.launcher.show_root();
+                        if let Some(text) = prefill {
+                            let _ = self.launcher.handle(UiEvent::TextChanged(text));
+                        }
+                        true
+                    }
+                };
+                if opened {
+                    self.present(host);
+                    host.show();
+                }
+                opened
+            }
+            ItemHotkeyOutcome::NotFound => false,
+        }
     }
 
     /// Opens the Launcher on a view that has its own hotkey; pressing it again closes the Launcher.
@@ -1560,5 +1598,130 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn t27_item_hotkey_executes_direct_silently_and_opens_launcher_for_view_or_param() {
+        use crate::modules::Modules;
+        use naobi_core::command::CommandSource;
+        use naobi_core::item::{Item, ItemKind};
+        use naobi_core::view_source::{Preview, ViewSource};
+        use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
+
+        struct DirectCmd;
+        impl CommandSource for DirectCmd {
+            fn items(&self, _q: &Query) -> Arc<[Item]> {
+                Arc::from([
+                    Item {
+                        id: ItemId("fake.open".into()),
+                        title: "Lock Screen".into(),
+                        subtitle: String::new(),
+                        keywords: vec![],
+                        alias: None,
+                        kind: ItemKind::Command,
+                        primary: ActionId("run".into()),
+                        secondary: None,
+                    },
+                    Item {
+                        id: ItemId("fake.view".into()),
+                        title: "Open Clips".into(),
+                        subtitle: String::new(),
+                        keywords: vec![],
+                        alias: None,
+                        kind: ItemKind::Command,
+                        primary: ActionId("open".into()),
+                        secondary: None,
+                    },
+                ])
+            }
+            fn actions(&self, _id: &ItemId) -> Vec<Action> {
+                vec![]
+            }
+            fn run(&self, id: &ItemId, _action: ActionId, _cx: &mut Cx) -> Outcome {
+                if id.0 == "fake.view" {
+                    Outcome::Effects(vec![Effect::PushView(ViewId("clips".into()))])
+                } else {
+                    Outcome::Effects(vec![
+                        Effect::Launch(LaunchTarget::ShellItem("notepad.exe".into())),
+                        Effect::Hide,
+                    ])
+                }
+            }
+        }
+
+        struct ClipsView;
+        impl CommandSource for ClipsView {
+            fn items(&self, _q: &Query) -> Arc<[Item]> {
+                Arc::new([])
+            }
+            fn actions(&self, _id: &ItemId) -> Vec<Action> {
+                vec![]
+            }
+            fn run(&self, _id: &ItemId, _a: ActionId, _cx: &mut Cx) -> Outcome {
+                Outcome::Done
+            }
+        }
+        impl ViewSource for ClipsView {
+            fn view_id(&self) -> ViewId {
+                ViewId("clips".into())
+            }
+            fn title(&self) -> &'static str {
+                "Clips"
+            }
+            fn opened_by_hotkey(&self) -> bool {
+                false
+            }
+            fn preview(&self, _id: &ItemId) -> Option<Preview> {
+                None
+            }
+        }
+
+        let links = QuicklinkSet::default();
+        links.set(vec![naobi_core::quicklink::Quicklink {
+            name: "Google".into(),
+            alias: "g".into(),
+            url: "https://example.com/?q={query}".into(),
+        }]);
+        let mut reg = Modules::new();
+        reg.register_source(Box::new(DirectCmd));
+        reg.register_source(Box::new(QuicklinkSource::new(links)));
+        reg.register_view(Box::new(ClipsView));
+        let parts = reg.into_parts();
+        let db = Db::open_in_memory().unwrap_or_else(|e| panic!("db: {e}"));
+        let frecency = Frecency::open(db, 0).unwrap_or_else(|e| panic!("frecency: {e}"));
+        let mut c = Controller::new(
+            Launcher::new(parts.sources, parts.views, frecency, Box::new(Zero)),
+            parts.router,
+        );
+        let mut h = Fake {
+            fg: Some(77),
+            ..Default::default()
+        };
+
+        // 1) Non-parameterized item (`fake.open`) launches silently without showing Launcher.
+        assert!(c.on_hotkey(&HotkeyId("item:fake.open".into()), &mut h));
+        assert!(!h.visible, "silent direct launch keeps Launcher hidden");
+        assert!(h.log.iter().any(|l| l.starts_with("launch ")));
+
+        // 2) View opener (`fake.view`) opens Launcher straight into its View.
+        h.log.clear();
+        assert!(c.on_hotkey(&HotkeyId("item:fake.view".into()), &mut h));
+        assert!(h.visible);
+        assert_eq!(
+            h.last_post.as_ref().map(|s| s.view.name.as_str()),
+            Some("Clips")
+        );
+
+        // Hide again, then trigger parameterized quicklink (`ql:g`): opens Launcher prefilled with "g ".
+        h.visible = false;
+        h.log.clear();
+        assert!(c.on_hotkey(&HotkeyId("item:ql:g".into()), &mut h));
+        assert!(h.visible);
+        assert_eq!(h.last_post.as_ref().map(|s| s.query.as_str()), Some("g "));
+
+        // Unknown ItemId returns false without showing Launcher.
+        h.visible = false;
+        assert!(!c.on_hotkey(&HotkeyId("item:missing.id".into()), &mut h));
+        assert!(!h.visible);
     }
 }

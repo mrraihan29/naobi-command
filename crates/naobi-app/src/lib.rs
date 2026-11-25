@@ -403,7 +403,11 @@ fn on_conflict(name: &str) {
     let chord = s
         .settings
         .as_ref()
-        .and_then(|set| set.hotkeys.get(name))
+        .and_then(|set| {
+            name.strip_prefix(naobi_win32::hotkeys::ITEM_HOTKEY_PREFIX)
+                .and_then(|id| set.item_hotkeys.get(id))
+                .or_else(|| set.hotkeys.get(name))
+        })
         .copied();
     let notice = notices::hotkey_conflict(name, chord);
     // A conflict on the chord this hotkey had before no longer applies.
@@ -523,7 +527,7 @@ fn on_settings_changed(path: &Path) {
     if next.general.autostart != last.general.autostart {
         sync_autostart(next.general.autostart);
     }
-    let chords_changed = next.hotkeys != last.hotkeys;
+    let chords_changed = next.hotkeys != last.hotkeys || next.item_hotkeys != last.item_hotkeys;
     // The settings are stored first, so a conflict event that follows names the new chord.
     {
         let mut s = state();

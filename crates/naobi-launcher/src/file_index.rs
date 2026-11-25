@@ -1,7 +1,7 @@
 //! Non-admin, disk-backed File index (ADR-0009, R-013): SQLite + FTS5 over configured local
 //! folders, kept current via incremental events. Never touches UNC/network paths and never logs
 //! file names or paths (D-020).
-use crate::providers::files::LIMIT;
+use crate::providers::files::{parse_file_filter, path_matches_extensions, LIMIT};
 use rusqlite::{params, Connection, OpenFlags};
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
@@ -278,7 +278,7 @@ impl FileIndex {
         Ok(())
     }
 
-    /// Searches indexed file names, returning at most `limit.min(LIMIT)` full paths.
+    /// Searches indexed file names, honoring `/ext` and `kind:<type>` filters, returning at most `limit.min(LIMIT)` full paths.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<String>, rusqlite::Error> {
         let cap = limit.min(LIMIT);
         let trimmed = query.trim();
@@ -286,10 +286,47 @@ impl FileIndex {
             return Ok(Vec::new());
         }
 
+        let filter = parse_file_filter(trimmed);
         let mut results = Vec::new();
         let mut seen = HashSet::new();
 
-        if let Some(fts_query) = fts_prefix_query(trimmed) {
+        if !filter.extensions.is_empty() && filter.query.is_empty() {
+            let mut stmt = self.conn.prepare_cached(
+                "SELECT path
+                 FROM files
+                 WHERE lower(name) LIKE ?1 ESCAPE '\\'
+                 ORDER BY length(name), path
+                 LIMIT ?2",
+            )?;
+            for ext in &filter.extensions {
+                if results.len() >= cap {
+                    break;
+                }
+                let pattern = format!("%.{ext}");
+                let left = (cap - results.len()) as i64;
+                let rows = stmt.query_map(params![pattern, left], |r| r.get::<_, String>(0))?;
+                for row in rows {
+                    let path = row?;
+                    if seen.insert(path.clone()) {
+                        results.push(path);
+                    }
+                }
+            }
+            return Ok(results);
+        }
+
+        let search_text = if filter.extensions.is_empty() {
+            trimmed
+        } else {
+            filter.query.as_str()
+        };
+        let fetch_cap = if filter.extensions.is_empty() {
+            cap
+        } else {
+            cap.saturating_mul(6).clamp(60, 400)
+        };
+
+        if let Some(fts_query) = fts_prefix_query(search_text) {
             let mut stmt = self.conn.prepare_cached(
                 "SELECT f.path
                  FROM files_fts
@@ -298,17 +335,22 @@ impl FileIndex {
                  ORDER BY bm25(files_fts), length(f.name), f.path
                  LIMIT ?2",
             )?;
-            let rows = stmt.query_map(params![fts_query, cap as i64], |r| r.get::<_, String>(0))?;
+            let rows = stmt.query_map(params![fts_query, fetch_cap as i64], |r| {
+                r.get::<_, String>(0)
+            })?;
             for row in rows {
                 let path = row?;
-                if seen.insert(path.clone()) {
+                if path_matches_extensions(&path, &filter.extensions) && seen.insert(path.clone()) {
                     results.push(path);
+                    if results.len() >= cap {
+                        break;
+                    }
                 }
             }
         }
 
         if results.len() < cap {
-            let words: Vec<String> = trimmed
+            let words: Vec<String> = search_text
                 .split_whitespace()
                 .map(str::to_ascii_lowercase)
                 .filter(|w| !w.is_empty())
@@ -320,7 +362,7 @@ impl FileIndex {
                      FROM files
                      WHERE name LIKE ?1 ESCAPE '\\'
                      ORDER BY length(name), path
-                     LIMIT 200",
+                     LIMIT 500",
                 )?;
                 let rows = stmt.query_map(params![pattern], |r| {
                     Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
@@ -328,7 +370,10 @@ impl FileIndex {
                 for row in rows {
                     let (path, name) = row?;
                     let lower = name.to_ascii_lowercase();
-                    if words.iter().all(|w| lower.contains(w)) && seen.insert(path.clone()) {
+                    if words.iter().all(|w| lower.contains(w))
+                        && path_matches_extensions(&path, &filter.extensions)
+                        && seen.insert(path.clone())
+                    {
                         results.push(path);
                         if results.len() >= cap {
                             break;

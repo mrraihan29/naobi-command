@@ -29,6 +29,85 @@ pub enum FileQuery<'a> {
     WindowsSearch(&'a str),
 }
 
+/// Result of stripping `/ext` and `kind:<type>` tokens from a Root search query (Ticket #28).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ParsedFileFilter {
+    /// Remaining non-filter search terms joined by spaces.
+    pub query: String,
+    /// Lowercase file extensions (without leading dot) to restrict results to.
+    pub extensions: Vec<String>,
+}
+
+const IMAGE_EXTS: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tif", "tiff", "avif", "heic",
+];
+const DOC_EXTS: &[&str] = &[
+    "pdf", "doc", "docx", "txt", "md", "rtf", "odt", "xls", "xlsx", "csv", "ppt", "pptx",
+];
+const AUDIO_EXTS: &[&str] = &["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus"];
+const VIDEO_EXTS: &[&str] = &["mp4", "mkv", "avi", "mov", "wmv", "webm", "m4v"];
+const ARCHIVE_EXTS: &[&str] = &["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "zst"];
+
+fn push_unique_ext(out: &mut Vec<String>, ext: &str) {
+    let clean = ext.trim().trim_start_matches('.').to_ascii_lowercase();
+    if !clean.is_empty()
+        && clean.chars().all(|c| c.is_ascii_alphanumeric())
+        && !out.contains(&clean)
+    {
+        out.push(clean);
+    }
+}
+
+/// Extracts `/ext` and `kind:<type>` tokens from `input`, preserving the remaining search terms.
+pub fn parse_file_filter(input: &str) -> ParsedFileFilter {
+    let mut terms = Vec::new();
+    let mut extensions = Vec::new();
+    for tok in input.split_whitespace() {
+        if let Some(ext) = tok.strip_prefix('/') {
+            if !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+                push_unique_ext(&mut extensions, ext);
+                continue;
+            }
+        } else if tok.len() > 5 && tok[..5].eq_ignore_ascii_case("kind:") {
+            let kind = tok[5..].trim_start_matches('.').to_ascii_lowercase();
+            let mapped: Option<&[&str]> = match kind.as_str() {
+                "image" | "images" | "img" => Some(IMAGE_EXTS),
+                "doc" | "docs" | "document" | "documents" => Some(DOC_EXTS),
+                "audio" | "music" => Some(AUDIO_EXTS),
+                "video" | "videos" => Some(VIDEO_EXTS),
+                "archive" | "archives" => Some(ARCHIVE_EXTS),
+                _ => None,
+            };
+            if let Some(list) = mapped {
+                for ext in list {
+                    push_unique_ext(&mut extensions, ext);
+                }
+                continue;
+            }
+            if !kind.is_empty() && kind.chars().all(|c| c.is_ascii_alphanumeric()) {
+                push_unique_ext(&mut extensions, &kind);
+                continue;
+            }
+        }
+        terms.push(tok);
+    }
+    ParsedFileFilter {
+        query: terms.join(" "),
+        extensions,
+    }
+}
+
+/// True when `extensions` is empty or `path`'s extension matches one of `extensions`.
+pub fn path_matches_extensions(path: &str, extensions: &[String]) -> bool {
+    if extensions.is_empty() {
+        return true;
+    }
+    Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| extensions.iter().any(|want| ext.eq_ignore_ascii_case(want)))
+}
+
 /// Strips optional `ws:` prefix (case-insensitive) and classifies the query.
 pub fn classify_query(text: &str) -> Option<FileQuery<'_>> {
     let trimmed = text.trim();

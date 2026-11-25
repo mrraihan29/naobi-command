@@ -19,6 +19,7 @@ pub mod inject;
 pub mod instance;
 pub mod job;
 pub mod local_time;
+pub mod locksmith;
 pub mod net_table;
 pub mod notice;
 pub mod paste;

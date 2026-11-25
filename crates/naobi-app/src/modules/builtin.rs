@@ -14,9 +14,11 @@ use naobi_launcher::providers::calc::{
 };
 use naobi_launcher::providers::color::ColorSource;
 use naobi_launcher::providers::dev::{DevEnv, DevSource};
+use naobi_launcher::providers::ms_settings::WindowsSettingsSource;
 use naobi_launcher::providers::quicklink::{QuicklinkSet, QuicklinkSource};
 use naobi_launcher::providers::run::{Program, ProgramLookup, RunSource};
 use naobi_launcher::providers::system::{SystemCommand, SystemOps, SystemSource};
+use naobi_launcher::providers::terminal::TerminalSource;
 use naobi_launcher::run_history::RunHistory;
 use naobi_win32::{clipboard_marker, fx, platform, random, run, shell_exec, system_commands};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -269,6 +271,8 @@ pub fn register(m: &mut Modules) {
     }
     m.register_source(Box::new(QuicklinkSource::new(quicklinks().clone())));
     m.register_source(Box::new(SystemSource::new(Arc::new(AppOps))));
+    m.register_source(Box::new(WindowsSettingsSource::new()));
+    m.register_source(Box::new(TerminalSource::new()));
     m.register_source(Box::new(RunSource::new(
         open_run_history(),
         Box::new(WinLookup),

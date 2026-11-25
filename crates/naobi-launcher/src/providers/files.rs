@@ -1,10 +1,13 @@
 //! File results from the Windows Search index (R-013, REPORT 5.4 "Files"). The search itself is the
 //! app's (a child process, because OLE DB must stay out of the resident one); this module owns what
 //! is pure: the Search SQL built from user text (T-031), the rows, and the "unavailable" state.
+use crate::providers::locksmith::{SharedLockTarget, VIEW_ID as LOCKSMITH_VIEW};
 use naobi_core::command::{CommandSource, Cx, Outcome, Query};
 use naobi_core::effect::{Effect, LaunchTarget};
-use naobi_core::ids::{ActionId, ItemId};
+use naobi_core::ids::{ActionId, ItemId, ViewId};
 use naobi_core::item::{Action, Item, ItemKind};
+use naobi_core::notice::{Notice, NoticeKind};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -176,15 +179,34 @@ pub(crate) fn parent(path: &str) -> Option<&str> {
     })
 }
 
+/// Returns true when `path` has an executable, script, or installer extension suitable for `"runas"`.
+fn is_runnable(path: &str) -> bool {
+    let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "exe" | "bat" | "cmd" | "msi" | "lnk" | "ps1"
+    )
+}
+
 /// The root source that owns the file rows' actions, and the "unavailable" state. It lists nothing
 /// itself: its rows arrive from the search, through `Launcher::file_results`.
 pub struct FileCommands {
     unavailable: Arc<AtomicBool>,
+    lock_target: SharedLockTarget,
 }
 
 impl FileCommands {
     pub fn new(unavailable: Arc<AtomicBool>) -> Self {
-        Self { unavailable }
+        Self {
+            unavailable,
+            lock_target: SharedLockTarget::default(),
+        }
+    }
+
+    pub fn lock_target(&self) -> SharedLockTarget {
+        self.lock_target.clone()
     }
 }
 
@@ -203,16 +225,27 @@ impl CommandSource for FileCommands {
             .then_some(UNAVAILABLE)
     }
 
-    fn actions(&self, _id: &ItemId) -> Vec<Action> {
-        let action = |id: &str, label: &str| Action {
+    fn actions(&self, id: &ItemId) -> Vec<Action> {
+        let runnable = id.0.strip_prefix("file:").is_some_and(is_runnable);
+        let action = |id: &str, label: &str, enabled: Result<(), &str>| Action {
             id: ActionId(id.into()),
             label: label.into(),
             shortcut: None,
-            enabled: Ok(()),
+            enabled: enabled.map_err(str::to_owned),
         };
         vec![
-            action("open", "Open"),
-            action("folder", "Open Containing Folder"),
+            action("open", "Open", Ok(())),
+            action("folder", "Reveal in Explorer", Ok(())),
+            action("locksmith", "Who is locking this file", Ok(())),
+            action(
+                "runas",
+                "Run as administrator",
+                if runnable {
+                    Ok(())
+                } else {
+                    Err("Only programs, scripts, and installers can run as administrator.")
+                },
+            ),
         ]
     }
 
@@ -220,17 +253,34 @@ impl CommandSource for FileCommands {
         let Some(path) = id.0.strip_prefix("file:") else {
             return Outcome::Done;
         };
-        let target = match action.0.as_str() {
-            "open" => Some(path),
-            "folder" => parent(path),
-            _ => None,
-        };
-        match target {
-            Some(t) => Outcome::Effects(vec![
-                Effect::Launch(LaunchTarget::ShellItem(t.to_owned())),
+        match action.0.as_str() {
+            "open" => Outcome::Effects(vec![
+                Effect::Launch(LaunchTarget::ShellItem(path.to_owned())),
                 Effect::Hide,
             ]),
-            None => Outcome::Done,
+            "folder" => Outcome::Effects(vec![
+                Effect::Launch(LaunchTarget::RevealInExplorer(path.to_owned())),
+                Effect::Hide,
+            ]),
+            "locksmith" => {
+                *self.lock_target.lock().unwrap_or_else(|e| e.into_inner()) = Some(path.to_owned());
+                Outcome::Effects(vec![Effect::PushView(ViewId(LOCKSMITH_VIEW.into()))])
+            }
+            "runas" => {
+                if is_runnable(path) {
+                    Outcome::Effects(vec![
+                        Effect::Launch(LaunchTarget::RunAsAdmin(path.to_owned())),
+                        Effect::Hide,
+                    ])
+                } else {
+                    Outcome::Failed(Notice {
+                        subject: "Run as administrator".into(),
+                        message: "This file type cannot run as administrator.".into(),
+                        kind: NoticeKind::Error,
+                    })
+                }
+            }
+            _ => Outcome::Done,
         }
     }
 }

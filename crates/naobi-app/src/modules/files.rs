@@ -201,8 +201,53 @@ fn run_indexer(db_path: &Path, wake: &WakeEvent) {
     }
 }
 
+struct WinLockOps;
+
+impl naobi_launcher::providers::locksmith::LockOps for WinLockOps {
+    fn locking_processes(
+        &self,
+        path: &str,
+    ) -> Result<Vec<naobi_launcher::providers::locksmith::LockingProcess>, &'static str> {
+        naobi_win32::locksmith::list_locks(path)
+            .map(|list| {
+                list.into_iter()
+                    .map(|p| naobi_launcher::providers::locksmith::LockingProcess {
+                        pid: p.pid,
+                        name: p.name,
+                        kind: p.kind,
+                    })
+                    .collect()
+            })
+            .map_err(|e| match e {
+                naobi_win32::locksmith::LockError::AccessDenied => {
+                    "Current-user access denied while inspecting locks"
+                }
+                naobi_win32::locksmith::LockError::Failed(_) => {
+                    "Windows Restart Manager could not inspect locks"
+                }
+            })
+    }
+
+    fn end_task(&self, pid: u32) -> naobi_launcher::providers::locksmith::LockEndOutcome {
+        match naobi_win32::locksmith::end_task(pid) {
+            Ok(()) => naobi_launcher::providers::locksmith::LockEndOutcome::Ended,
+            Err(naobi_win32::locksmith::LockError::AccessDenied) => {
+                naobi_launcher::providers::locksmith::LockEndOutcome::Elevated
+            }
+            Err(naobi_win32::locksmith::LockError::Failed(_)) => {
+                naobi_launcher::providers::locksmith::LockEndOutcome::Failed
+            }
+        }
+    }
+}
+
 pub fn register(m: &mut Modules) {
-    m.register_source(Box::new(FileCommands::new(unavailable().clone())));
+    let files = FileCommands::new(unavailable().clone());
+    let target = files.lock_target();
+    m.register_source(Box::new(files));
+    m.register_view(Box::new(
+        naobi_launcher::providers::locksmith::LocksmithView::new(Box::new(WinLockOps), target),
+    ));
 }
 
 /// Asks for the files named like `text`, for the query of `generation`. Returns at once; the answer

@@ -113,6 +113,8 @@ impl Host for AppHost {
         // The controller refused every URL that is not http or https before this.
         match target {
             LaunchTarget::ShellItem(t) | LaunchTarget::Url(t) => shell_exec::open(t),
+            LaunchTarget::RevealInExplorer(t) => shell_exec::reveal_in_explorer(t),
+            LaunchTarget::RunAsAdmin(t) => shell_exec::run_as_admin(t),
             // The Owner's own command line or program, never through the URL scheme check (T-033).
             LaunchTarget::Console(line) => naobi_win32::run::run_in_console(line),
             LaunchTarget::Program { path, args } => naobi_win32::run::start_program(path, args),

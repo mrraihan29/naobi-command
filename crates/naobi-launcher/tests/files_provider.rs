@@ -203,21 +203,61 @@ fn r013_the_file_query_is_asked_only_at_the_root_with_text() {
 fn r013_actions_open_the_file_or_its_folder() {
     let c = FileCommands::new(Arc::new(AtomicBool::new(false)));
     let id = ItemId(r"file:C:\Users\me\a b.txt".into());
-    let labels: Vec<_> = c.actions(&id).into_iter().map(|a| a.label).collect();
-    assert_eq!(labels, ["Open", "Open Containing Folder"]);
+    let actions = c.actions(&id);
+    let labels: Vec<_> = actions.iter().map(|a| a.label.as_str()).collect();
+    assert_eq!(
+        labels,
+        [
+            "Open",
+            "Reveal in Explorer",
+            "Who is locking this file",
+            "Run as administrator",
+        ]
+    );
+    assert!(actions[3].enabled.is_err(), ".txt cannot run as admin");
+    let exe_id = ItemId(r"file:C:\Tools\setup.exe".into());
+    assert!(
+        c.actions(&exe_id)[3].enabled.is_ok(),
+        ".exe can run as admin"
+    );
+
     let run = |act: &str, id: &ItemId| c.run(id, ActionId(act.into()), &mut Cx::default());
-    let launch = |t: &str| {
+    assert_eq!(
+        run("open", &id),
         Outcome::Effects(vec![
-            Effect::Launch(LaunchTarget::ShellItem(t.into())),
+            Effect::Launch(LaunchTarget::ShellItem(r"C:\Users\me\a b.txt".into())),
             Effect::Hide,
         ])
-    };
-    assert_eq!(run("open", &id), launch(r"C:\Users\me\a b.txt"));
-    assert_eq!(run("folder", &id), launch(r"C:\Users\me"));
-    // A file in a drive's root opens the root, not "C:".
+    );
     assert_eq!(
-        run("folder", &ItemId(r"file:C:\a.txt".into())),
-        launch(r"C:\")
+        run("folder", &id),
+        Outcome::Effects(vec![
+            Effect::Launch(LaunchTarget::RevealInExplorer(
+                r"C:\Users\me\a b.txt".into()
+            )),
+            Effect::Hide,
+        ])
+    );
+    assert_eq!(
+        run("runas", &exe_id),
+        Outcome::Effects(vec![
+            Effect::Launch(LaunchTarget::RunAsAdmin(r"C:\Tools\setup.exe".into())),
+            Effect::Hide,
+        ])
+    );
+    assert!(matches!(run("runas", &id), Outcome::Failed(_)));
+    assert_eq!(
+        run("locksmith", &id),
+        Outcome::Effects(vec![Effect::PushView(naobi_core::ids::ViewId(
+            naobi_launcher::providers::locksmith::VIEW_ID.into()
+        ))])
+    );
+    assert_eq!(
+        c.lock_target()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_deref(),
+        Some(r"C:\Users\me\a b.txt")
     );
     assert_eq!(run("nope", &id), Outcome::Done);
     assert_eq!(run("open", &ItemId("app:x".into())), Outcome::Done);
@@ -487,4 +527,105 @@ fn r013_classify_query_and_merge_paths_routing_helpers() {
     assert!(l.file_results(gen, source, rows(&[r"C:\Docs\report.pdf".into()])));
     let s = l.screen();
     assert_eq!(s.sections[0].rows[0].matched, vec![0, 1, 2]);
+}
+
+#[test]
+fn t25_locksmith_view_lists_locks_requires_confirm_and_maps_outcomes() {
+    use naobi_core::view_source::ViewSource;
+    use naobi_launcher::providers::locksmith::{
+        LockEndOutcome, LockOps, LockingProcess, LocksmithView, SharedLockTarget,
+    };
+    use std::sync::Mutex;
+
+    struct FakeOps {
+        locks: Mutex<Vec<LockingProcess>>,
+        end_result: Mutex<LockEndOutcome>,
+        ended: Arc<Mutex<Vec<u32>>>,
+    }
+
+    impl LockOps for FakeOps {
+        fn locking_processes(&self, _path: &str) -> Result<Vec<LockingProcess>, &'static str> {
+            Ok(self.locks.lock().unwrap_or_else(|e| e.into_inner()).clone())
+        }
+
+        fn end_task(&self, pid: u32) -> LockEndOutcome {
+            self.ended
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(pid);
+            *self.end_result.lock().unwrap_or_else(|e| e.into_inner())
+        }
+    }
+
+    let ended = Arc::new(Mutex::new(Vec::new()));
+    let ops = FakeOps {
+        locks: Mutex::new(vec![
+            LockingProcess {
+                pid: 4242,
+                name: "Code.exe".into(),
+                kind: "Desktop app",
+            },
+            LockingProcess {
+                pid: 9001,
+                name: "wordpad.exe".into(),
+                kind: "Desktop app",
+            },
+        ]),
+        end_result: Mutex::new(LockEndOutcome::Ended),
+        ended: ended.clone(),
+    };
+    let target = SharedLockTarget::default();
+    *target.lock().unwrap_or_else(|e| e.into_inner()) = Some(r"C:\docs\locked.txt".into());
+
+    let view = LocksmithView::new(Box::new(ops), target);
+    assert!(!view.opened_by_hotkey());
+    assert!(view.empty_title().contains("current-user"));
+
+    let all = view.items(&Query::default());
+    assert_eq!(all.len(), 2);
+    assert_eq!(all[0].title, "Code.exe");
+    assert!(all[0].subtitle.contains("PID 4242"));
+    assert!(all[0].subtitle.contains("current-user"));
+    assert!(view.needs_confirm(&all[0].id, &ActionId("end_task".into())));
+    assert_eq!(
+        view.actions(&all[0].id)
+            .into_iter()
+            .map(|a| a.label)
+            .collect::<Vec<_>>(),
+        ["End task"]
+    );
+
+    let filtered = view.items(&Query {
+        text: "word".into(),
+    });
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].title, "wordpad.exe");
+
+    let out = view.run(
+        &ItemId("lock:4242".into()),
+        ActionId("end_task".into()),
+        &mut Cx::default(),
+    );
+    assert!(matches!(out, Outcome::Stay { .. }));
+    assert_eq!(*ended.lock().unwrap_or_else(|e| e.into_inner()), vec![4242]);
+
+    // AccessDenied / elevation failure maps cleanly to a non-crashing Notice failure.
+    struct ElevatedOps;
+    impl LockOps for ElevatedOps {
+        fn locking_processes(&self, _path: &str) -> Result<Vec<LockingProcess>, &'static str> {
+            Err("Current-user access denied while inspecting locks")
+        }
+        fn end_task(&self, _pid: u32) -> LockEndOutcome {
+            LockEndOutcome::Elevated
+        }
+    }
+    let elevated = LocksmithView::new(
+        Box::new(ElevatedOps),
+        Arc::new(Mutex::new(Some("x".into()))),
+    );
+    assert_eq!(elevated.items(&Query::default())[0].id.0, "lock:error");
+    assert!(matches!(
+        elevated.run(&ItemId("lock:9".into()), ActionId("end_task".into()), &mut Cx::default()),
+        Outcome::Failed(n) if n.message.contains("administrator")
+    ));
 }

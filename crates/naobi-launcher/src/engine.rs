@@ -748,7 +748,8 @@ impl Launcher {
         }
         let now = self.clock.now_ms() / 1000;
         let frecency = &self.frecency;
-        let empty_home = self.mode == Mode::Root && text.is_empty() && self.scope == SearchScope::All;
+        let empty_home =
+            self.mode == Mode::Root && text.is_empty() && self.scope == SearchScope::All;
         self.rows = self.ranker.rank_with_alias(
             &text,
             pool,
@@ -825,19 +826,43 @@ impl Launcher {
                 self.move_by(PAGE_ROWS);
                 vec![]
             }
-            Key::Digit1 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+            Key::Digit1
+                if c.ctrl
+                    && !c.alt
+                    && !c.shift
+                    && self.mode == Mode::Root
+                    && self.panel.is_none() =>
+            {
                 self.toggle_scope(SearchScope::Apps);
                 vec![]
             }
-            Key::Digit2 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+            Key::Digit2
+                if c.ctrl
+                    && !c.alt
+                    && !c.shift
+                    && self.mode == Mode::Root
+                    && self.panel.is_none() =>
+            {
                 self.toggle_scope(SearchScope::Files);
                 vec![]
             }
-            Key::Digit3 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+            Key::Digit3
+                if c.ctrl
+                    && !c.alt
+                    && !c.shift
+                    && self.mode == Mode::Root
+                    && self.panel.is_none() =>
+            {
                 self.toggle_scope(SearchScope::Commands);
                 vec![]
             }
-            Key::Digit4 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+            Key::Digit4
+                if c.ctrl
+                    && !c.alt
+                    && !c.shift
+                    && self.mode == Mode::Root
+                    && self.panel.is_none() =>
+            {
                 self.toggle_scope(SearchScope::Clipboard);
                 vec![]
             }
@@ -1302,6 +1327,8 @@ fn action_style(id: &str) -> ActionStyle {
         "queue_next" => ("action.queue_next", 1, false),
         "queue_clear" => ("action.queue_clear", 1, false),
         "folder" => ("action.folder", 1, false),
+        "locksmith" => ("action.open", 1, false),
+        "runas" => ("action.run", 1, false),
         "duplicate" | "copy_item_id" => ("action.copy", 1, false),
         "star" => ("action.pin", 1, false),
         "save_snippet" => ("action.save_snippet", 1, false),
@@ -1309,7 +1336,7 @@ fn action_style(id: &str) -> ActionStyle {
         "pin" => ("action.pin", 1, false),
         "minimize" => ("action.minimize", 1, false),
         "close" => ("action.close", 1, false),
-        "delete" | "force_quit" | "clear" => ("action.delete", 2, true),
+        "delete" | "force_quit" | "end_task" | "clear" => ("action.delete", 2, true),
         _ => ("action.copy", 0, false),
     };
     ActionStyle {

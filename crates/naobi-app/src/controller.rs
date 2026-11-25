@@ -356,8 +356,11 @@ impl Controller {
                                 LaunchTarget::Console(_) => {
                                     ("Run", "PowerShell could not be started.")
                                 }
-                                LaunchTarget::Program { .. } => {
+                                LaunchTarget::Program { .. } | LaunchTarget::RunAsAdmin(_) => {
                                     ("Run", "Windows could not start that program.")
+                                }
+                                LaunchTarget::RevealInExplorer(_) => {
+                                    ("Reveal", "Explorer could not open that folder.")
                                 }
                                 _ => ("Open", "Windows could not open it."),
                             };
@@ -513,7 +516,8 @@ mod tests {
             self.log.push(format!("paste_text {text} {target:?}"));
         }
         fn paste_files(&mut self, files: &[String], target: Option<isize>) {
-            self.log.push(format!("paste_files {} {target:?}", files.join(",")));
+            self.log
+                .push(format!("paste_files {} {target:?}", files.join(",")));
         }
         fn search_files(&mut self, generation: u64, query: &str) {
             self.log.push(format!("search {generation} {query}"));

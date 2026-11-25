@@ -6,6 +6,10 @@ use crate::notice::Notice;
 pub enum LaunchTarget {
     /// A path, or `shell:AppsFolder\<AUMID>`.
     ShellItem(String),
+    /// Opens Explorer and selects the path if possible (falling back to the parent folder).
+    RevealInExplorer(String),
+    /// Starts an executable/script elevated via ShellExecute `"runas"`.
+    RunAsAdmin(String),
     Url(String),
     /// A command line the Owner typed after `>` (R-024): runs in a new PowerShell console window that stays open.
     Console(String),

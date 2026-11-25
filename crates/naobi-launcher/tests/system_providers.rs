@@ -603,3 +603,82 @@ fn t4_timezone_date_and_epoch_copy_on_enter() {
     type_text(&mut l, "42");
     assert!(titles(&l.screen()).is_empty(), "bare 42 shows no calc row");
 }
+
+#[test]
+fn t26_windows_settings_catalog_and_terminal_profiles() {
+    use naobi_core::command::{CommandSource, Cx, Outcome, Query};
+    use naobi_core::ids::{ActionId, ItemId};
+    use naobi_launcher::providers::ms_settings::WindowsSettingsSource;
+    use naobi_launcher::providers::terminal::{discover_settings_paths, TerminalSource};
+
+    let settings = WindowsSettingsSource::new();
+    let rows = settings.items(&Query::default());
+    assert!(
+        rows.len() >= 50,
+        "full ms-settings catalog has 50+ entries, got {}",
+        rows.len()
+    );
+    assert!(rows
+        .iter()
+        .all(|i| i.id.0.starts_with("winset:ms-settings:")));
+    assert_eq!(
+        settings.run(
+            &ItemId("winset:ms-settings:storagesense".into()),
+            ActionId("open".into()),
+            &mut Cx::default()
+        ),
+        Outcome::Effects(vec![
+            Effect::Launch(LaunchTarget::ShellItem("ms-settings:storagesense".into())),
+            Effect::Hide,
+        ])
+    );
+
+    // Missing or malformed Windows Terminal files silently yield empty.
+    let tmp = std::env::temp_dir().join(format!("naobi-wt-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    assert!(discover_settings_paths(&tmp).is_empty());
+    assert!(TerminalSource::from_paths(&[tmp.join("missing.json")])
+        .items(&Query::default())
+        .is_empty());
+
+    let pkg_dir = tmp
+        .join("Packages")
+        .join("Microsoft.WindowsTerminal_8wekyb3d8bbwe")
+        .join("LocalState");
+    std::fs::create_dir_all(&pkg_dir).unwrap_or_else(|e| panic!("mkdir: {e}"));
+    let wt_file = pkg_dir.join("settings.json");
+    std::fs::write(
+        &wt_file,
+        r#"{
+            "profiles": {
+                "list": [
+                    { "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}", "name": "Windows PowerShell", "commandline": "powershell.exe" },
+                    { "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}", "name": "Hidden Shell", "hidden": true },
+                    { "name": "Ubuntu" }
+                ]
+            }
+        }"#,
+    )
+    .unwrap_or_else(|e| panic!("write: {e}"));
+
+    let found = discover_settings_paths(&tmp);
+    assert_eq!(found, vec![wt_file]);
+
+    let term = TerminalSource::from_paths(&found);
+    let items = term.items(&Query::default());
+    let titles: Vec<_> = items.iter().map(|i| i.title.as_str()).collect();
+    assert_eq!(titles, ["Terminal: Windows PowerShell", "Terminal: Ubuntu"]);
+
+    assert_eq!(
+        term.run(&items[0].id, ActionId("open".into()), &mut Cx::default()),
+        Outcome::Effects(vec![
+            Effect::Launch(LaunchTarget::Program {
+                path: "wt.exe".into(),
+                args: "-p \"Windows PowerShell\"".into(),
+            }),
+            Effect::Hide,
+        ])
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}

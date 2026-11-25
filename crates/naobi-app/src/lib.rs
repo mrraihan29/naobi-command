@@ -532,6 +532,7 @@ fn on_settings_changed(path: &Path) {
     modules::builtin::set_quicklinks(next.quicklinks);
     modules::builtin::set_calc_rem_base_px(next.calculator.rem_base_px);
     modules::builtin::set_currency_config(&next.currency);
+    modules::builtin::set_theme_schedule(next.theme.schedule.clone());
     modules::files::set_config(&next.files);
     if next.currency.auto_refresh && !last.currency.auto_refresh {
         modules::builtin::maybe_auto_refresh_fx();
@@ -709,6 +710,7 @@ pub fn run() -> anyhow::Result<()> {
     platform::start_with(&settings, route, || std::process::exit(0))?;
     report("tray_ready");
     modules::builtin::start_fx_scheduler();
+    modules::builtin::set_theme_schedule(settings.theme.schedule.clone());
     let mut jobs = Vec::new();
     if let Some(dir) = settings_dir {
         let themes = modules::themes::folder(&dir);

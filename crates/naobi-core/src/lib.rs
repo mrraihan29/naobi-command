@@ -18,6 +18,7 @@ pub mod settings;
 pub mod snippet;
 pub mod theme;
 pub mod theme_file;
+pub mod theme_schedule;
 pub mod tokens;
 pub mod ui;
 pub mod view_source;

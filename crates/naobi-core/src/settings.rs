@@ -89,17 +89,54 @@ impl Default for Aot {
 }
 
 /// The Theme of each Windows app mode (R-032).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeSlots {
     pub light: String,
     pub dark: String,
+    pub schedule: Option<ThemeSchedule>,
 }
 impl Default for ThemeSlots {
     fn default() -> Self {
         Self {
             light: "paper".into(),
             dark: "stone".into(),
+            schedule: None,
+        }
+    }
+}
+
+/// Optional automatic light/dark schedule under `[theme.schedule]`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ThemeSchedule {
+    pub enabled: bool,
+    /// `"fixed"` or `"solar"`.
+    pub mode: String,
+    /// `"HH:MM"` (24h local time) for `"fixed"` mode.
+    pub light_at: String,
+    /// `"HH:MM"` (24h local time) for `"fixed"` mode.
+    pub dark_at: String,
+    /// Manual latitude (-90..=90) for `"solar"` mode.
+    pub latitude: f64,
+    /// Manual longitude (-180..=180) for `"solar"` mode.
+    pub longitude: f64,
+    /// Optional offset in minutes applied to sunrise/sunset (-180..=180).
+    pub offset_minutes: i32,
+    /// `"apps"` or `"both"`.
+    pub target: String,
+}
+impl Default for ThemeSchedule {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: "fixed".into(),
+            light_at: "07:00".into(),
+            dark_at: "19:00".into(),
+            latitude: 0.0,
+            longitude: 0.0,
+            offset_minutes: 0,
+            target: "apps".into(),
         }
     }
 }
@@ -323,6 +360,38 @@ impl Settings {
                 defaults.dark
             ));
             s.theme.dark = defaults.dark;
+        }
+        if let Some(sch) = &mut s.theme.schedule {
+            let mut valid = true;
+            if !matches!(sch.mode.as_str(), "fixed" | "solar") {
+                note("theme.schedule.mode must be \"fixed\" or \"solar\"".into());
+                valid = false;
+            }
+            if crate::theme_schedule::parse_hhmm(&sch.light_at).is_none()
+                || crate::theme_schedule::parse_hhmm(&sch.dark_at).is_none()
+            {
+                note("theme.schedule.light_at and dark_at must be HH:MM".into());
+                valid = false;
+            }
+            if !sch.latitude.is_finite()
+                || !(-90.0..=90.0).contains(&sch.latitude)
+                || !sch.longitude.is_finite()
+                || !(-180.0..=180.0).contains(&sch.longitude)
+            {
+                note("theme.schedule latitude/longitude out of range".into());
+                valid = false;
+            }
+            if !(-180..=180).contains(&sch.offset_minutes) {
+                note("theme.schedule.offset_minutes must be within -180..=180".into());
+                valid = false;
+            }
+            if !matches!(sch.target.as_str(), "apps" | "both") {
+                note("theme.schedule.target must be \"apps\" or \"both\"".into());
+                valid = false;
+            }
+            if !valid {
+                sch.enabled = false;
+            }
         }
         if s.aot.border_color != "auto" && !is_hex_color(&s.aot.border_color) {
             note("aot.border_color must be \"auto\" or #RRGGBB; using auto".into());

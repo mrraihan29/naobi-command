@@ -306,6 +306,25 @@ pub fn toggle_dark_mode() -> io::Result<()> {
     Ok(())
 }
 
+/// Sets Windows light (`dark = false`, value 1) or dark (`dark = true`, value 0) mode when it
+/// differs from the current registry state, then broadcasts `ImmersiveColorSet`.
+pub fn set_dark_mode(dark: bool, include_system: bool) -> io::Result<()> {
+    let want = u32::from(!dark);
+    let mut changed = false;
+    if read_dword(APPS_VALUE) != Some(want) {
+        write_dword(APPS_VALUE, want)?;
+        changed = true;
+    }
+    if include_system && read_dword(SYSTEM_VALUE) != Some(want) {
+        write_dword(SYSTEM_VALUE, want)?;
+        changed = true;
+    }
+    if changed {
+        broadcast_theme_change();
+    }
+    Ok(())
+}
+
 fn broadcast_theme_change() {
     // SAFETY: the broadcast string is a static, NUL-terminated wide literal; the call waits at most
     // half a second per window and skips hung ones.

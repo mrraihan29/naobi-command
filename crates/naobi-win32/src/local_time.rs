@@ -1,5 +1,5 @@
-//! Wall-clock local date and time from Windows (`GetLocalTime`).
-use windows::Win32::System::SystemInformation::GetLocalTime;
+//! Wall-clock local date and time from Windows (`GetLocalTime` / `GetSystemTime`).
+use windows::Win32::System::SystemInformation::{GetLocalTime, GetSystemTime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalTime {
@@ -23,6 +23,36 @@ pub fn now() -> LocalTime {
         minute: st.wMinute,
         second: st.wSecond,
     }
+}
+
+/// Reads the current local time alongside the active UTC offset in minutes.
+pub fn now_with_offset() -> (LocalTime, i32) {
+    // SAFETY: `GetSystemTime` and `GetLocalTime` return plain `SYSTEMTIME` values.
+    let utc = unsafe { GetSystemTime() };
+    let loc = unsafe { GetLocalTime() };
+    let to_mins = |y: u16, m: u16, d: u16, h: u16, min: u16| -> i64 {
+        let y = i64::from(y) - i64::from(m <= 2);
+        let era = y / 400;
+        let yoe = y - era * 400;
+        let m = i64::from(m);
+        let d = i64::from(d);
+        let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+        let days = era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        days * 1440 + i64::from(h) * 60 + i64::from(min)
+    };
+    let offset = (to_mins(loc.wYear, loc.wMonth, loc.wDay, loc.wHour, loc.wMinute)
+        - to_mins(utc.wYear, utc.wMonth, utc.wDay, utc.wHour, utc.wMinute)) as i32;
+    (
+        LocalTime {
+            year: loc.wYear,
+            month: loc.wMonth,
+            day: loc.wDay,
+            hour: loc.wHour,
+            minute: loc.wMinute,
+            second: loc.wSecond,
+        },
+        offset,
+    )
 }
 
 #[cfg(test)]

@@ -631,6 +631,7 @@ mod tests {
         ThemeSlots {
             light: light.into(),
             dark: dark.into(),
+            schedule: None,
         }
     }
 

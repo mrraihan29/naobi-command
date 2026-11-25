@@ -42,6 +42,65 @@ pub fn set_calc_rem_base_px(px: f64) {
 }
 
 const FX_TIMER: usize = 0xB1;
+const THEME_TIMER: usize = 0xB2;
+
+#[derive(Default)]
+struct ThemeScheduleRuntime {
+    config: Option<naobi_core::settings::ThemeSchedule>,
+    state: naobi_core::theme_schedule::ScheduleState,
+}
+
+fn theme_schedule_rt() -> &'static Mutex<ThemeScheduleRuntime> {
+    static RT: OnceLock<Mutex<ThemeScheduleRuntime>> = OnceLock::new();
+    RT.get_or_init(|| Mutex::new(ThemeScheduleRuntime::default()))
+}
+
+pub fn set_theme_schedule(schedule: Option<naobi_core::settings::ThemeSchedule>) {
+    {
+        let mut rt = theme_schedule_rt()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if rt.config != schedule {
+            rt.config = schedule;
+            rt.state.reset();
+        }
+    }
+    step_theme_schedule();
+}
+
+pub fn step_theme_schedule() {
+    let (lt, offset) = naobi_win32::local_time::now_with_offset();
+    let now = naobi_core::theme_schedule::ScheduleTime {
+        year: i32::from(lt.year),
+        month: u32::from(lt.month),
+        day: u32::from(lt.day),
+        hour: u32::from(lt.hour),
+        minute: u32::from(lt.minute),
+        second: u32::from(lt.second),
+        utc_offset_minutes: offset,
+    };
+    let step = {
+        let mut rt = theme_schedule_rt()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let Some(cfg) = rt.config.clone() else {
+            platform::set_timer(THEME_TIMER, None);
+            return;
+        };
+        rt.state.step(&cfg, now)
+    };
+    match step {
+        Some((apply, delay_ms)) => {
+            if let Some((dark, include_system)) = apply {
+                let _ = system_commands::set_dark_mode(dark, include_system);
+            }
+            platform::set_timer(THEME_TIMER, Some(delay_ms));
+        }
+        None => {
+            platform::set_timer(THEME_TIMER, None);
+        }
+    }
+}
 
 #[derive(Default)]
 struct FxScheduler {
@@ -189,11 +248,19 @@ pub fn register(m: &mut Modules) {
             if let AppEvent::Timer(id) = ev {
                 if id.0 == FX_TIMER {
                     maybe_auto_refresh_fx();
+                } else if id.0 == THEME_TIMER {
+                    step_theme_schedule();
                 }
             }
         }),
     );
-    m.subscribe_event(EventKind::Resume, Box::new(|_, _| maybe_auto_refresh_fx()));
+    m.subscribe_event(
+        EventKind::Resume,
+        Box::new(|_, _| {
+            maybe_auto_refresh_fx();
+            step_theme_schedule();
+        }),
+    );
     m.register_source(Box::new(ColorSource));
     m.register_source(Box::new(DevSource::new(Box::new(WinDevEnv))));
     if let Some(history) = calc_history {

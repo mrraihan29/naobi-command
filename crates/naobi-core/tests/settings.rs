@@ -417,3 +417,35 @@ fn item_aliases_validate_and_report_conflicts() {
     assert!(!bad.settings.aliases.contains_key("empty"));
     assert_eq!(bad.reports.len(), 4);
 }
+
+#[test]
+fn theme_schedule_validates_fixed_and_solar_modes() {
+    let fixed = Settings::parse(
+        "[theme.schedule]\nenabled = true\nmode = \"fixed\"\nlight_at = \"06:30\"\ndark_at = \"18:45\"\ntarget = \"both\"\n",
+    )
+    .unwrap();
+    assert!(fixed.reports.is_empty());
+    let sch = fixed.settings.theme.schedule.expect("schedule");
+    assert!(sch.enabled);
+    assert_eq!(sch.mode, "fixed");
+    assert_eq!(sch.light_at, "06:30");
+    assert_eq!(sch.dark_at, "18:45");
+    assert_eq!(sch.target, "both");
+
+    let solar = Settings::parse(
+        "[theme.schedule]\nenabled = true\nmode = \"solar\"\nlatitude = -6.2\nlongitude = 106.8\noffset_minutes = -15\n",
+    )
+    .unwrap();
+    assert!(solar.reports.is_empty());
+    let sch = solar.settings.theme.schedule.expect("solar");
+    assert_eq!(sch.mode, "solar");
+    assert_eq!(sch.offset_minutes, -15);
+    assert_eq!(sch.target, "apps");
+
+    let bad = Settings::parse(
+        "[theme.schedule]\nenabled = true\nmode = \"magic\"\nlight_at = \"25:00\"\nlatitude = 120.0\ntarget = \"invalid\"\n",
+    )
+    .unwrap();
+    assert!(!bad.reports.is_empty());
+    assert!(!bad.settings.theme.schedule.unwrap().enabled);
+}

@@ -209,7 +209,10 @@ pub fn force_quit(hwnd: isize) -> Result<(), ActionError> {
 /// Given `(hwnd, pid)` in Z-order (topmost first), picks the next window belonging to `fg_hwnd`'s
 /// process, or `None` when fewer than two windows belong to that process.
 pub fn next_same_process_window(fg_hwnd: isize, windows: &[(isize, u32)]) -> Option<isize> {
-    let fg_pid = windows.iter().find(|&&(h, _)| h == fg_hwnd).map(|&(_, p)| p)?;
+    let fg_pid = windows
+        .iter()
+        .find(|&&(h, _)| h == fg_hwnd)
+        .map(|&(_, p)| p)?;
     let same: Vec<isize> = windows
         .iter()
         .filter(|&&(_, p)| p == fg_pid)
@@ -269,7 +272,9 @@ pub fn restart_frontmost_app() -> Result<(), ActionError> {
         // SAFETY: `proc_h.0` is a valid process handle with SYNCHRONIZE/TERMINATE.
         let wait = unsafe { WaitForSingleObject(proc_h.0, 1500) };
         if wait != WAIT_OBJECT_0 {
+            // SAFETY: `proc_h.0` is a valid process handle opened with `PROCESS_TERMINATE`.
             let _ = unsafe { TerminateProcess(proc_h.0, 1) };
+            // SAFETY: `proc_h.0` is a valid process handle opened with `PROCESS_SYNCHRONIZE`.
             let _ = unsafe { WaitForSingleObject(proc_h.0, 1000) };
         }
     }
@@ -331,6 +336,9 @@ mod tests {
         assert_eq!(next_same_process_window(1, &[(1, 100), (2, 200)]), None);
         let z = [(1, 100), (2, 200), (3, 100), (4, 100)];
         assert_eq!(next_same_process_window(1, &z), Some(4));
-        assert_eq!(next_same_process_window(4, &[(4, 100), (1, 100), (3, 100)]), Some(3));
+        assert_eq!(
+            next_same_process_window(4, &[(4, 100), (1, 100), (3, 100)]),
+            Some(3)
+        );
     }
 }

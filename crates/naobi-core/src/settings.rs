@@ -471,11 +471,15 @@ impl Settings {
             let alias_trimmed = alias.trim();
             let target_trimmed = target.trim();
             if alias_trimmed.is_empty() || alias_trimmed.chars().any(char::is_whitespace) {
-                note(format!("alias '{alias}' rejected: cannot be empty or contain whitespace"));
+                note(format!(
+                    "alias '{alias}' rejected: cannot be empty or contain whitespace"
+                ));
                 continue;
             }
             if target_trimmed.is_empty() {
-                note(format!("alias '{alias_trimmed}' rejected: target item id is empty"));
+                note(format!(
+                    "alias '{alias_trimmed}' rejected: target item id is empty"
+                ));
                 continue;
             }
             let lower = alias_trimmed.to_ascii_lowercase();

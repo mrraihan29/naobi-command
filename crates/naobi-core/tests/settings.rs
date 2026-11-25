@@ -397,20 +397,26 @@ fn r013_files_settings_default_and_custom_parse_strictly() {
 
 #[test]
 fn item_aliases_validate_and_report_conflicts() {
-    let ok = Settings::parse(
-        "[aliases]\nterm = \"app:wt.exe\"\nb64 = \"dev:b64\"\n",
-    )
-    .unwrap();
+    let ok = Settings::parse("[aliases]\nterm = \"app:wt.exe\"\nb64 = \"dev:b64\"\n").unwrap();
     assert!(ok.reports.is_empty());
-    assert_eq!(ok.settings.aliases.get("term").map(String::as_str), Some("app:wt.exe"));
-    assert_eq!(ok.settings.aliases.get("b64").map(String::as_str), Some("dev:b64"));
+    assert_eq!(
+        ok.settings.aliases.get("term").map(String::as_str),
+        Some("app:wt.exe")
+    );
+    assert_eq!(
+        ok.settings.aliases.get("b64").map(String::as_str),
+        Some("dev:b64")
+    );
 
     // Whitespace in alias, empty target, case-duplicate alias, or quicklink collision report and keep first.
     let bad = Settings::parse(
         "[aliases]\n\"has space\" = \"app:a\"\nempty = \"\"\nTerm = \"app:first\"\nterm = \"app:second\"\ng = \"sys.lock\"\n",
     )
     .unwrap();
-    assert_eq!(bad.settings.aliases.get("Term").map(String::as_str), Some("app:first"));
+    assert_eq!(
+        bad.settings.aliases.get("Term").map(String::as_str),
+        Some("app:first")
+    );
     assert!(!bad.settings.aliases.contains_key("term"));
     assert!(!bad.settings.aliases.contains_key("g"));
     assert!(!bad.settings.aliases.contains_key("has space"));

@@ -250,7 +250,10 @@ fn r012_ctrl_k_lists_actions_of_selected_result() {
     assert!(ctrl(&mut l, Key::K).is_empty());
     let panel = l.screen().action_panel.expect("panel open");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, vec!["Open", "Copy path", "Star item", "Copy item ID"]);
+    assert_eq!(
+        labels,
+        vec!["Open", "Copy path", "Star item", "Copy item ID"]
+    );
 }
 
 // @R-012
@@ -1307,7 +1310,10 @@ fn r026_destructive_actions_come_last() {
     ctrl(&mut l, Key::K);
     let panel = l.screen().action_panel.expect("panel open");
     let labels: Vec<_> = panel.actions.iter().map(|a| a.label.as_str()).collect();
-    assert_eq!(labels, ["Open", "Pin", "Star item", "Copy item ID", "Delete"]);
+    assert_eq!(
+        labels,
+        ["Open", "Pin", "Star item", "Copy item ID", "Delete"]
+    );
     assert_eq!(
         panel
             .actions
@@ -1448,7 +1454,10 @@ fn copy_item_id_custom_alias_and_inline_args() {
         ],
         vec![],
     );
-    l.set_aliases(BTreeMap::from([("term".into(), ItemId("app:wt.exe".into()))]));
+    l.set_aliases(BTreeMap::from([(
+        "term".into(),
+        ItemId("app:wt.exe".into()),
+    )]));
     type_text(&mut l, "term");
     assert_eq!(titles(&l.screen())[0], "Windows Terminal");
 
@@ -1618,7 +1627,10 @@ fn home_lists_starred_before_recents_and_respects_show_home() {
     );
     // Record opens on Alpha so Alpha is the top recent item.
     type_text(&mut l, "alpha");
-    assert_eq!(key(&mut l, Key::Enter), vec![launch("app:alpha:open"), Effect::Hide]);
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![launch("app:alpha:open"), Effect::Hide]
+    );
     l.show_root();
     assert_eq!(titles(&l.screen())[0], "Alpha");
 
@@ -1626,7 +1638,11 @@ fn home_lists_starred_before_recents_and_respects_show_home() {
     type_text(&mut l, "gamma");
     ctrl(&mut l, Key::K);
     let panel = l.screen().action_panel.expect("panel open");
-    let idx = panel.actions.iter().position(|a| a.label == "Star item").unwrap();
+    let idx = panel
+        .actions
+        .iter()
+        .position(|a| a.label == "Star item")
+        .unwrap();
     for _ in 0..idx {
         key(&mut l, Key::Down);
     }

@@ -217,8 +217,9 @@ fn iso_week(y: i32, m: u8, d: u8) -> Option<u32> {
     let dow = {
         let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
         let y_adj = y - i32::from(m < 3);
-        let raw = (y_adj + y_adj / 4 - y_adj / 100 + y_adj / 400 + t[(m - 1) as usize] + i32::from(d))
-            .rem_euclid(7);
+        let raw =
+            (y_adj + y_adj / 4 - y_adj / 100 + y_adj / 400 + t[(m - 1) as usize] + i32::from(d))
+                .rem_euclid(7);
         if raw == 0 {
             7
         } else {
@@ -367,9 +368,7 @@ fn eval_tip_vat_split(words: &[&str], lower: &[String], ans: Option<f64>) -> Opt
                 return Some(format!("{total} (+{tip_s})"));
             }
             if words.len() == 3 {
-                if let (Some(pct), Some((amt, _))) =
-                    (parse_pct(words[2]), eval(words[1], ans))
-                {
+                if let (Some(pct), Some((amt, _))) = (parse_pct(words[2]), eval(words[1], ans)) {
                     let extra = amt.f * pct / 100.0;
                     let total = sig10(amt.f + extra)?;
                     let tip_s = sig10(extra)?;

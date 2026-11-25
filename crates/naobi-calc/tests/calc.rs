@@ -98,7 +98,10 @@ fn wcag_contrast_color_mix_and_everyday_math() {
         Some("6.47:1 (AA)")
     );
     assert_eq!(text("mix #000 #fff 50%").as_deref(), Some("#808080"));
-    assert_eq!(text("mix rgb(0, 0, 0) #ffffff 25%").as_deref(), Some("#404040"));
+    assert_eq!(
+        text("mix rgb(0, 0, 0) #ffffff 25%").as_deref(),
+        Some("#404040")
+    );
     assert_eq!(text("tip 15% on 80").as_deref(), Some("92 (+12)"));
     assert_eq!(text("vat 11% on 200").as_deref(), Some("222 (+22)"));
     assert_eq!(text("split 120 between 4").as_deref(), Some("30 each"));

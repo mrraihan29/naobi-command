@@ -27,8 +27,9 @@ pub fn now() -> LocalTime {
 
 /// Reads the current local time alongside the active UTC offset in minutes.
 pub fn now_with_offset() -> (LocalTime, i32) {
-    // SAFETY: `GetSystemTime` and `GetLocalTime` return plain `SYSTEMTIME` values.
+    // SAFETY: `GetSystemTime` returns a plain `SYSTEMTIME` value.
     let utc = unsafe { GetSystemTime() };
+    // SAFETY: `GetLocalTime` returns a plain `SYSTEMTIME` value.
     let loc = unsafe { GetLocalTime() };
     let to_mins = |y: u16, m: u16, d: u16, h: u16, min: u16| -> i64 {
         let y = i64::from(y) - i64::from(m <= 2);

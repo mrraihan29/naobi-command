@@ -287,9 +287,7 @@ impl<'a> XmlParser<'a> {
             }
             if self.rest().starts_with("</") {
                 self.pos += 2;
-                let close = self
-                    .read_name()
-                    .ok_or("Clipboard text is not valid XML.")?;
+                let close = self.read_name().ok_or("Clipboard text is not valid XML.")?;
                 self.skip_ws();
                 if close != name || !self.rest().starts_with('>') {
                     return Err("Clipboard text has mismatched XML tags.");
@@ -479,10 +477,7 @@ pub fn html_to_markdown(input: &str) -> Result<String, &'static str> {
     if !rest.is_empty() {
         out.push_str(&decode_entities(rest));
     }
-    let cleaned: Vec<&str> = out
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>();
+    let cleaned: Vec<&str> = out.lines().map(str::trim_end).collect::<Vec<_>>();
     let joined = cleaned.join("\n").trim().to_owned();
     if joined.is_empty() {
         return Err("Clipboard HTML produced empty Markdown.");

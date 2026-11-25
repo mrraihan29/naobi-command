@@ -10,6 +10,7 @@ pub mod limits;
 pub mod paste;
 pub mod ports;
 pub mod testing;
+pub mod transform;
 pub mod view;
 
 pub use history::{Error, History, Purged, Stored};

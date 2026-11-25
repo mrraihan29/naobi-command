@@ -45,6 +45,8 @@ pub enum Effect {
     Paste(EntryId),
     /// Pastes dynamic or expanded plain text (Snippets, Emoji) into the Paste target (D-019).
     PasteText(String),
+    /// Pastes materialized temporary files (`CF_HDROP`) into the Paste target (D-019).
+    PasteFiles(Vec<String>),
     /// Puts a clipboard entry on the clipboard without pasting it (Ctrl+Enter in the history).
     CopyEntry(EntryId),
     /// Runs a module's hotkey handlers once the Launcher is hidden and focus is back, so a command

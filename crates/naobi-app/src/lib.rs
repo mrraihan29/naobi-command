@@ -138,6 +138,9 @@ impl Host for AppHost {
     fn paste_text(&mut self, text: &str, target: Option<isize>) {
         modules::clipboard::paste_text(text.to_owned(), target, |n| raise_notice(&mut state(), n));
     }
+    fn paste_files(&mut self, files: &[String], target: Option<isize>) {
+        modules::clipboard::paste_files(files.to_vec(), target, |n| raise_notice(&mut state(), n));
+    }
     fn search_files(&mut self, generation: u64, query: &str) {
         modules::files::request(generation, query);
     }

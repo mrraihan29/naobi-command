@@ -14,6 +14,10 @@ use std::io;
 use std::sync::Arc;
 
 pub fn register(m: &mut Modules) {
+    naobi_clipboard::transform::prune_temp_dir(
+        &naobi_clipboard::transform::default_temp_dir(),
+        naobi_clipboard::transform::TEMP_TTL,
+    );
     let Some(history) = shared() else { return };
     m.register_source(Box::new(ClipboardCommands::new(history.clone())));
     m.register_view(Box::new(
@@ -162,6 +166,11 @@ pub fn paste_text(text: String, target: Option<isize>, raise: fn(Notice)) {
         target,
         raise,
     );
+}
+
+/// Pastes file paths (`CF_HDROP`) through the D-019 snapshot-and-restore pipeline.
+pub fn paste_files(files: Vec<String>, target: Option<isize>, raise: fn(Notice)) {
+    spawn_paste(move || Ok(Payload::Files(files)), target, raise);
 }
 
 fn spawn_paste(

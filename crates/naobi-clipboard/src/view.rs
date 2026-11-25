@@ -202,6 +202,7 @@ impl CommandSource for ClipboardView {
         let meta = entry_id(id).and_then(|n| h.get(n).ok().flatten());
         let pinned = meta.as_ref().is_some_and(|m| m.pinned);
         let is_text = meta.as_ref().is_some_and(|m| m.kind == Kind::Text);
+        let is_image = meta.as_ref().is_some_and(|m| m.kind == Kind::Image);
         let has_queued = !h.queue().is_empty();
         drop(h);
         let action = |id: &str, label: &str, shortcut: Option<KeyChord>| Action {
@@ -255,6 +256,56 @@ impl CommandSource for ClipboardView {
                     Ok(())
                 } else {
                     Err("Only text entries can be saved as snippets.".into())
+                },
+            },
+            Action {
+                id: ActionId("paste_txt".into()),
+                label: "Paste as .txt file".into(),
+                shortcut: None,
+                enabled: if is_text {
+                    Ok(())
+                } else {
+                    Err("Only text entries can be pasted as a .txt file.".into())
+                },
+            },
+            Action {
+                id: ActionId("paste_png".into()),
+                label: "Paste as .png file".into(),
+                shortcut: None,
+                enabled: if is_image {
+                    Ok(())
+                } else {
+                    Err("Only image entries can be pasted as a .png file.".into())
+                },
+            },
+            Action {
+                id: ActionId("csv_json".into()),
+                label: "Copy CSV as JSON".into(),
+                shortcut: None,
+                enabled: if is_text {
+                    Ok(())
+                } else {
+                    Err("Only text entries can be converted from CSV.".into())
+                },
+            },
+            Action {
+                id: ActionId("xml_json".into()),
+                label: "Copy XML as JSON".into(),
+                shortcut: None,
+                enabled: if is_text {
+                    Ok(())
+                } else {
+                    Err("Only text entries can be converted from XML.".into())
+                },
+            },
+            Action {
+                id: ActionId("html_md".into()),
+                label: "Copy HTML as Markdown".into(),
+                shortcut: None,
+                enabled: if is_text {
+                    Ok(())
+                } else {
+                    Err("Only text entries can be converted from HTML.".into())
                 },
             },
             action(
@@ -375,6 +426,64 @@ impl CommandSource for ClipboardView {
                         }
                     }
                     Err(msg) => Outcome::Failed(snippet_notice(&msg, NoticeKind::Error)),
+                }
+            }
+            "paste_txt" => {
+                let bytes = match h.get(n) {
+                    Ok(Some(m)) if m.kind == Kind::Text => match h.payload(n) {
+                        Ok(Some(b)) => b,
+                        Ok(None) => return Outcome::Done,
+                        Err(_) => return failed(UNREADABLE),
+                    },
+                    _ => return failed("Only text entries can be pasted as a .txt file."),
+                };
+                let now_ms = h.now_s() * 1000;
+                drop(h);
+                let dir = crate::transform::default_temp_dir();
+                match crate::transform::write_temp_file(&dir, "txt", &bytes, now_ms) {
+                    Ok(p) => Outcome::Effects(vec![Effect::PasteFiles(vec![p
+                        .to_string_lossy()
+                        .into_owned()])]),
+                    Err(_) => failed("Could not write temporary .txt file."),
+                }
+            }
+            "paste_png" => {
+                let bytes = match h.get(n) {
+                    Ok(Some(m)) if m.kind == Kind::Image => match h.payload(n) {
+                        Ok(Some(b)) => b,
+                        Ok(None) => return Outcome::Done,
+                        Err(_) => return failed(UNREADABLE),
+                    },
+                    _ => return failed("Only image entries can be pasted as a .png file."),
+                };
+                let now_ms = h.now_s() * 1000;
+                drop(h);
+                let dir = crate::transform::default_temp_dir();
+                match crate::transform::write_temp_file(&dir, "png", &bytes, now_ms) {
+                    Ok(p) => Outcome::Effects(vec![Effect::PasteFiles(vec![p
+                        .to_string_lossy()
+                        .into_owned()])]),
+                    Err(_) => failed("Could not write temporary .png file."),
+                }
+            }
+            "csv_json" | "xml_json" | "html_md" => {
+                let text = match h.get(n) {
+                    Ok(Some(m)) if m.kind == Kind::Text => match h.payload(n) {
+                        Ok(Some(bytes)) => String::from_utf8_lossy(&bytes).into_owned(),
+                        Ok(None) => return Outcome::Done,
+                        Err(_) => return failed(UNREADABLE),
+                    },
+                    _ => return failed("Only text entries can be transformed."),
+                };
+                drop(h);
+                let res = match action.0.as_str() {
+                    "csv_json" => crate::transform::csv_to_json(&text),
+                    "xml_json" => crate::transform::xml_to_json(&text),
+                    _ => crate::transform::html_to_markdown(&text),
+                };
+                match res {
+                    Ok(out) => Outcome::Effects(vec![Effect::CopyText(out)]),
+                    Err(msg) => failed(msg),
                 }
             }
             "delete" => match h.delete(n) {

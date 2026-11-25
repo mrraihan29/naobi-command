@@ -40,6 +40,8 @@ pub trait Host {
     fn paste(&mut self, id: EntryId, target: Option<isize>);
     /// Pastes plain text into `target`, the window that had focus before the Launcher.
     fn paste_text(&mut self, text: &str, target: Option<isize>);
+    /// Pastes file paths (`CF_HDROP`) into `target`.
+    fn paste_files(&mut self, files: &[String], target: Option<isize>);
     /// Starts a file search for `query`; the answer comes back through
     /// `Controller::on_file_results` with the same `generation`.
     fn search_files(&mut self, generation: u64, query: &str);
@@ -326,6 +328,7 @@ impl Controller {
         let mut copied = false;
         let mut paste = None;
         let mut paste_text = None;
+        let mut paste_files = None;
         let mut hotkeys = Vec::new();
         // Where a paste goes: the window that had focus before the Launcher (`close` forgets it).
         let target = self.previous;
@@ -372,6 +375,7 @@ impl Controller {
                 // The paste runs after the Launcher is hidden.
                 Effect::Paste(id) => paste = Some(id),
                 Effect::PasteText(text) => paste_text = Some(text),
+                Effect::PasteFiles(files) => paste_files = Some(files),
                 Effect::RunHotkey(id) => hotkeys.push(id),
                 Effect::ApplyTheme(id) => match host.apply_theme(&id) {
                     Ok(()) => self.applied = true,
@@ -394,7 +398,12 @@ impl Controller {
             let focused_other = matches!(host.foreground(), Some(w) if Some(w) != self.previous);
             self.close(
                 host,
-                restore && !launched && paste.is_none() && paste_text.is_none() && !focused_other,
+                restore
+                    && !launched
+                    && paste.is_none()
+                    && paste_text.is_none()
+                    && paste_files.is_none()
+                    && !focused_other,
             );
         }
         if let Some(id) = paste {
@@ -402,6 +411,9 @@ impl Controller {
         }
         if let Some(text) = paste_text {
             host.paste_text(&text, target);
+        }
+        if let Some(files) = paste_files {
+            host.paste_files(&files, target);
         }
         // After the Launcher is hidden and focus is back: the handlers act on the window in front.
         for id in hotkeys {
@@ -495,6 +507,9 @@ mod tests {
         }
         fn paste_text(&mut self, text: &str, target: Option<isize>) {
             self.log.push(format!("paste_text {text} {target:?}"));
+        }
+        fn paste_files(&mut self, files: &[String], target: Option<isize>) {
+            self.log.push(format!("paste_files {} {target:?}", files.join(",")));
         }
         fn search_files(&mut self, generation: u64, query: &str) {
             self.log.push(format!("search {generation} {query}"));
@@ -1207,6 +1222,9 @@ mod tests {
             }
             fn paste_text(&mut self, text: &str, target: Option<isize>) {
                 self.fake.paste_text(text, target);
+            }
+            fn paste_files(&mut self, files: &[String], target: Option<isize>) {
+                self.fake.paste_files(files, target);
             }
             fn search_files(&mut self, generation: u64, query: &str) {
                 self.fake.search_files(generation, query);

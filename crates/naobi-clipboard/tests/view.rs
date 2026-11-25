@@ -521,3 +521,28 @@ fn save_as_snippet_persists_text_entry_notifies_and_disables_non_text() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn clipboard_transforms_convert_and_paste_as_files() {
+    let (mut l, shared, _) = setup();
+    copy(&shared, "a,b\n1,2\n");
+    open(&mut l);
+    let fx = run_panel_action(&mut l, "Copy CSV as JSON");
+    assert!(matches!(
+        fx.as_slice(),
+        [Effect::CopyText(s), Effect::Hide] if s.contains("\"a\": \"1\"") && s.contains("\"b\": \"2\"")
+    ));
+
+    copy(&shared, "hello file");
+    open(&mut l);
+    let fx = run_panel_action(&mut l, "Paste as .txt file");
+    match fx.as_slice() {
+        [Effect::PasteFiles(paths), Effect::Hide] => {
+            assert_eq!(paths.len(), 1);
+            assert!(paths[0].ends_with(".txt"));
+            assert_eq!(std::fs::read_to_string(&paths[0]).unwrap(), "hello file");
+            let _ = std::fs::remove_file(&paths[0]);
+        }
+        other => panic!("unexpected effects: {other:?}"),
+    }
+}

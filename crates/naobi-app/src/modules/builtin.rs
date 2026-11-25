@@ -361,6 +361,18 @@ impl SystemOps for AppOps {
             SystemCommand::SleepDisplays => done(system_commands::sleep_displays()),
             SystemCommand::Hibernate => done(system_commands::suspend(true)),
             SystemCommand::Restart => done(system_commands::restart()),
+            SystemCommand::RestartFrontmostApp => {
+                naobi_win32::window_switcher::restart_frontmost_app()
+                    .map(|()| None)
+                    .map_err(|e| match e {
+                        naobi_win32::window_switcher::ActionError::Elevated => {
+                            "That window runs as administrator.".to_owned()
+                        }
+                        naobi_win32::window_switcher::ActionError::Refused => {
+                            "Could not restart the frontmost app.".to_owned()
+                        }
+                    })
+            }
             SystemCommand::ShutDown => done(system_commands::shut_down()),
             SystemCommand::SignOut => done(system_commands::sign_out()),
             SystemCommand::EmptyRecycleBin => done(system_commands::empty_recycle_bin()),

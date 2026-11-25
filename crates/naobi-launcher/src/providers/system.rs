@@ -16,6 +16,7 @@ pub enum SystemCommand {
     SleepDisplays,
     Hibernate,
     Restart,
+    RestartFrontmostApp,
     ShutDown,
     SignOut,
     EmptyRecycleBin,
@@ -38,12 +39,13 @@ pub enum SystemCommand {
 }
 
 impl SystemCommand {
-    pub const ALL: [SystemCommand; 24] = [
+    pub const ALL: [SystemCommand; 25] = [
         Self::Lock,
         Self::Sleep,
         Self::SleepDisplays,
         Self::Hibernate,
         Self::Restart,
+        Self::RestartFrontmostApp,
         Self::ShutDown,
         Self::SignOut,
         Self::EmptyRecycleBin,
@@ -73,6 +75,7 @@ impl SystemCommand {
             Self::SleepDisplays => "sys.sleep_displays",
             Self::Hibernate => "sys.hibernate",
             Self::Restart => "sys.restart",
+            Self::RestartFrontmostApp => "sys.restart_frontmost_app",
             Self::ShutDown => "sys.shut_down",
             Self::SignOut => "sys.sign_out",
             Self::EmptyRecycleBin => "sys.empty_recycle_bin",
@@ -102,6 +105,7 @@ impl SystemCommand {
             Self::SleepDisplays => "Sleep Displays",
             Self::Hibernate => "Hibernate",
             Self::Restart => "Restart",
+            Self::RestartFrontmostApp => "Restart Frontmost App",
             Self::ShutDown => "Shut Down",
             Self::SignOut => "Sign Out",
             Self::EmptyRecycleBin => "Empty Recycle Bin",
@@ -137,6 +141,7 @@ impl SystemCommand {
             ],
             Self::Hibernate => &[],
             Self::Restart => &["reboot"],
+            Self::RestartFrontmostApp => &["relaunch", "restart app", "kill and reopen"],
             Self::ShutDown => &["shutdown", "power off", "turn off"],
             Self::SignOut => &["log off", "log out", "sign off"],
             Self::EmptyRecycleBin => &["trash", "recycle bin"],
@@ -163,7 +168,11 @@ impl SystemCommand {
     pub fn armed(self) -> bool {
         matches!(
             self,
-            Self::Restart | Self::ShutDown | Self::SignOut | Self::EmptyRecycleBin
+            Self::Restart
+                | Self::RestartFrontmostApp
+                | Self::ShutDown
+                | Self::SignOut
+                | Self::EmptyRecycleBin
         )
     }
 

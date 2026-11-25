@@ -241,7 +241,13 @@ const DEFAULT_HOTKEYS: [(&str, u8, u32); 4] = [
 ];
 
 /// Valid `[hotkeys]` slots that have no default global binding.
-pub const OPTIONAL_HOTKEYS: [&str; 4] = ["window_switcher", "emoji", "snippets", "scratchpad"];
+pub const OPTIONAL_HOTKEYS: [&str; 5] = [
+    "window_switcher",
+    "cycle_app_windows",
+    "emoji",
+    "snippets",
+    "scratchpad",
+];
 
 /// D-024: Google, GitHub, YouTube, naobi.dev.
 const DEFAULT_QUICKLINKS: [(&str, &str, &str); 4] = [

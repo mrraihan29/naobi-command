@@ -1,11 +1,12 @@
 //! Win32 implementation for the Window switcher: `EnumWindows` + `DWMWA_CLOAKED` filtering,
 //! plus Focus, Minimize, Close (`WM_CLOSE`), and Force Quit (`TerminateProcess`).
-use crate::process::{exe_name, Owned};
+use crate::process::{exe_name, exe_path, Owned};
 use std::ffi::c_void;
 use windows::core::BOOL;
-use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{ERROR_ACCESS_DENIED, HWND, LPARAM, WAIT_OBJECT_0, WPARAM};
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+    GetCurrentProcessId, OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    PROCESS_TERMINATE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
@@ -205,6 +206,76 @@ pub fn force_quit(hwnd: isize) -> Result<(), ActionError> {
     unsafe { TerminateProcess(process.0, 1) }.map_err(|_| ActionError::Refused)
 }
 
+/// Given `(hwnd, pid)` in Z-order (topmost first), picks the next window belonging to `fg_hwnd`'s
+/// process, or `None` when fewer than two windows belong to that process.
+pub fn next_same_process_window(fg_hwnd: isize, windows: &[(isize, u32)]) -> Option<isize> {
+    let fg_pid = windows.iter().find(|&&(h, _)| h == fg_hwnd).map(|&(_, p)| p)?;
+    let same: Vec<isize> = windows
+        .iter()
+        .filter(|&&(_, p)| p == fg_pid)
+        .map(|&(h, _)| h)
+        .collect();
+    if same.len() < 2 {
+        return None;
+    }
+    // Rotating to the bottom-most window in Z-order visits every window in turn with no state.
+    same.last().copied().filter(|&h| h != fg_hwnd).or_else(|| {
+        let pos = same.iter().position(|&h| h == fg_hwnd)?;
+        Some(same[(pos + 1) % same.len()])
+    })
+}
+
+/// Cycles to another open window of the same process as `fg_hwnd`. Returns `Ok(false)` when
+/// fewer than two windows exist for that process.
+pub fn cycle_same_app(fg_hwnd: isize) -> Result<bool, ActionError> {
+    if fg_hwnd == 0 {
+        return Ok(false);
+    }
+    let pairs: Vec<(isize, u32)> = list()
+        .into_iter()
+        .map(|w| {
+            let mut pid = 0u32;
+            // SAFETY: `w.hwnd` came from EnumWindows.
+            unsafe { GetWindowThreadProcessId(hwnd_of(w.hwnd), Some(&mut pid)) };
+            (w.hwnd, pid)
+        })
+        .collect();
+    let Some(target) = next_same_process_window(fg_hwnd, &pairs) else {
+        return Ok(false);
+    };
+    if crate::paste::is_elevated(target) {
+        return Err(ActionError::Elevated);
+    }
+    focus(target)?;
+    Ok(true)
+}
+
+/// Closes the frontmost non-Naobi application window and relaunches its executable path.
+pub fn restart_frontmost_app() -> Result<(), ActionError> {
+    let entry = list().into_iter().next().ok_or(ActionError::Refused)?;
+    let h = ensure_target_window(entry.hwnd)?;
+    let mut pid = 0u32;
+    // SAFETY: `h` was validated by `ensure_target_window`.
+    unsafe { GetWindowThreadProcessId(h, Some(&mut pid)) };
+    if pid == 0 {
+        return Err(ActionError::Refused);
+    }
+    let path = exe_path(pid).ok_or(ActionError::Refused)?;
+    // SAFETY: `pid` is non-zero; handle is closed by `Owned`.
+    let sync = unsafe { OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, false, pid) }.ok();
+    let owned_sync = sync.map(Owned);
+    close(entry.hwnd)?;
+    if let Some(proc_h) = owned_sync {
+        // SAFETY: `proc_h.0` is a valid process handle with SYNCHRONIZE/TERMINATE.
+        let wait = unsafe { WaitForSingleObject(proc_h.0, 1500) };
+        if wait != WAIT_OBJECT_0 {
+            let _ = unsafe { TerminateProcess(proc_h.0, 1) };
+            let _ = unsafe { WaitForSingleObject(proc_h.0, 1000) };
+        }
+    }
+    crate::shell_exec::open(&path).map_err(|_| ActionError::Refused)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +324,13 @@ mod tests {
         assert_eq!(minimize(0), Err(ActionError::Refused));
         assert_eq!(close(0), Err(ActionError::Refused));
         assert_eq!(force_quit(0), Err(ActionError::Refused));
+    }
+
+    #[test]
+    fn same_process_cycling_requires_two_windows_and_rotates() {
+        assert_eq!(next_same_process_window(1, &[(1, 100), (2, 200)]), None);
+        let z = [(1, 100), (2, 200), (3, 100), (4, 100)];
+        assert_eq!(next_same_process_window(1, &z), Some(4));
+        assert_eq!(next_same_process_window(4, &[(4, 100), (1, 100), (3, 100)]), Some(3));
     }
 }

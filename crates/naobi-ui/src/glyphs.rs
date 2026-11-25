@@ -9,6 +9,7 @@ const GLYPHS: &[(&str, &str, &str)] = &[
     ("sys.sleep_displays", "M3 5h18v11H3zM9 20h6M12 16v4M10 9h4l-4 4h4", ""),
     ("sys.hibernate", "M12 3v18M4.5 7.5l15 9M19.5 7.5l-15 9", ""),
     ("sys.restart", "M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5", ""),
+    ("sys.restart_frontmost_app", "M4 6h16v12H4zM4 9h16M15 13a3 3 0 1 1-1-2.2M15 10v3h-3", ""),
     ("sys.shut_down", "M12 3v9M6.5 6.5a8 8 0 1 0 11 0", ""),
     ("sys.sign_out", "M10 4H5v16h5M14 8l4 4-4 4M18 12H9", ""),
     ("sys.empty_recycle_bin", "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v6M14 11v6", ""),

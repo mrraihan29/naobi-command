@@ -137,6 +137,7 @@ fn r020_only_the_four_destructive_commands_need_a_second_enter() {
         armed,
         vec![
             SystemCommand::Restart,
+            SystemCommand::RestartFrontmostApp,
             SystemCommand::ShutDown,
             SystemCommand::SignOut,
             SystemCommand::EmptyRecycleBin
@@ -183,6 +184,7 @@ fn d024_catalog_contains_listed_commands_only() {
             "sys.sleep_displays",
             "sys.hibernate",
             "sys.restart",
+            "sys.restart_frontmost_app",
             "sys.shut_down",
             "sys.sign_out",
             "sys.empty_recycle_bin",

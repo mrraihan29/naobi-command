@@ -23,8 +23,8 @@ impl Drop for Owned {
     }
 }
 
-/// File name of `pid`'s executable, or None if Windows denies query access.
-pub(crate) fn exe_name(pid: u32) -> Option<String> {
+/// Full executable path of `pid`, or None if Windows denies query access.
+pub(crate) fn exe_path(pid: u32) -> Option<String> {
     if pid == 0 {
         return None;
     }
@@ -46,7 +46,12 @@ pub(crate) fn exe_name(pid: u32) -> Option<String> {
     if !ok {
         return None;
     }
-    let full = String::from_utf16(buf.get(..len as usize)?).ok()?;
+    String::from_utf16(buf.get(..len as usize)?).ok()
+}
+
+/// File name of `pid`'s executable, or None if Windows denies query access.
+pub(crate) fn exe_name(pid: u32) -> Option<String> {
+    let full = exe_path(pid)?;
     Path::new(&full)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())

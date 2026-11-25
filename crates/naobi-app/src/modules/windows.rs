@@ -8,6 +8,7 @@ use naobi_win32::window_switcher::{self, ActionError};
 use std::sync::Arc;
 
 pub const HOTKEY: &str = "window_switcher";
+pub const CYCLE_HOTKEY: &str = "cycle_app_windows";
 
 struct WinWindowOps;
 
@@ -57,5 +58,18 @@ pub fn register(m: &mut Modules) {
     m.subscribe(
         HotkeyId(HOTKEY.into()),
         Box::new(|_, cx| cx.open_view(ViewId(VIEW_ID.into()))),
+    );
+    m.subscribe(
+        HotkeyId(CYCLE_HOTKEY.into()),
+        Box::new(|_, cx| {
+            let fg = naobi_win32::paste::foreground_window();
+            if let Err(ActionError::Elevated) = window_switcher::cycle_same_app(fg) {
+                cx.notice(naobi_core::notice::Notice {
+                    subject: "Window Switcher".into(),
+                    message: "That window runs as administrator.".into(),
+                    kind: naobi_core::notice::NoticeKind::Error,
+                });
+            }
+        }),
     );
 }

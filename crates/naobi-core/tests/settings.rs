@@ -449,3 +449,11 @@ fn theme_schedule_validates_fixed_and_solar_modes() {
     assert!(!bad.reports.is_empty());
     assert!(!bad.settings.theme.schedule.unwrap().enabled);
 }
+
+#[test]
+fn cycle_app_windows_hotkey_is_optional_with_no_default_binding() {
+    let def = Settings::parse("").unwrap().settings;
+    assert!(!def.hotkeys.contains_key("cycle_app_windows"));
+    let set = Settings::parse("[hotkeys]\ncycle_app_windows = \"Alt+`\"\n");
+    assert!(set.is_ok());
+}

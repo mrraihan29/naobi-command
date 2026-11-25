@@ -249,6 +249,11 @@ pub enum Key {
     X,
     /// Ctrl+K (open or close the action panel).
     K,
+    /// Ctrl+1..4 (toggle Search scope).
+    Digit1,
+    Digit2,
+    Digit3,
+    Digit4,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

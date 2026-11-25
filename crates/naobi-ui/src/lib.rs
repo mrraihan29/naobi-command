@@ -353,6 +353,10 @@ fn key_from(text: &str, ctrl: bool) -> Option<Key> {
         '.' => Some(Key::Period),
         'k' | 'K' | '\u{b}' => Some(Key::K),
         'x' | 'X' | '\u{18}' => Some(Key::X),
+        '1' => Some(Key::Digit1),
+        '2' => Some(Key::Digit2),
+        '3' => Some(Key::Digit3),
+        '4' => Some(Key::Digit4),
         _ => None,
     }
 }

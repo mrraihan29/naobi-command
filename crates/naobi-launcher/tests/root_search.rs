@@ -1480,3 +1480,128 @@ fn copy_item_id_custom_alias_and_inline_args() {
     type_text(&mut l, "enc hello world");
     assert_eq!(titles(&l.screen()), vec!["b64:hello world"]);
 }
+
+#[test]
+fn search_scope_ctrl_1_to_4_filters_toggles_and_shows_inline_clipboard() {
+    struct Mixed {
+        items: Vec<Item>,
+    }
+    impl CommandSource for Mixed {
+        fn items(&self, _q: &Query) -> Arc<[Item]> {
+            self.items.clone().into()
+        }
+        fn actions(&self, _id: &ItemId) -> Vec<Action> {
+            vec![action("open", "Open")]
+        }
+        fn run(&self, id: &ItemId, _act: ActionId, cx: &mut Cx) -> Outcome {
+            cx.launch(LaunchTarget::ShellItem(id.0.clone()));
+            Outcome::Done
+        }
+    }
+    struct FakeClipView;
+    impl CommandSource for FakeClipView {
+        fn items(&self, q: &Query) -> Arc<[Item]> {
+            let mut c1 = item("clip:1", "hello clipboard");
+            c1.kind = ItemKind::ClipboardEntry;
+            c1.primary = ActionId("paste".into());
+            c1.secondary = Some(ActionId("copy".into()));
+            let mut c2 = item("clip:2", "other secret");
+            c2.kind = ItemKind::ClipboardEntry;
+            c2.primary = ActionId("paste".into());
+            c2.secondary = Some(ActionId("copy".into()));
+            [c1, c2]
+                .into_iter()
+                .filter(|it| q.text.is_empty() || it.title.contains(&q.text))
+                .collect::<Vec<_>>()
+                .into()
+        }
+        fn actions(&self, _id: &ItemId) -> Vec<Action> {
+            vec![
+                action("paste", "Paste"),
+                action("paste_plain", "Paste as Plain Text"),
+                action("copy", "Copy"),
+            ]
+        }
+        fn run(&self, id: &ItemId, act: ActionId, cx: &mut Cx) -> Outcome {
+            if act.0 == "copy" {
+                cx.copy_text(id.0.clone());
+            } else {
+                cx.paste_text("hello clipboard".into());
+            }
+            Outcome::Done
+        }
+    }
+    impl ViewSource for FakeClipView {
+        fn view_id(&self) -> ViewId {
+            ViewId("clipboard".into())
+        }
+        fn title(&self) -> &'static str {
+            "Clipboard History"
+        }
+        fn opened_by_hotkey(&self) -> bool {
+            true
+        }
+        fn ranked(&self) -> bool {
+            false
+        }
+        fn preview(&self, _id: &ItemId) -> Option<Preview> {
+            None
+        }
+    }
+
+    let mut cmd = item("sys.lock", "Lock");
+    cmd.kind = ItemKind::Command;
+    let mut l = Launcher::new(
+        vec![Box::new(Mixed {
+            items: vec![item("app:notes", "Notes"), cmd],
+        })],
+        vec![Box::new(FakeClipView)],
+        Frecency::open(Db::open_in_memory().unwrap(), 0).unwrap(),
+        Box::new(FakeClock(Rc::new(Cell::new(T0_MS)))),
+    );
+
+    // Ctrl+1: Apps only; view badge marks "Apps" without back button.
+    ctrl(&mut l, Key::Digit1);
+    let s = l.screen();
+    assert_eq!(s.view.name, "Apps");
+    assert!(s.view.marked && !s.view.back);
+    assert_eq!(titles(&s), vec!["Notes"]);
+
+    // Pressing Ctrl+1 again toggles back to global Launcher.
+    ctrl(&mut l, Key::Digit1);
+    let s = l.screen();
+    assert_eq!(s.view.name, "Launcher");
+    assert!(!s.view.marked);
+
+    // Ctrl+3: Commands only.
+    ctrl(&mut l, Key::Digit3);
+    assert_eq!(l.screen().view.name, "Commands");
+    assert_eq!(titles(&l.screen()), vec!["Lock"]);
+
+    // Backspace on empty query clears scope back to Launcher.
+    key(&mut l, Key::Backspace);
+    assert_eq!(l.screen().view.name, "Launcher");
+
+    // Ctrl+2: Files only.
+    ctrl(&mut l, Key::Digit2);
+    assert_eq!(l.screen().view.name, "Files");
+    type_text(&mut l, "notes");
+    assert!(titles(&l.screen()).is_empty());
+    let gen = l.generation();
+    let mut f = item("file:notes.txt", "notes.txt");
+    f.kind = ItemKind::File;
+    assert!(l.file_results(gen, 0, vec![f]));
+    assert_eq!(titles(&l.screen()), vec!["notes.txt"]);
+
+    // Ctrl+4: Clipboard entries inline; query filters and Enter pastes.
+    type_text(&mut l, "");
+    ctrl(&mut l, Key::Digit4);
+    assert_eq!(l.screen().view.name, "Clipboard");
+    assert_eq!(titles(&l.screen()), vec!["hello clipboard", "other secret"]);
+    type_text(&mut l, "hello");
+    assert_eq!(titles(&l.screen()), vec!["hello clipboard"]);
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![Effect::PasteText("hello clipboard".into()), Effect::Hide]
+    );
+}

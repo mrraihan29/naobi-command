@@ -28,6 +28,55 @@ enum Mode {
     Hotkey(usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum SearchScope {
+    #[default]
+    All,
+    Apps,
+    Files,
+    Commands,
+    Clipboard,
+}
+
+impl SearchScope {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "Launcher",
+            Self::Apps => "Apps",
+            Self::Files => "Files",
+            Self::Commands => "Commands",
+            Self::Clipboard => "Clipboard",
+        }
+    }
+
+    fn placeholder(self) -> &'static str {
+        match self {
+            Self::All => "Search apps and commands, or type > to run one...",
+            Self::Apps => "Search apps...",
+            Self::Files => "Search files...",
+            Self::Commands => "Search commands, quicklinks, and snippets...",
+            Self::Clipboard => "Search clipboard history...",
+        }
+    }
+
+    fn matches(self, kind: ItemKind) -> bool {
+        match self {
+            Self::All => true,
+            Self::Apps => kind == ItemKind::App,
+            Self::Files => kind == ItemKind::File,
+            Self::Commands => matches!(
+                kind,
+                ItemKind::Command
+                    | ItemKind::Quicklink
+                    | ItemKind::Snippet
+                    | ItemKind::Utility
+                    | ItemKind::Window
+            ),
+            Self::Clipboard => kind == ItemKind::ClipboardEntry,
+        }
+    }
+}
+
 struct Panel {
     target: Hit,
     /// Every action, in display order.
@@ -47,6 +96,7 @@ pub struct Launcher {
     ranker: Ranker,
     armed: Armed,
     mode: Mode,
+    scope: SearchScope,
     query: String,
     /// Bumped on every query change and every show; file results carry the generation they answer.
     generation: u64,
@@ -86,6 +136,7 @@ impl Launcher {
             ranker: Ranker::default(),
             armed: Armed::default(),
             mode: Mode::Root,
+            scope: SearchScope::All,
             query: String::new(),
             generation: 0,
             rows: Vec::new(),
@@ -287,8 +338,11 @@ impl Launcher {
     /// The query a file search should answer now: its generation and text, or None when the root
     /// is not showing or the query is empty.
     pub fn file_query(&self) -> Option<(u64, String)> {
-        (self.mode == Mode::Root && self.claimed.is_none() && !self.query.trim().is_empty())
-            .then(|| (self.generation, self.query.clone()))
+        (self.mode == Mode::Root
+            && matches!(self.scope, SearchScope::All | SearchScope::Files)
+            && self.claimed.is_none()
+            && !self.query.trim().is_empty())
+        .then(|| (self.generation, self.query.clone()))
     }
 
     /// The root source that takes file rows, if one is registered.
@@ -303,6 +357,7 @@ impl Launcher {
         if generation != self.generation
             || self.query.is_empty()
             || self.mode != Mode::Root
+            || !matches!(self.scope, SearchScope::All | SearchScope::Files)
             || self.claimed.is_some()
         {
             return false;
@@ -455,7 +510,7 @@ impl Launcher {
             footer,
             view: self.view_bar(),
             placeholder: match self.mode {
-                Mode::Root => "Search apps and commands, or type > to run one...",
+                Mode::Root => self.scope.placeholder(),
                 Mode::Pushed(i) | Mode::Hotkey(i) => self.views[i].placeholder(),
             }
             .to_owned(),
@@ -485,8 +540,8 @@ impl Launcher {
     fn view_bar(&self) -> ViewBar {
         match self.mode {
             Mode::Root => ViewBar {
-                name: "Launcher".to_owned(),
-                marked: false,
+                name: self.scope.label().to_owned(),
+                marked: self.scope != SearchScope::All,
                 back: false,
             },
             Mode::Pushed(i) | Mode::Hotkey(i) => ViewBar {
@@ -531,6 +586,7 @@ impl Launcher {
     }
 
     fn reset(&mut self) {
+        self.scope = SearchScope::All;
         self.query.clear();
         self.panel = None;
         self.armed.disarm();
@@ -566,6 +622,31 @@ impl Launcher {
             return;
         }
         let raw_text = self.query.trim().to_owned();
+        if self.mode == Mode::Root && self.scope == SearchScope::Clipboard {
+            self.claimed = None;
+            let q = Query { text: raw_text };
+            self.rows = self
+                .view_index(&ViewId("clipboard".into()))
+                .map(|idx| {
+                    self.views[idx]
+                        .items(&q)
+                        .iter()
+                        .take(MAX_ROWS)
+                        .map(|item| Hit {
+                            src: Source::View(idx),
+                            item: item.clone(),
+                            exact: false,
+                            total: 0.0,
+                            opens: 0.0,
+                            matched: Vec::new(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.files.clear();
+            self.selected = 0;
+            return;
+        }
         let (alias_target, text) = if self.mode == Mode::Root && !raw_text.is_empty() {
             self.resolve_custom_alias(&raw_text)
         } else {
@@ -609,9 +690,17 @@ impl Launcher {
                 vec![(Source::View(i), self.views[i].items(&q))]
             }
         };
-        let pool = lists
-            .iter()
-            .flat_map(|(src, items)| items.iter().map(move |it| (*src, it)));
+        let pool = lists.iter().flat_map(|(src, items)| {
+            let scope = if self.mode == Mode::Root {
+                self.scope
+            } else {
+                SearchScope::All
+            };
+            items
+                .iter()
+                .filter(move |it| scope.matches(it.kind))
+                .map(move |it| (*src, it))
+        });
         let limit = if text.is_empty() {
             EMPTY_QUERY_ROWS
         } else {
@@ -644,7 +733,10 @@ impl Launcher {
             limit,
             alias_target.as_ref(),
         );
-        if self.mode == Mode::Root && !text.is_empty() {
+        if self.mode == Mode::Root
+            && !text.is_empty()
+            && matches!(self.scope, SearchScope::All | SearchScope::Commands)
+        {
             self.fallback = self.sources.iter().enumerate().find_map(|(i, s)| {
                 s.fallback(&q).map(|item| Hit {
                     src: Source::Root(i),
@@ -703,12 +795,32 @@ impl Launcher {
                 self.move_by(PAGE_ROWS);
                 vec![]
             }
-            // The field passes Backspace on only when it is empty: that pops a pushed view, like Esc
-            // does once the query is clear.
+            Key::Digit1 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+                self.toggle_scope(SearchScope::Apps);
+                vec![]
+            }
+            Key::Digit2 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+                self.toggle_scope(SearchScope::Files);
+                vec![]
+            }
+            Key::Digit3 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+                self.toggle_scope(SearchScope::Commands);
+                vec![]
+            }
+            Key::Digit4 if c.ctrl && !c.alt && !c.shift && self.mode == Mode::Root && self.panel.is_none() => {
+                self.toggle_scope(SearchScope::Clipboard);
+                vec![]
+            }
+            // The field passes Backspace on only when it is empty: that pops a pushed view or clears
+            // an active Search scope, like Esc does once the query is clear.
             Key::Backspace if self.query.is_empty() && self.panel.is_none() => {
                 if matches!(self.mode, Mode::Pushed(_)) {
                     self.mode = Mode::Root;
                     self.reset();
+                } else if self.mode == Mode::Root && self.scope != SearchScope::All {
+                    self.scope = SearchScope::All;
+                    self.generation += 1;
+                    self.refresh();
                 }
                 vec![]
             }
@@ -717,6 +829,17 @@ impl Launcher {
             Key::X if c.ctrl => self.run_named("delete"),
             _ => vec![],
         }
+    }
+
+    fn toggle_scope(&mut self, target: SearchScope) {
+        self.scope = if self.scope == target {
+            SearchScope::All
+        } else {
+            target
+        };
+        self.generation += 1;
+        self.armed.disarm();
+        self.refresh();
     }
 
     fn move_by(&mut self, delta: isize) {

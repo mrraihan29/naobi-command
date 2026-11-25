@@ -357,6 +357,13 @@ impl CalcSource {
 
 impl CommandSource for CalcSource {
     fn items(&self, q: &Query) -> Arc<[Item]> {
+        if q.text
+            .split_whitespace()
+            .next()
+            .is_some_and(|w| w.eq_ignore_ascii_case("mix"))
+        {
+            return Arc::from(Vec::new());
+        }
         let ans = if contains_ans(&q.text) {
             self.history.as_ref().and_then(|h| lock(h).latest_ans())
         } else {

@@ -1642,3 +1642,23 @@ fn home_lists_starred_before_recents_and_respects_show_home() {
     l.show_root();
     assert!(titles(&l.screen()).is_empty());
 }
+
+#[test]
+fn color_mix_in_root_search_renders_swatch_and_copies_hex_or_rgb() {
+    let mut l = Launcher::new(
+        vec![Box::new(naobi_launcher::providers::color::ColorSource)],
+        vec![],
+        Frecency::open(Db::open_in_memory().unwrap(), 0).unwrap(),
+        Box::new(FakeClock(Rc::new(Cell::new(T0_MS)))),
+    );
+    type_text(&mut l, "mix #000000 #ffffff 50%");
+    let s = l.screen();
+    let row = &s.sections[0].rows[0];
+    assert_eq!(row.kind, "Color");
+    assert_eq!(row.title, "#808080");
+    assert_eq!(row.swatch, Some(0x808080));
+    assert_eq!(
+        key(&mut l, Key::Enter),
+        vec![Effect::CopyText("#808080".into()), Effect::Hide]
+    );
+}

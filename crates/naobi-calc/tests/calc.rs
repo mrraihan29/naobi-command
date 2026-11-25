@@ -88,6 +88,36 @@ fn d017_hex_bin_exact_above_2_pow_53() {
 }
 
 #[test]
+fn wcag_contrast_color_mix_and_everyday_math() {
+    assert_eq!(
+        text("contrast #ffffff #000000").as_deref(),
+        Some("21.00:1 (AAA / AA)")
+    );
+    assert_eq!(
+        text("contrast #fff #914a3b").as_deref(),
+        Some("6.47:1 (AA)")
+    );
+    assert_eq!(text("mix #000 #fff 50%").as_deref(), Some("#808080"));
+    assert_eq!(text("mix rgb(0, 0, 0) #ffffff 25%").as_deref(), Some("#404040"));
+    assert_eq!(text("tip 15% on 80").as_deref(), Some("92 (+12)"));
+    assert_eq!(text("vat 11% on 200").as_deref(), Some("222 (+22)"));
+    assert_eq!(text("split 120 between 4").as_deref(), Some("30 each"));
+    assert_eq!(text("0.75 to fraction").as_deref(), Some("3/4"));
+    assert_eq!(text("round 3.14159 to 2 decimals").as_deref(), Some("3.14"));
+    assert_eq!(text("ceil 2.1").as_deref(), Some("3"));
+    assert_eq!(text("floor 2.9").as_deref(), Some("2"));
+    assert_eq!(text("week 2026-11-25").as_deref(), Some("Week 48"));
+    assert_eq!(
+        text_at("time left", NOW_2026_11_20_MS).as_deref(),
+        Some("6h 57m left today")
+    );
+    assert_eq!(
+        text_at("days left in year", NOW_2026_11_20_MS).as_deref(),
+        Some("41 days")
+    );
+}
+
+#[test]
 fn d017_data_size_decimal_vs_binary() {
     assert_eq!(text("1 KB to B").as_deref(), Some("1000 B"));
     assert_eq!(text("1 KiB to B").as_deref(), Some("1024 B"));

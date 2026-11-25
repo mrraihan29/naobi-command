@@ -1,6 +1,7 @@
 //! Pure calculator and unit-conversion seam (R-014, D-017). Std only, no adapters.
 
 mod currency;
+pub mod extra;
 mod format;
 mod parse;
 mod time;
@@ -65,6 +66,12 @@ pub fn evaluate_with(input: &str, opts: EvalOptions) -> Option<CalcOutcome> {
 
 /// Evaluate launcher input with `opts` and an explicit `now_ms` (Unix milliseconds).
 pub fn evaluate_at_with(input: &str, opts: EvalOptions, now_ms: i64) -> Option<CalcOutcome> {
+    if let Some(text) = extra::evaluate(input, opts.ans, now_ms) {
+        return Some(CalcOutcome {
+            text,
+            kind: Kind::Number,
+        });
+    }
     if let Some(done) = time::evaluate(input, now_ms) {
         return done.map(|text| CalcOutcome {
             text,

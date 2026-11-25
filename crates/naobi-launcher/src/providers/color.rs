@@ -11,6 +11,27 @@ pub struct ColorSource;
 
 impl CommandSource for ColorSource {
     fn items(&self, q: &Query) -> Arc<[Item]> {
+        if let Some((r, g, b)) = naobi_calc::extra::mix_colors(&q.text) {
+            let rgb = Rgb::from_packed((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b));
+            let title = format(rgb, Format::Hex);
+            let subtitle = Format::ALL
+                .into_iter()
+                .filter(|&f| f != Format::Hex)
+                .map(|f| format(rgb, f))
+                .collect::<Vec<_>>()
+                .join(" · ");
+            return vec![Item {
+                id: ItemId(format!("{ID_PREFIX}{:06X}", rgb.packed())),
+                title,
+                subtitle,
+                keywords: Vec::new(),
+                alias: Some(q.text.clone()),
+                kind: ItemKind::Color,
+                primary: ActionId(Format::Hex.id().into()),
+                secondary: Some(ActionId(Format::Rgb.id().into())),
+            }]
+            .into();
+        }
         let Some(parsed) = parse(&q.text) else {
             return Arc::from(Vec::new());
         };
